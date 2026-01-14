@@ -18,6 +18,7 @@ import {
   ColumnMapping,
   DivisionPreset,
   DivisionAgeRange,
+  ScoringMode,
 } from './types';
 import { parseCSVWithMapping } from './utils/csvParser';
 
@@ -43,8 +44,6 @@ function App() {
     draftState,
     setPlayers,
     setTeams,
-    setDraftFormat,
-    setDraftOrder,
     startDraft,
     draftPlayer,
     undoLastPick,
@@ -109,7 +108,13 @@ function App() {
   const handleMappingComplete = (mapping: ColumnMapping) => {
     if (!csvData || !activeDivision) return;
 
-    const loadedPlayers = parseCSVWithMapping(csvData, mapping, activeDivision.teamCount);
+    const loadedPlayers = parseCSVWithMapping(
+      csvData,
+      mapping,
+      activeDivision.teamCount,
+      activeDivision.scoringMode,
+      activeDivision.scoringWeights
+    );
     setAllPlayers(loadedPlayers);
     setPlayers(loadedPlayers);
 
@@ -123,6 +128,12 @@ function App() {
     setTeamsState(activeDivision.teams);
 
     setPhase('review');
+  };
+
+  // Handle scoring mode change
+  const handleScoringModeChange = (mode: ScoringMode) => {
+    if (!activeDivision) return;
+    updateActiveDivision({ scoringMode: mode });
   };
 
   // Handle player score updates
@@ -157,14 +168,8 @@ function App() {
     console.log('📋 format:', format);
     console.log('📋 order:', order);
 
-    setDraftFormat(format);
-    setDraftOrder(order);
-
-    // Wait for state updates to complete before starting draft
-    setTimeout(() => {
-      console.log('📋 Starting draft after state updates');
-      startDraft();
-    }, 100);
+    // Pass format and order directly to startDraft to avoid race conditions
+    startDraft(format, order);
   };
 
   // Handle going back to division selector
@@ -300,6 +305,8 @@ function App() {
           <PlayerReview
             players={players}
             teams={teams}
+            scoringMode={activeDivision.scoringMode}
+            onScoringModeChange={handleScoringModeChange}
             onUpdatePlayer={handlePlayerUpdate}
             onUpdatePlayerField={updatePlayerField}
             onTeamsUpdate={setTeamsState}

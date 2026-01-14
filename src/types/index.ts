@@ -163,6 +163,9 @@ export interface ScoringWeights {
   running: number;    // % weight for running score
 }
 
+// Scoring mode determines how CSV scores are interpreted
+export type ScoringMode = 'raw' | 'pre-weighted';
+
 // Default weights based on evaluation criteria
 export const DEFAULT_SCORING_WEIGHTS: ScoringWeights = {
   fielding: {
@@ -203,6 +206,7 @@ export interface Division {
   players: Player[];
   draftState: DraftState | null;
   scoringWeights: ScoringWeights;
+  scoringMode: ScoringMode; // Whether CSV scores are raw or pre-weighted
   phase: AppPhase;
   createdAt: string; // ISO date string
   completedAt?: string; // ISO date string
@@ -279,6 +283,7 @@ export function createInitialDivision(
     players: [],
     draftState: null,
     scoringWeights: { ...DEFAULT_SCORING_WEIGHTS },
+    scoringMode: 'pre-weighted', // Default to pre-weighted since most CSVs have this format
     phase: 'upload',
     createdAt: new Date().toISOString(),
   };

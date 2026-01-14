@@ -1,4 +1,4 @@
-import { Player, ScoringWeights } from '../types';
+import { Player, ScoringWeights, ScoringMode } from '../types';
 
 export interface CalculatedScores {
   fieldingSubtotal: number;
@@ -73,14 +73,43 @@ export function validateWeights(weights: ScoringWeights): { isValid: boolean; to
 }
 
 /**
+ * Calculate scores for pre-weighted data (CSV already has weighted scores)
+ * Simply sums the component scores without applying any weights
+ */
+export function calculatePreWeightedScores(
+  player: Pick<Player, 'fieldScore' | 'throwScore' | 'hitPower' | 'hitForm' | 'hitContact' | 'pitchingStrength' | 'pitchingForm' | 'catchScore' | 'runningScore' | 'officialAdjust'>
+): CalculatedScores {
+  // Sum component scores directly (they're already weighted in the CSV)
+  const fieldingSubtotal = player.fieldScore + player.throwScore;
+  const hittingSubtotal = player.hitPower + player.hitForm + player.hitContact;
+  const pitchingSubtotal = player.pitchingStrength + player.pitchingForm;
+
+  const subjectiveTotal = fieldingSubtotal + hittingSubtotal + pitchingSubtotal;
+  const objectiveTotal = player.catchScore + player.runningScore;
+  const totalScore = subjectiveTotal + objectiveTotal + player.officialAdjust;
+
+  return {
+    fieldingSubtotal,
+    hittingSubtotal,
+    pitchingSubtotal,
+    subjectiveTotal,
+    objectiveTotal,
+    totalScore,
+  };
+}
+
+/**
  * Recalculate all players' scores with new weights
  */
 export function recalculateAllScores(
   players: Player[],
-  weights: ScoringWeights
+  weights: ScoringWeights,
+  mode: ScoringMode = 'raw'
 ): Player[] {
   return players.map(player => {
-    const calculated = calculatePlayerScore(player, weights);
+    const calculated = mode === 'pre-weighted'
+      ? calculatePreWeightedScores(player)
+      : calculatePlayerScore(player, weights);
     return {
       ...player,
       ...calculated,

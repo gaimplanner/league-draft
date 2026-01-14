@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { List, Grid, ChevronRight, Edit2, Users, Link, X, Wand2, CheckCircle2 } from 'lucide-react';
-import { Player, Team, ViewMode } from '../types';
+import { List, Grid, ChevronRight, Edit2, Users, Link, X, Wand2, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Player, Team, ViewMode, ScoringMode } from '../types';
 import { autoDetectCoachKids, autoDetectSiblings, CoachKidMatch, SiblingMatch } from '../utils/coachKidDetection';
 import { useScoringWeights } from '../hooks/useScoringWeights';
 import { ScoringWeightsConfig } from './ScoringWeightsConfig';
@@ -9,6 +9,8 @@ import { recalculateAllScores } from '../utils/scoreCalculation';
 interface PlayerReviewProps {
   players: Player[];
   teams: Team[];
+  scoringMode: ScoringMode;
+  onScoringModeChange: (mode: ScoringMode) => void;
   onUpdatePlayer: (playerId: string, field: keyof Pick<Player, 'fieldingSubtotal' | 'hittingSubtotal' | 'pitchingSubtotal' | 'catchScore' | 'runningScore' | 'officialAdjust'>, value: number) => void;
   onUpdatePlayerField: (playerId: string, updates: Partial<Player>) => void;
   onTeamsUpdate: (teams: Team[]) => void;
@@ -17,7 +19,7 @@ interface PlayerReviewProps {
   onNext: () => void;
 }
 
-export const PlayerReview = ({ players, teams, onUpdatePlayer, onUpdatePlayerField, onTeamsUpdate, onLinkSiblings, onUnlinkSibling, onNext }: PlayerReviewProps) => {
+export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange, onUpdatePlayer, onUpdatePlayerField, onTeamsUpdate, onLinkSiblings, onUnlinkSibling, onNext }: PlayerReviewProps) => {
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [editingPlayer, setEditingPlayer] = useState<string | null>(null);
   const [linkingSiblingFor, setLinkingSiblingFor] = useState<string | null>(null);
@@ -28,10 +30,13 @@ export const PlayerReview = ({ players, teams, onUpdatePlayer, onUpdatePlayerFie
   const [selectedSiblingPairs, setSelectedSiblingPairs] = useState<Set<string>>(new Set());
   const { weights, updateWeight, resetToDefaults, validation } = useScoringWeights();
 
-  // Recalculate all player scores when weights change
+  // Recalculate all player scores when weights change (only in raw mode)
   useEffect(() => {
+    // Skip recalculation in pre-weighted mode - CSV scores are already weighted
+    if (scoringMode === 'pre-weighted') return;
+
     if (validation.isValid && players.length > 0) {
-      const recalculated = recalculateAllScores(players, weights);
+      const recalculated = recalculateAllScores(players, weights, scoringMode);
       // Only update if scores actually changed to avoid infinite loops
       const hasChanges = recalculated.some((p, i) =>
         Math.abs(p.totalScore - players[i].totalScore) > 0.01
@@ -51,7 +56,7 @@ export const PlayerReview = ({ players, teams, onUpdatePlayer, onUpdatePlayerFie
         });
       }
     }
-  }, [weights]);
+  }, [weights, scoringMode]);
 
   const handleEdit = (playerId: string, field: keyof Pick<Player, 'fieldingSubtotal' | 'hittingSubtotal' | 'pitchingSubtotal' | 'catchScore' | 'runningScore' | 'officialAdjust'>, value: string) => {
     const numValue = parseFloat(value) || 0;
@@ -498,13 +503,81 @@ export const PlayerReview = ({ players, teams, onUpdatePlayer, onUpdatePlayerFie
           </div>
         </div>
 
-        {/* Scoring Weights Configuration */}
-        <ScoringWeightsConfig
-          weights={weights}
-          onUpdateWeight={updateWeight}
-          onReset={resetToDefaults}
-          validation={validation}
-        />
+        {/* Scoring Mode Toggle */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700 mb-6">
+          <div className="flex items-start gap-4">
+            <div className="flex-1">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">Scoring Mode</h2>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                Choose how to interpret the imported CSV scores.
+              </p>
+
+              <div className="flex gap-4">
+                <label className={`flex-1 p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                  scoringMode === 'pre-weighted'
+                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                    : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                }`}>
+                  <input
+                    type="radio"
+                    name="scoringMode"
+                    value="pre-weighted"
+                    checked={scoringMode === 'pre-weighted'}
+                    onChange={() => onScoringModeChange('pre-weighted')}
+                    className="sr-only"
+                  />
+                  <div className="font-medium text-gray-900 dark:text-white mb-1">
+                    Pre-weighted Scores
+                  </div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">
+                    CSV values are already weighted (spreadsheet applied weights). Scores will be summed directly.
+                  </div>
+                </label>
+
+                <label className={`flex-1 p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                  scoringMode === 'raw'
+                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                    : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                }`}>
+                  <input
+                    type="radio"
+                    name="scoringMode"
+                    value="raw"
+                    checked={scoringMode === 'raw'}
+                    onChange={() => onScoringModeChange('raw')}
+                    className="sr-only"
+                  />
+                  <div className="font-medium text-gray-900 dark:text-white mb-1">
+                    Raw Scores
+                  </div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">
+                    CSV values are raw evaluation scores. App will apply weight percentages below.
+                  </div>
+                </label>
+              </div>
+
+              {scoringMode === 'pre-weighted' && (
+                <div className="mt-4 flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                  <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+                  <div className="text-sm text-amber-800 dark:text-amber-200">
+                    <strong>Pre-weighted mode:</strong> Weight configuration is disabled. Scores from the CSV will be used as-is.
+                    If player totals look incorrect (too low), your CSV may contain raw scores - switch to "Raw Scores" mode.
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Scoring Weights Configuration (only shown in raw mode) */}
+        {scoringMode === 'raw' && (
+          <ScoringWeightsConfig
+            weights={weights}
+            onUpdateWeight={updateWeight}
+            onReset={resetToDefaults}
+            validation={validation}
+          />
+        )}
 
         {/* Players Grid/List */}
         <div className={

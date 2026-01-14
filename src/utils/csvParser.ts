@@ -1,6 +1,6 @@
 import Papa from 'papaparse';
-import { CSVRow, Player, ParsedCSVData, ColumnMapping, DEFAULT_SCORING_WEIGHTS } from '../types';
-import { calculatePlayerScore } from './scoreCalculation';
+import { CSVRow, Player, ParsedCSVData, ColumnMapping, DEFAULT_SCORING_WEIGHTS, ScoringMode, ScoringWeights } from '../types';
+import { calculatePlayerScore, calculatePreWeightedScores } from './scoreCalculation';
 
 export const parseCSVFile = (file: File): Promise<ParsedCSVData> => {
   return new Promise((resolve, reject) => {
@@ -23,7 +23,9 @@ export const parseCSVFile = (file: File): Promise<ParsedCSVData> => {
 export const parseCSVWithMapping = (
   csvData: ParsedCSVData,
   mapping: ColumnMapping,
-  teamCount: number = 8
+  teamCount: number = 8,
+  scoringMode: ScoringMode = 'pre-weighted',
+  weights: ScoringWeights = DEFAULT_SCORING_WEIGHTS
 ): Player[] => {
   const players: Player[] = csvData.rows.map((row, index) => {
     // Helper function to get mapped value
@@ -73,22 +75,23 @@ export const parseCSVWithMapping = (
     let totalScore: number;
 
     if (hasRawScores) {
-      // Calculate scores using our engine from raw component scores
-      const calculated = calculatePlayerScore(
-        {
-          fieldScore,
-          throwScore,
-          hitPower,
-          hitForm,
-          hitContact,
-          pitchingStrength,
-          pitchingForm,
-          catchScore,
-          runningScore,
-          officialAdjust,
-        },
-        DEFAULT_SCORING_WEIGHTS
-      );
+      const playerScoreData = {
+        fieldScore,
+        throwScore,
+        hitPower,
+        hitForm,
+        hitContact,
+        pitchingStrength,
+        pitchingForm,
+        catchScore,
+        runningScore,
+        officialAdjust,
+      };
+
+      // Use appropriate calculation based on scoring mode
+      const calculated = scoringMode === 'pre-weighted'
+        ? calculatePreWeightedScores(playerScoreData)
+        : calculatePlayerScore(playerScoreData, weights);
 
       fieldingSubtotal = calculated.fieldingSubtotal;
       hittingSubtotal = calculated.hittingSubtotal;
@@ -97,8 +100,8 @@ export const parseCSVWithMapping = (
       objectiveTotal = calculated.objectiveTotal;
       totalScore = calculated.totalScore;
 
-      // Validation: Compare calculated vs imported (if imported values also exist)
-      if (hasImportedSubtotals) {
+      // Validation: Compare calculated vs imported (if imported values also exist, only for raw mode)
+      if (scoringMode === 'raw' && hasImportedSubtotals) {
         const fieldingDiff = Math.abs(fieldingSubtotal - importedFieldingSubtotal);
         const hittingDiff = Math.abs(hittingSubtotal - importedHittingSubtotal);
         const pitchingDiff = Math.abs(pitchingSubtotal - importedPitchingSubtotal);
