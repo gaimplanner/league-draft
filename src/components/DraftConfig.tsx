@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { ChevronRight, ChevronUp, ChevronDown, CheckCircle, AlertCircle } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { ChevronRight, CheckCircle, AlertCircle } from 'lucide-react';
 import { Team, Player, DraftFormat } from '../types';
 
 interface DraftConfigProps {
@@ -8,25 +8,94 @@ interface DraftConfigProps {
   onConfigComplete: (draftFormat: DraftFormat, draftOrder: string[]) => void;
 }
 
+// Validation result for draft order
+interface OrderValidation {
+  valid: boolean;
+  error?: string;
+  duplicates: number[];
+  missing: number[];
+}
+
+function validateDraftOrder(positions: (number | null)[], teamCount: number): OrderValidation {
+  const validPositions = positions.filter((p): p is number => p !== null && p >= 1 && p <= teamCount);
+  const expected = Array.from({ length: teamCount }, (_, i) => i + 1);
+
+  // Find duplicates
+  const seen = new Set<number>();
+  const duplicates: number[] = [];
+  for (const pos of validPositions) {
+    if (seen.has(pos)) {
+      duplicates.push(pos);
+    }
+    seen.add(pos);
+  }
+
+  // Find missing positions
+  const missing = expected.filter(n => !validPositions.includes(n));
+
+  if (duplicates.length > 0) {
+    return { valid: false, error: `Duplicate position: ${duplicates[0]}`, duplicates, missing };
+  }
+
+  if (missing.length > 0) {
+    return { valid: false, error: `Missing positions: ${missing.join(', ')}`, duplicates, missing };
+  }
+
+  return { valid: true, duplicates: [], missing: [] };
+}
+
 export const DraftConfig = ({ teams, players, onConfigComplete }: DraftConfigProps) => {
   const [draftFormat, setDraftFormat] = useState<DraftFormat>('snake');
-  const [draftOrder, setDraftOrder] = useState<string[]>([]);
+  // Store position by team ID
+  const [teamPositions, setTeamPositions] = useState<Record<string, number | null>>({});
 
-  // Initialize draft order from teams
+  // Initialize team positions from teams
   useEffect(() => {
-    setDraftOrder(teams.map((t) => t.id));
+    const initial: Record<string, number | null> = {};
+    teams.forEach((team, index) => {
+      initial[team.id] = index + 1;
+    });
+    setTeamPositions(initial);
   }, [teams]);
 
   const coachKids = players.filter((p) => p.isCoachKid);
 
-  const moveTeam = (index: number, direction: 'up' | 'down') => {
-    const newOrder = [...draftOrder];
-    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+  // Convert positions to array for validation
+  const positionsArray = useMemo(() => {
+    return teams.map(t => teamPositions[t.id] ?? null);
+  }, [teams, teamPositions]);
 
-    if (targetIndex < 0 || targetIndex >= newOrder.length) return;
+  // Validate the current order
+  const validation = useMemo(() => {
+    return validateDraftOrder(positionsArray, teams.length);
+  }, [positionsArray, teams.length]);
 
-    [newOrder[index], newOrder[targetIndex]] = [newOrder[targetIndex], newOrder[index]];
-    setDraftOrder(newOrder);
+  // Build the draft order from positions
+  const draftOrder = useMemo(() => {
+    if (!validation.valid) return [];
+
+    // Create array of [teamId, position] pairs and sort by position
+    const pairs = teams
+      .map(t => ({ id: t.id, position: teamPositions[t.id] ?? 0 }))
+      .filter(p => p.position > 0)
+      .sort((a, b) => a.position - b.position);
+
+    return pairs.map(p => p.id);
+  }, [teams, teamPositions, validation.valid]);
+
+  // Handle position change for a team
+  const handlePositionChange = (teamId: string, value: string) => {
+    const num = parseInt(value);
+    setTeamPositions(prev => ({
+      ...prev,
+      [teamId]: isNaN(num) ? null : num,
+    }));
+  };
+
+  // Check if a position has a duplicate
+  const isDuplicate = (position: number | null): boolean => {
+    if (position === null) return false;
+    return validation.duplicates.includes(position);
   };
 
   const handleStart = () => {
@@ -38,8 +107,23 @@ export const DraftConfig = ({ teams, players, onConfigComplete }: DraftConfigPro
       return;
     }
 
+    // Validate draft order
+    if (!validation.valid) {
+      alert(`Please fix the draft order: ${validation.error}`);
+      return;
+    }
+
     onConfigComplete(draftFormat, draftOrder);
   };
+
+  // Sort teams by their current position for display
+  const sortedTeams = useMemo(() => {
+    return [...teams].sort((a, b) => {
+      const posA = teamPositions[a.id] ?? Infinity;
+      const posB = teamPositions[b.id] ?? Infinity;
+      return posA - posB;
+    });
+  }, [teams, teamPositions]);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
@@ -54,7 +138,12 @@ export const DraftConfig = ({ teams, players, onConfigComplete }: DraftConfigPro
 
           <button
             onClick={handleStart}
-            className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium flex items-center gap-2"
+            disabled={!validation.valid}
+            className={`px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors ${
+              validation.valid
+                ? 'bg-blue-500 hover:bg-blue-600 text-white'
+                : 'bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed'
+            }`}
           >
             Start Draft
             <ChevronRight className="w-5 h-5" />
@@ -147,51 +236,74 @@ export const DraftConfig = ({ teams, players, onConfigComplete }: DraftConfigPro
             <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
               Draft Order
             </h2>
-            <div className="space-y-2">
-              {draftOrder.map((teamId, index) => {
-                const team = teams.find((t) => t.id === teamId);
-                if (!team) return null;
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+              Enter a position number (1-{teams.length}) for each team. Position 1 picks first in round 1.
+            </p>
 
-                const teamCoachKids = players.filter(p => p.coachTeamId === teamId);
+            {/* Validation Error */}
+            {!validation.valid && (
+              <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-start gap-2">
+                <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                <span className="text-sm text-red-700 dark:text-red-300">{validation.error}</span>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              {sortedTeams.map((team) => {
+                const position = teamPositions[team.id];
+                const teamCoachKids = players.filter(p => p.coachTeamId === team.id);
+                const hasError = isDuplicate(position) || (position !== null && (position < 1 || position > teams.length));
 
                 return (
                   <div
-                    key={teamId}
-                    className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-700 rounded"
+                    key={team.id}
+                    className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
+                      hasError
+                        ? 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800'
+                        : 'bg-gray-50 dark:bg-gray-700'
+                    }`}
                   >
-                    <span className="text-sm font-medium text-gray-600 dark:text-gray-400 w-8">
-                      #{index + 1}
-                    </span>
+                    <input
+                      type="number"
+                      min="1"
+                      max={teams.length}
+                      value={position ?? ''}
+                      onChange={(e) => handlePositionChange(team.id, e.target.value)}
+                      className={`w-16 px-3 py-2 text-center border rounded-lg font-semibold text-lg ${
+                        hasError
+                          ? 'border-red-500 bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+                          : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white'
+                      } focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
+                    />
                     <div className="flex-1">
-                      <span className="text-gray-900 dark:text-white">{team.name}</span>
+                      <span className="text-gray-900 dark:text-white font-medium">{team.name}</span>
                       {teamCoachKids.length > 0 && (
                         <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
                           (Coach: {teamCoachKids.map(p => p.name).join(', ')})
                         </span>
                       )}
                     </div>
-                    <div className="flex gap-1">
-                      <button
-                        onClick={() => moveTeam(index, 'up')}
-                        disabled={index === 0}
-                        className="p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded disabled:opacity-30"
-                        title="Move up"
-                      >
-                        <ChevronUp className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => moveTeam(index, 'down')}
-                        disabled={index === draftOrder.length - 1}
-                        className="p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded disabled:opacity-30"
-                        title="Move down"
-                      >
-                        <ChevronDown className="w-4 h-4" />
-                      </button>
-                    </div>
+                    {hasError && isDuplicate(position) && (
+                      <span className="text-xs text-red-600 dark:text-red-400">
+                        Duplicate
+                      </span>
+                    )}
                   </div>
                 );
               })}
             </div>
+
+            {/* Valid Order Preview */}
+            {validation.valid && (
+              <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Draft order preview:
+                </p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  {draftOrder.map(id => teams.find(t => t.id === id)?.name).join(' → ')}
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </div>
