@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { List, Grid, ChevronRight, Edit2, Users, Link, X, Wand2, CheckCircle2, AlertTriangle } from 'lucide-react';
-import { Player, Team, ViewMode, ScoringMode } from '../types';
+import { ChevronRight, ChevronDown, Edit2, Users, Link, X, Wand2, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Player, Team, ScoringMode } from '../types';
 import { autoDetectCoachKids, autoDetectSiblings, CoachKidMatch, SiblingMatch } from '../utils/coachKidDetection';
 import { useScoringWeights } from '../hooks/useScoringWeights';
 import { ScoringWeightsConfig } from './ScoringWeightsConfig';
@@ -20,8 +20,8 @@ interface PlayerReviewProps {
 }
 
 export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange, onUpdatePlayer, onUpdatePlayerField, onTeamsUpdate, onLinkSiblings, onUnlinkSibling, onNext }: PlayerReviewProps) => {
-  const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [editingPlayer, setEditingPlayer] = useState<string | null>(null);
+  const [expandedPlayerId, setExpandedPlayerId] = useState<string | null>(null);
   const [linkingSiblingFor, setLinkingSiblingFor] = useState<string | null>(null);
   const [autoDetectedMatches, setAutoDetectedMatches] = useState<CoachKidMatch[]>([]);
   const [siblingMatches, setSiblingMatches] = useState<SiblingMatch[]>([]);
@@ -215,158 +215,221 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
   const PlayerCard = ({ player }: { player: Player }) => {
     const assignedTeam = teams.find(t => t.id === player.coachTeamId);
     const availableSiblings = players.filter(p => p.id !== player.id && !p.siblingId);
+    const isExpanded = expandedPlayerId === player.id;
 
+    // Condensed row view (default) - click to expand
     return (
-      <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-        <div className="flex justify-between items-start mb-3">
-          <div className="flex-1">
-            <div className="flex items-center gap-2">
-              <h3 className="font-semibold text-lg text-gray-900 dark:text-white">
-                {player.name}
-              </h3>
-              <span className="text-xs bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-2 py-1 rounded font-mono">
+      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+        {/* Condensed Header Row - Always visible */}
+        <button
+          onClick={() => setExpandedPlayerId(isExpanded ? null : player.id)}
+          className="w-full p-3 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-left"
+        >
+          {/* Expand/Collapse Icon */}
+          <div className="flex-shrink-0">
+            {isExpanded ? (
+              <ChevronDown className="w-5 h-5 text-gray-400" />
+            ) : (
+              <ChevronRight className="w-5 h-5 text-gray-400" />
+            )}
+          </div>
+
+          {/* Rank */}
+          <div className="w-12 flex-shrink-0">
+            <span className="text-sm font-bold text-gray-900 dark:text-white">#{player.rank}</span>
+          </div>
+
+          {/* Name and badges */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-medium text-gray-900 dark:text-white truncate">{player.name}</span>
+              <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 px-1.5 py-0.5 rounded font-mono">
                 {player.bib}
               </span>
+              {player.isCoachKid && (
+                <span className={`text-xs px-1.5 py-0.5 rounded ${
+                  player.coachTeamId
+                    ? 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200'
+                    : 'bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200'
+                }`}>
+                  Coach{player.coachTeamId ? `: ${assignedTeam?.name}` : ' (unassigned)'}
+                </span>
+              )}
+              {player.siblingId && (
+                <span className="text-xs bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 px-1.5 py-0.5 rounded">
+                  Sibling: {player.sibling}
+                </span>
+              )}
               {player.isDNE && (
-                <span className="text-xs bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200 px-2 py-1 rounded">
+                <span className="text-xs bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200 px-1.5 py-0.5 rounded">
                   DNE
                 </span>
               )}
               {player.isAllStar && (
-                <span className="text-xs bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 px-2 py-1 rounded">
+                <span className="text-xs bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 px-1.5 py-0.5 rounded">
                   All-Star
                 </span>
               )}
             </div>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              Rank #{player.rank} • Round {player.projectedRound} • Score: {player.totalScore.toFixed(1)}
-            </p>
-            <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
-              F:{player.fieldingSubtotal.toFixed(1)} H:{player.hittingSubtotal.toFixed(1)} P:{player.pitchingSubtotal.toFixed(1)} C:{player.catchScore.toFixed(1)} R:{player.runningScore.toFixed(1)}
-              {player.officialAdjust !== 0 && ` Adj:${player.officialAdjust > 0 ? '+' : ''}${player.officialAdjust.toFixed(1)}`}
-            </p>
-            <p className="text-xs text-gray-500 dark:text-gray-500">
-              Age: {player.littleLeagueAge} {player.birthday && `• Birthday: ${player.birthday}`}
-            </p>
           </div>
-          <button
-            onClick={() => setEditingPlayer(editingPlayer === player.id ? null : player.id)}
-            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
-            title="Edit scores"
-          >
-            <Edit2 className="w-4 h-4 text-gray-600 dark:text-gray-400" />
-          </button>
-        </div>
 
-        {/* Coach's Kid Controls */}
-        <div className="mb-3 p-3 bg-gray-50 dark:bg-gray-700/50 rounded border border-gray-200 dark:border-gray-600">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={player.isCoachKid}
-              onChange={(e) => handleCoachKidToggle(player.id, e.target.checked)}
-              className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-            />
-            <span className="text-sm font-medium text-gray-900 dark:text-white">
-              Coach's Kid
-            </span>
-          </label>
+          {/* Age */}
+          <div className="w-12 flex-shrink-0 text-center">
+            <span className="text-sm text-gray-600 dark:text-gray-400">{player.littleLeagueAge}</span>
+          </div>
 
-          {player.isCoachKid && (
-            <div className="mt-2">
-              <select
-                value={player.coachTeamId || ''}
-                onChange={(e) => handleCoachTeamAssignment(player.id, e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-              >
-                <option value="">Select team...</option>
-                {teams.map(team => (
-                  <option key={team.id} value={team.id}>{team.name}</option>
-                ))}
-              </select>
-              {assignedTeam && (
-                <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                  Assigned to {assignedTeam.name}
-                </p>
+          {/* Round */}
+          <div className="w-12 flex-shrink-0 text-center">
+            <span className="text-sm text-gray-600 dark:text-gray-400">R{player.projectedRound}</span>
+          </div>
+
+          {/* Score */}
+          <div className="w-16 flex-shrink-0 text-right">
+            <span className="font-bold text-gray-900 dark:text-white">{player.totalScore.toFixed(1)}</span>
+          </div>
+        </button>
+
+        {/* Expanded Details */}
+        {isExpanded && (
+          <div className="p-4 pt-2 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+            {/* Scores breakdown */}
+            <div className="mb-4">
+              <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Score Breakdown:</p>
+              <div className="flex flex-wrap gap-3 text-sm">
+                <span className="text-gray-600 dark:text-gray-400">F: <strong className="text-gray-900 dark:text-white">{player.fieldingSubtotal.toFixed(1)}</strong></span>
+                <span className="text-gray-600 dark:text-gray-400">H: <strong className="text-gray-900 dark:text-white">{player.hittingSubtotal.toFixed(1)}</strong></span>
+                <span className="text-gray-600 dark:text-gray-400">P: <strong className="text-gray-900 dark:text-white">{player.pitchingSubtotal.toFixed(1)}</strong></span>
+                <span className="text-gray-600 dark:text-gray-400">C: <strong className="text-gray-900 dark:text-white">{player.catchScore.toFixed(1)}</strong></span>
+                <span className="text-gray-600 dark:text-gray-400">R: <strong className="text-gray-900 dark:text-white">{player.runningScore.toFixed(1)}</strong></span>
+                {player.officialAdjust !== 0 && (
+                  <span className="text-gray-600 dark:text-gray-400">
+                    Adj: <strong className={player.officialAdjust > 0 ? 'text-green-600' : 'text-red-600'}>
+                      {player.officialAdjust > 0 ? '+' : ''}{player.officialAdjust.toFixed(1)}
+                    </strong>
+                  </span>
+                )}
+              </div>
+              {player.birthday && (
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Birthday: {player.birthday}</p>
               )}
             </div>
-          )}
-        </div>
 
-        {/* Sibling Linking */}
-        <div className="mb-3 p-3 bg-gray-50 dark:bg-gray-700/50 rounded border border-gray-200 dark:border-gray-600">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-gray-900 dark:text-white">Sibling</span>
-            {!player.siblingId && (
-              <button
-                onClick={() => setLinkingSiblingFor(linkingSiblingFor === player.id ? null : player.id)}
-                className="text-xs px-2 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded flex items-center gap-1"
-              >
-                <Link className="w-3 h-3" />
-                Link
-              </button>
-            )}
-          </div>
+            <div className="grid md:grid-cols-2 gap-4">
+              {/* Coach's Kid Controls */}
+              <div className="p-3 bg-white dark:bg-gray-700/50 rounded border border-gray-200 dark:border-gray-600">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={player.isCoachKid}
+                    onChange={(e) => handleCoachKidToggle(player.id, e.target.checked)}
+                    className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="text-sm font-medium text-gray-900 dark:text-white">
+                    Coach's Kid
+                  </span>
+                </label>
 
-          {player.siblingId ? (
-            <div className="flex items-center justify-between p-2 bg-purple-50 dark:bg-purple-900/20 rounded border border-purple-200 dark:border-purple-800">
-              <span className="text-sm text-purple-800 dark:text-purple-200">
-                {player.sibling}
-              </span>
-              <button
-                onClick={() => handleSiblingUnlink(player.id)}
-                className="p-1 hover:bg-purple-100 dark:hover:bg-purple-900/40 rounded"
-                title="Unlink sibling"
-              >
-                <X className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-              </button>
+                {player.isCoachKid && (
+                  <div className="mt-2">
+                    <select
+                      value={player.coachTeamId || ''}
+                      onChange={(e) => handleCoachTeamAssignment(player.id, e.target.value)}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                    >
+                      <option value="">Select team...</option>
+                      {teams.map(team => (
+                        <option key={team.id} value={team.id}>{team.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              {/* Sibling Linking */}
+              <div className="p-3 bg-white dark:bg-gray-700/50 rounded border border-gray-200 dark:border-gray-600">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-gray-900 dark:text-white">Sibling</span>
+                  {!player.siblingId && (
+                    <button
+                      onClick={() => setLinkingSiblingFor(linkingSiblingFor === player.id ? null : player.id)}
+                      className="text-xs px-2 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded flex items-center gap-1"
+                    >
+                      <Link className="w-3 h-3" />
+                      Link
+                    </button>
+                  )}
+                </div>
+
+                {player.siblingId ? (
+                  <div className="flex items-center justify-between p-2 bg-purple-50 dark:bg-purple-900/20 rounded border border-purple-200 dark:border-purple-800">
+                    <span className="text-sm text-purple-800 dark:text-purple-200">
+                      {player.sibling}
+                    </span>
+                    <button
+                      onClick={() => handleSiblingUnlink(player.id)}
+                      className="p-1 hover:bg-purple-100 dark:hover:bg-purple-900/40 rounded"
+                      title="Unlink sibling"
+                    >
+                      <X className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                    </button>
+                  </div>
+                ) : linkingSiblingFor === player.id ? (
+                  <select
+                    onChange={(e) => e.target.value && handleSiblingLink(player.id, e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                    defaultValue=""
+                  >
+                    <option value="">Select sibling...</option>
+                    {availableSiblings.map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} (Rank #{p.rank}, Age {p.littleLeagueAge})
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <p className="text-xs text-gray-500 dark:text-gray-400">No sibling linked</p>
+                )}
+              </div>
             </div>
-          ) : linkingSiblingFor === player.id ? (
-            <select
-              onChange={(e) => e.target.value && handleSiblingLink(player.id, e.target.value)}
-              className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-              defaultValue=""
-            >
-              <option value="">Select sibling...</option>
-              {availableSiblings.map(p => (
-                <option key={p.id} value={p.id}>
-                  {p.name} (Rank #{p.rank}, Age {p.littleLeagueAge})
-                </option>
-              ))}
-            </select>
-          ) : (
-            <p className="text-xs text-gray-500 dark:text-gray-400">No sibling linked</p>
-          )}
-        </div>
 
-        {/* Score Editing */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          {(['fieldingSubtotal', 'hittingSubtotal', 'pitchingSubtotal', 'catchScore', 'runningScore', 'officialAdjust'] as const).map((field) => (
-            <div key={field}>
-              <label className="text-xs text-gray-600 dark:text-gray-400 capitalize block mb-1">
-                {field === 'fieldingSubtotal' ? 'Fielding' :
-                 field === 'hittingSubtotal' ? 'Hitting' :
-                 field === 'pitchingSubtotal' ? 'Pitching' :
-                 field === 'catchScore' ? 'Catch' :
-                 field === 'runningScore' ? 'Running' :
-                 field === 'officialAdjust' ? 'Adjustment' : field}
-              </label>
-              {editingPlayer === player.id ? (
-                <input
-                  type="number"
-                  step="0.1"
-                  value={player[field]}
-                  onChange={(e) => handleEdit(player.id, field, e.target.value)}
-                  className="w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
-                />
-              ) : (
-                <div className="text-sm font-medium text-gray-900 dark:text-white">
-                  {player[field].toFixed(1)}
+            {/* Score Editing */}
+            <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-600">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-gray-900 dark:text-white">Edit Scores</span>
+                <button
+                  onClick={() => setEditingPlayer(editingPlayer === player.id ? null : player.id)}
+                  className="text-xs px-2 py-1 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 rounded flex items-center gap-1"
+                >
+                  <Edit2 className="w-3 h-3" />
+                  {editingPlayer === player.id ? 'Done' : 'Edit'}
+                </button>
+              </div>
+              {editingPlayer === player.id && (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {(['fieldingSubtotal', 'hittingSubtotal', 'pitchingSubtotal', 'catchScore', 'runningScore', 'officialAdjust'] as const).map((field) => (
+                    <div key={field}>
+                      <label className="text-xs text-gray-600 dark:text-gray-400 capitalize block mb-1">
+                        {field === 'fieldingSubtotal' ? 'Fielding' :
+                         field === 'hittingSubtotal' ? 'Hitting' :
+                         field === 'pitchingSubtotal' ? 'Pitching' :
+                         field === 'catchScore' ? 'Catch' :
+                         field === 'runningScore' ? 'Running' :
+                         field === 'officialAdjust' ? 'Adjustment' : field}
+                      </label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        value={player[field]}
+                        onChange={(e) => handleEdit(player.id, field, e.target.value)}
+                        className="w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+                      />
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
-          ))}
-        </div>
+          </div>
+        )}
       </div>
     );
   };
@@ -391,6 +454,52 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
     if (brokenSiblingLinks.length > 0) {
       alert(`Warning: Found broken sibling links. Please check: ${brokenSiblingLinks.map(p => p.name).join(', ')}`);
       return;
+    }
+
+    // Handle same-round coach's kid conflicts
+    // Find coach's kids grouped by projected round
+    const coachKidsByRound: Record<number, Player[]> = {};
+    players.filter(p => p.isCoachKid && p.coachTeamId).forEach(p => {
+      const round = p.projectedRound;
+      if (!coachKidsByRound[round]) {
+        coachKidsByRound[round] = [];
+      }
+      coachKidsByRound[round].push(p);
+    });
+
+    // Check for conflicts (multiple coach's kids from different teams in same round)
+    for (const [roundStr, kidsInRound] of Object.entries(coachKidsByRound)) {
+      const round = parseInt(roundStr);
+      const uniqueTeams = new Set(kidsInRound.map(p => p.coachTeamId));
+
+      if (uniqueTeams.size > 1) {
+        // Conflict! Multiple teams have coach's kids in the same round
+        // Ask user how to resolve
+        const conflictInfo = kidsInRound.map(p => {
+          const team = teams.find(t => t.id === p.coachTeamId);
+          return `${p.name} (${team?.name})`;
+        }).join('\n• ');
+
+        const message = `Coach's kid conflict in Round ${round}:\n\n• ${conflictInfo}\n\nMultiple teams cannot all pick their coach's kids in the same round. The system will automatically adjust:\n- First pick in that round drafts their coach's kid\n- Others get pushed to Round ${round + 1}\n\nContinue?`;
+
+        if (!window.confirm(message)) {
+          return;
+        }
+
+        // Auto-resolve: spread them across rounds based on the draft order
+        // For now, we'll just push subsequent ones to later rounds
+        // The first one in initial draft order keeps their round, others get lockedToRound = round + offset
+        let offset = 0;
+        kidsInRound.forEach((kid, index) => {
+          if (index === 0) {
+            // First one keeps their projected round (no lock needed)
+          } else {
+            // Push to next available round
+            offset++;
+            onUpdatePlayerField(kid.id, { lockedToRound: round + offset });
+          }
+        });
+      }
     }
 
     onNext();
@@ -421,31 +530,6 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
               <Wand2 className="w-5 h-5" />
               <span className="hidden sm:inline">Auto-Detect Coaches</span>
             </button>
-
-            <div className="flex bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-1">
-              <button
-                onClick={() => setViewMode('list')}
-                className={`p-2 rounded ${
-                  viewMode === 'list'
-                    ? 'bg-blue-500 text-white'
-                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
-                }`}
-                title="List view"
-              >
-                <List className="w-5 h-5" />
-              </button>
-              <button
-                onClick={() => setViewMode('grid')}
-                className={`p-2 rounded ${
-                  viewMode === 'grid'
-                    ? 'bg-blue-500 text-white'
-                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
-                }`}
-                title="Grid view"
-              >
-                <Grid className="w-5 h-5" />
-              </button>
-            </div>
 
             <button
               onClick={handleNext}
@@ -579,12 +663,17 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
           />
         )}
 
-        {/* Players Grid/List */}
-        <div className={
-          viewMode === 'grid'
-            ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4'
-            : 'space-y-3'
-        }>
+        {/* Players List */}
+        <div className="space-y-1">
+          {/* Header row for list view */}
+          <div className="hidden md:flex items-center gap-3 px-3 py-2 bg-gray-100 dark:bg-gray-800 rounded-lg text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+            <div className="w-5 flex-shrink-0"></div>
+            <div className="w-12 flex-shrink-0">Rank</div>
+            <div className="flex-1">Player</div>
+            <div className="w-12 flex-shrink-0 text-center">Age</div>
+            <div className="w-12 flex-shrink-0 text-center">Round</div>
+            <div className="w-16 flex-shrink-0 text-right">Score</div>
+          </div>
           {players.map((player) => (
             <PlayerCard key={player.id} player={player} />
           ))}

@@ -113,6 +113,11 @@ export const DraftConfig = ({ teams, players, onConfigComplete }: DraftConfigPro
       return;
     }
 
+    // Debug: Log the draft order being passed
+    console.log('🎯 DraftConfig.handleStart - draftOrder:', draftOrder);
+    console.log('🎯 DraftConfig.handleStart - teams:', teams.map(t => ({ id: t.id, name: t.name })));
+    console.log('🎯 DraftConfig.handleStart - teamPositions:', teamPositions);
+
     onConfigComplete(draftFormat, draftOrder);
   };
 

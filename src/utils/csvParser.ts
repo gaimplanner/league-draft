@@ -123,13 +123,13 @@ export const parseCSVWithMapping = (
       objectiveTotal = catchScore + runningScore;
       totalScore = subjectiveTotal + objectiveTotal + officialAdjust;
     } else {
-      // No scores provided - all zeros
+      // No component scores provided - use zeros but still include official adjust
       fieldingSubtotal = 0;
       hittingSubtotal = 0;
       pitchingSubtotal = 0;
       subjectiveTotal = 0;
-      objectiveTotal = 0;
-      totalScore = 0;
+      objectiveTotal = catchScore + runningScore; // catchScore/runningScore might still have values
+      totalScore = objectiveTotal + officialAdjust; // ALWAYS include official adjust
     }
 
     // Parse player info

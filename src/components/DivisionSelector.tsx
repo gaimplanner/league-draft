@@ -120,7 +120,9 @@ export const DivisionSelector = ({
                         </span>
                         <span className="flex items-center gap-1.5">
                           <Calendar className="w-4 h-4" />
-                          Created {formatDate(division.createdAt)}
+                          {division.completedAt
+                            ? `Completed ${formatDate(division.completedAt)}`
+                            : `Created ${formatDate(division.createdAt)}`}
                         </span>
                       </div>
                     </div>

@@ -77,7 +77,18 @@ function App() {
   // Save phase changes back to division
   useEffect(() => {
     if (activeDivision && phase !== activeDivision.phase) {
-      updateActiveDivision({ phase });
+      // When draft completes, also save the completion timestamp and final state
+      if (phase === 'complete') {
+        updateActiveDivision({
+          phase,
+          completedAt: new Date().toISOString(),
+          draftState,
+          teams: draftState.teams,
+          players: draftState.players,
+        });
+      } else {
+        updateActiveDivision({ phase });
+      }
     }
   }, [phase, activeDivision?.id]);
 

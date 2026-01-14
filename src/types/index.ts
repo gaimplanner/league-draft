@@ -40,6 +40,10 @@ export interface Player {
   sibling?: string; // Display name of sibling
   siblingId?: string; // ID of linked sibling player
 
+  // Locked assignments (for same-round conflicts and sibling requirements)
+  lockedToRound?: number; // Override projectedRound for mandatory pick timing
+  lockedToTeamId?: string; // Team that must draft this player (set when sibling is drafted)
+
   // Draft Status
   isDrafted: boolean;
   draftedByTeamId?: string;

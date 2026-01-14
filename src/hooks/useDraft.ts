@@ -170,12 +170,13 @@ export const useDraft = (divisionId?: string) => {
       if (!team) return;
 
       // Check for coach's kids that must be drafted this round
+      // Use lockedToRound if set (for same-round conflicts), otherwise use projectedRound
       const coachKidToDraft = players.find(
         (p) =>
           !p.isDrafted &&
           p.isCoachKid &&
           p.coachTeamId === teamId &&
-          p.projectedRound === round
+          (p.lockedToRound ?? p.projectedRound) === round
       );
 
       if (coachKidToDraft) {
@@ -189,30 +190,40 @@ export const useDraft = (divisionId?: string) => {
         return;
       }
 
-      // Check for sibling requirements (only in projected round)
+      // Check for sibling requirements
+      // A sibling must be drafted when:
+      // 1. They are locked to this team (lockedToTeamId === teamId), OR
+      // 2. Their sibling was drafted by this team and it's their projected round
       const siblingToDraft = players.find((p) => {
-        if (p.isDrafted || !p.sibling) return false;
+        if (p.isDrafted || !p.siblingId) return false;
 
-        // Sibling must be drafted in their projected round
-        if (p.projectedRound !== round) return false;
+        // If locked to this team, must draft in their lockedToRound or projectedRound
+        if (p.lockedToTeamId === teamId) {
+          const requiredRound = p.lockedToRound ?? p.projectedRound;
+          return requiredRound === round;
+        }
 
-        // Check if sibling was drafted by this team
-        const sibling = players.find(
-          (other) =>
-            other.name.toLowerCase() === p.sibling!.toLowerCase() &&
-            other.draftedByTeamId === teamId
-        );
+        // Legacy check: sibling by name match in projected round
+        if (p.sibling && p.projectedRound === round) {
+          const sibling = players.find(
+            (other) =>
+              other.name.toLowerCase() === p.sibling!.toLowerCase() &&
+              other.draftedByTeamId === teamId
+          );
+          return !!sibling;
+        }
 
-        return !!sibling;
+        return false;
       });
 
       if (siblingToDraft) {
+        const siblingPlayer = players.find(p => p.id === siblingToDraft.siblingId);
         setDraftState((prev) => ({
           ...prev,
           mandatoryPick: {
             playerId: siblingToDraft.id,
             reason: 'sibling',
-            siblingName: siblingToDraft.sibling,
+            siblingName: siblingPlayer?.name || siblingToDraft.sibling,
           },
         }));
         return;
@@ -268,10 +279,21 @@ export const useDraft = (divisionId?: string) => {
           draftedAtPick: (currentRound - 1) * teams.length + currentPickInRound,
         };
 
-        // Update players array
-        const updatedPlayers = players.map((p) =>
-          p.id === playerId ? draftedPlayer : p
-        );
+        // Update players array - also lock siblings to this team
+        const updatedPlayers = players.map((p) => {
+          if (p.id === playerId) {
+            return draftedPlayer;
+          }
+          // If this player is a sibling of the drafted player, lock them to this team
+          if (p.siblingId === playerId && !p.isDrafted) {
+            console.log('🔗 Locking sibling', p.name, 'to team', currentTeamId);
+            return {
+              ...p,
+              lockedToTeamId: currentTeamId,
+            };
+          }
+          return p;
+        });
 
         // Update team with the drafted player
         const updatedTeams = teams.map((t) => {
@@ -371,18 +393,28 @@ export const useDraft = (divisionId?: string) => {
       const lastPick = prev.picks[prev.picks.length - 1];
       if (!lastPick.playerId) return prev;
 
-      // Revert player
-      const updatedPlayers = prev.players.map((p) =>
-        p.id === lastPick.playerId
-          ? {
-              ...p,
-              isDrafted: false,
-              draftedByTeamId: undefined,
-              draftedInRound: undefined,
-              draftedAtPick: undefined,
-            }
-          : p
-      );
+      // Revert player and unlock any siblings that were locked to that team
+      const updatedPlayers = prev.players.map((p) => {
+        if (p.id === lastPick.playerId) {
+          return {
+            ...p,
+            isDrafted: false,
+            draftedByTeamId: undefined,
+            draftedInRound: undefined,
+            draftedAtPick: undefined,
+          };
+        }
+        // If this player was locked to a team because their sibling was drafted,
+        // unlock them when the sibling is undrafted
+        if (p.siblingId === lastPick.playerId && p.lockedToTeamId === lastPick.teamId) {
+          console.log('🔓 Unlocking sibling', p.name, 'from team', lastPick.teamId);
+          return {
+            ...p,
+            lockedToTeamId: undefined,
+          };
+        }
+        return p;
+      });
 
       // Revert team
       const updatedTeams = prev.teams.map((t) => {

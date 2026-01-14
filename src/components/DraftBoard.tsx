@@ -131,35 +131,108 @@ export const DraftBoard = ({ draftState, onDraftPlayer, onUndo, onReset }: Draft
           </div>
 
           {/* Mandatory Pick Warning */}
-          {draftState.mandatoryPick && (
-            <div className="mt-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
-              <div>
-                <div className="font-semibold text-yellow-800 dark:text-yellow-200">
-                  Mandatory Pick Required
-                </div>
-                <div className="text-sm text-yellow-700 dark:text-yellow-300 mt-1">
-                  {draftState.mandatoryPick.reason === 'coach-kid' ? (
-                    <>
-                      You must draft{' '}
-                      <strong>
-                        {draftState.players.find((p) => p.id === draftState.mandatoryPick?.playerId)?.name}
-                      </strong>{' '}
-                      (coach's kid in their projected round)
-                    </>
-                  ) : (
-                    <>
-                      You must draft{' '}
-                      <strong>
-                        {draftState.players.find((p) => p.id === draftState.mandatoryPick?.playerId)?.name}
-                      </strong>{' '}
-                      (sibling of {draftState.mandatoryPick.siblingName})
-                    </>
-                  )}
+          {draftState.mandatoryPick && (() => {
+            const mandatoryPlayer = draftState.players.find((p) => p.id === draftState.mandatoryPick?.playerId);
+            return (
+              <div className="mt-4 p-4 bg-yellow-50 dark:bg-yellow-900/30 border-2 border-yellow-400 dark:border-yellow-600 rounded-lg">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="w-6 h-6 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <div className="font-bold text-lg text-yellow-800 dark:text-yellow-200">
+                      Mandatory Pick Required
+                    </div>
+                    <div className="text-sm text-yellow-700 dark:text-yellow-300 mt-1 mb-3">
+                      {draftState.mandatoryPick.reason === 'coach-kid' ? (
+                        <>
+                          <strong>{mandatoryPlayer?.name}</strong> is a coach's kid and must be drafted in Round {draftState.currentRound}.
+                        </>
+                      ) : (
+                        <>
+                          <strong>{mandatoryPlayer?.name}</strong> must be drafted with their sibling ({draftState.mandatoryPick.siblingName}).
+                        </>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => {
+                        if (mandatoryPlayer) {
+                          setSelectedPlayerId(mandatoryPlayer.id);
+                          // Scroll to the player in the list
+                          const playerElement = document.getElementById(`player-${mandatoryPlayer.id}`);
+                          playerElement?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }
+                      }}
+                      className="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-white font-semibold rounded-lg flex items-center gap-2 shadow-md"
+                    >
+                      Select {mandatoryPlayer?.name}
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
+        </div>
+
+        {/* Round Order Display */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 mb-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-semibold text-gray-900 dark:text-white">
+              Round {draftState.currentRound} Draft Order
+            </h3>
+            <span className="text-sm text-gray-500 dark:text-gray-400">
+              Format: {draftState.draftFormat}
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {draftState.currentRoundOrder.map((teamId, index) => {
+              const team = draftState.teams.find(t => t.id === teamId);
+              const isPastPick = index + 1 < draftState.currentPickInRound;
+              const isCurrentPick = index + 1 === draftState.currentPickInRound;
+
+              return (
+                <div
+                  key={teamId}
+                  className={`
+                    flex items-center gap-2 px-3 py-2 rounded-lg border-2 transition-all
+                    ${isCurrentPick
+                      ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 shadow-md scale-105'
+                      : isPastPick
+                      ? 'border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 opacity-50'
+                      : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-700'
+                    }
+                  `}
+                >
+                  <span className={`
+                    w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold
+                    ${isCurrentPick
+                      ? 'bg-blue-500 text-white'
+                      : isPastPick
+                      ? 'bg-gray-400 text-white'
+                      : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'
+                    }
+                  `}>
+                    {index + 1}
+                  </span>
+                  <span className={`
+                    text-sm font-medium
+                    ${isCurrentPick
+                      ? 'text-blue-700 dark:text-blue-200'
+                      : isPastPick
+                      ? 'text-gray-500 dark:text-gray-500 line-through'
+                      : 'text-gray-700 dark:text-gray-300'
+                    }
+                  `}>
+                    {team?.name || 'Unknown'}
+                  </span>
+                  {isCurrentPick && (
+                    <span className="text-xs bg-blue-500 text-white px-2 py-0.5 rounded-full">
+                      NOW
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
 
         <div className="grid lg:grid-cols-3 gap-6">
@@ -219,6 +292,7 @@ export const DraftBoard = ({ draftState, onDraftPlayer, onUndo, onReset }: Draft
                   return (
                     <button
                       key={player.id}
+                      id={`player-${player.id}`}
                       onClick={() => !isCoachKidForOtherTeam && handlePlayerClick(player.id)}
                       disabled={isCoachKidForOtherTeam || undefined}
                       className={`
