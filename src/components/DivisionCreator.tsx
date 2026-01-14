@@ -1,0 +1,247 @@
+import { useState } from 'react';
+import { ArrowLeft, Check } from 'lucide-react';
+import { DivisionPreset, DIVISION_PRESETS, DivisionAgeRange } from '../types';
+
+interface DivisionCreatorProps {
+  onCancel: () => void;
+  onCreate: (config: {
+    name: string;
+    preset: DivisionPreset;
+    teamCount: number;
+    ageRange: DivisionAgeRange;
+    enforceAgeLimit: boolean;
+    maxPerAge: number;
+  }) => void;
+}
+
+const presetOptions: { id: DivisionPreset; label: string; description: string }[] = [
+  { id: 'majors', label: 'Majors', description: 'Ages 10-12, max 8 per age' },
+  { id: 'aaa', label: 'AAA', description: 'Ages 8-10, max 8 per age' },
+  { id: 'aa', label: 'AA', description: 'Ages 7-10, no age limit' },
+  { id: 'custom', label: 'Custom', description: 'Configure your own settings' },
+];
+
+export const DivisionCreator = ({ onCancel, onCreate }: DivisionCreatorProps) => {
+  const [step, setStep] = useState<'preset' | 'configure'>('preset');
+  const [selectedPreset, setSelectedPreset] = useState<DivisionPreset | null>(null);
+  const [name, setName] = useState('');
+  const [teamCount, setTeamCount] = useState(8);
+  const [ageMin, setAgeMin] = useState(7);
+  const [ageMax, setAgeMax] = useState(12);
+  const [enforceAgeLimit, setEnforceAgeLimit] = useState(true);
+  const [maxPerAge, setMaxPerAge] = useState(8);
+
+  const handlePresetSelect = (preset: DivisionPreset) => {
+    setSelectedPreset(preset);
+
+    if (preset !== 'custom') {
+      const presetConfig = DIVISION_PRESETS[preset];
+      setName(presetConfig.name);
+      setAgeMin(presetConfig.ageRange.min);
+      setAgeMax(presetConfig.ageRange.max);
+      setEnforceAgeLimit(presetConfig.enforceAgeLimit);
+      setMaxPerAge(presetConfig.maxPerAge);
+    } else {
+      setName('');
+    }
+
+    setStep('configure');
+  };
+
+  const handleCreate = () => {
+    if (!name.trim() || !selectedPreset) return;
+
+    onCreate({
+      name: name.trim(),
+      preset: selectedPreset,
+      teamCount,
+      ageRange: { min: ageMin, max: ageMax },
+      enforceAgeLimit,
+      maxPerAge: enforceAgeLimit ? maxPerAge : 0,
+    });
+  };
+
+  const isValid = name.trim().length > 0 && teamCount >= 5 && teamCount <= 10;
+
+  return (
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center p-4">
+      <div className="max-w-2xl w-full">
+        <div className="mb-8">
+          <button
+            onClick={step === 'configure' ? () => setStep('preset') : onCancel}
+            className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors mb-4"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            {step === 'configure' ? 'Back to Presets' : 'Back to Divisions'}
+          </button>
+
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+            Create New Division
+          </h1>
+          <p className="text-gray-600 dark:text-gray-400 mt-1">
+            {step === 'preset'
+              ? 'Choose a preset or configure your own'
+              : 'Configure your division settings'}
+          </p>
+        </div>
+
+        {step === 'preset' && (
+          <div className="grid grid-cols-2 gap-4">
+            {presetOptions.map((option) => (
+              <button
+                key={option.id}
+                onClick={() => handlePresetSelect(option.id)}
+                className="p-6 bg-white dark:bg-gray-800 rounded-lg border-2 border-gray-200 dark:border-gray-700 hover:border-blue-500 dark:hover:border-blue-500 transition-colors text-left group"
+              >
+                <h3 className="text-xl font-semibold text-gray-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                  {option.label}
+                </h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                  {option.description}
+                </p>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {step === 'configure' && (
+          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6 space-y-6">
+            {/* Division Name */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Division Name
+              </label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g., Majors 2024"
+                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+
+            {/* Team Count */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Number of Teams: {teamCount}
+              </label>
+              <input
+                type="range"
+                min="5"
+                max="10"
+                value={teamCount}
+                onChange={(e) => setTeamCount(parseInt(e.target.value))}
+                className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-600"
+              />
+              <div className="flex justify-between text-xs text-gray-500 dark:text-gray-500 mt-1">
+                <span>5</span>
+                <span>6</span>
+                <span>7</span>
+                <span>8</span>
+                <span>9</span>
+                <span>10</span>
+              </div>
+            </div>
+
+            {/* Age Range */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Minimum Age
+                </label>
+                <input
+                  type="number"
+                  min="5"
+                  max={ageMax}
+                  value={ageMin}
+                  onChange={(e) => setAgeMin(parseInt(e.target.value) || 5)}
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Maximum Age
+                </label>
+                <input
+                  type="number"
+                  min={ageMin}
+                  max="18"
+                  value={ageMax}
+                  onChange={(e) => setAgeMax(parseInt(e.target.value) || 12)}
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+            </div>
+
+            {/* Age Limit Enforcement */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setEnforceAgeLimit(!enforceAgeLimit)}
+                  className={`relative w-11 h-6 rounded-full transition-colors ${
+                    enforceAgeLimit ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'
+                  }`}
+                >
+                  <span
+                    className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
+                      enforceAgeLimit ? 'translate-x-5' : ''
+                    }`}
+                  />
+                </button>
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Enforce age limits per team
+                </span>
+              </div>
+
+              {enforceAgeLimit && (
+                <div className="ml-14">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Maximum players per age group
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="15"
+                    value={maxPerAge}
+                    onChange={(e) => setMaxPerAge(parseInt(e.target.value) || 8)}
+                    className="w-24 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Summary */}
+            <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4">
+              <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Division Summary
+              </h4>
+              <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
+                <li>• {teamCount} teams competing</li>
+                <li>• Players ages {ageMin}-{ageMax}</li>
+                <li>
+                  {enforceAgeLimit
+                    ? `• Max ${maxPerAge} players per age group per team`
+                    : '• No age group limits'}
+                </li>
+              </ul>
+            </div>
+
+            {/* Create Button */}
+            <button
+              onClick={handleCreate}
+              disabled={!isValid}
+              className={`w-full py-3 rounded-lg font-semibold flex items-center justify-center gap-2 transition-colors ${
+                isValid
+                  ? 'bg-blue-600 text-white hover:bg-blue-700'
+                  : 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
+              }`}
+            >
+              <Check className="w-5 h-5" />
+              Create Division
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};

@@ -1,0 +1,285 @@
+export interface Player {
+  id: string;
+  bib: string; // Unique ID from evaluation day
+  firstName: string;
+  lastName: string;
+  name: string; // Full name (firstName + lastName)
+
+  // Raw Component Scores (from evaluations)
+  fieldScore: number;
+  throwScore: number;
+  hitPower: number;
+  hitForm: number;
+  hitContact: number;
+  pitchingStrength: number;
+  pitchingForm: number;
+  catchScore: number;
+  runningScore: number;
+
+  // Calculated Subtotals (weighted aggregates)
+  fieldingSubtotal: number;
+  hittingSubtotal: number;
+  pitchingSubtotal: number;
+  subjectiveTotal: number; // Sum of weighted subjective scores
+  objectiveTotal: number; // Sum of objective scores
+  officialAdjust: number;
+
+  totalScore: number;
+  rank: number;
+  projectedRound: number;
+
+  // Player Info
+  littleLeagueAge: number;
+  birthday: string;
+  isAllStar: boolean;
+  isDNE: boolean; // Did Not Evaluate
+
+  // Draft Rules
+  isCoachKid: boolean;
+  coachTeamId?: string;
+  sibling?: string; // Display name of sibling
+  siblingId?: string; // ID of linked sibling player
+
+  // Draft Status
+  isDrafted: boolean;
+  draftedByTeamId?: string;
+  draftedInRound?: number;
+  draftedAtPick?: number;
+}
+
+export interface Team {
+  id: string;
+  name: string;
+  roster: Player[];
+  totalScore: number;
+  draftPosition: number; // 1-8
+  coachKids: string[]; // player IDs
+  assistantCoaches: string[]; // assistant coach last names
+}
+
+export interface DraftPick {
+  round: number;
+  pick: number;
+  teamId: string;
+  playerId?: string;
+  timestamp?: number;
+}
+
+export type DraftFormat = 'straight' | 'snake' | 'recalculated';
+
+export interface DraftConfig {
+  teams: Team[];
+  draftFormat: DraftFormat;
+  draftOrder: string[]; // team IDs in order
+}
+
+export interface DraftState {
+  players: Player[];
+  teams: Team[];
+  draftFormat: DraftFormat;
+  draftOrder: string[]; // team IDs (initial order)
+  currentRoundOrder: string[]; // team IDs for current round (cached)
+  picks: DraftPick[];
+  currentRound: number;
+  currentPickInRound: number;
+  currentTeamId: string | null;
+  isDraftComplete: boolean;
+  mandatoryPick?: {
+    playerId: string;
+    reason: 'coach-kid' | 'sibling';
+    siblingName?: string;
+  };
+}
+
+export interface CSVRow {
+  'First Name': string;
+  'Last Name': string;
+  'FIELDING SUBTOTAL': string;
+  'HITTING SUBTOTAL': string;
+  'PITCHING SUBTOTAL': string;
+  'CATCH SCORE': string;
+  'RUNNING Score': string;
+  'Official Adjust': string;
+  'Little League Age': string;
+  'Birthday': string;
+  'All-Star': string;
+  'DNE': string;
+  'Coach Kid'?: string;
+  'Sibling'?: string;
+}
+
+export type ViewMode = 'list' | 'grid';
+
+export type AppPhase = 'upload' | 'mapping' | 'review' | 'config' | 'draft' | 'complete';
+
+export type AppField =
+  | 'bib'
+  | 'firstName'
+  | 'lastName'
+  | 'fieldScore'
+  | 'throwScore'
+  | 'hitPower'
+  | 'hitForm'
+  | 'hitContact'
+  | 'pitchingStrength'
+  | 'pitchingForm'
+  | 'fieldingSubtotal'
+  | 'hittingSubtotal'
+  | 'pitchingSubtotal'
+  | 'catchScore'
+  | 'runningScore'
+  | 'officialAdjust'
+  | 'littleLeagueAge'
+  | 'birthday'
+  | 'isAllStar'
+  | 'isDNE'
+  | 'isCoachKid'
+  | 'sibling';
+
+export interface ColumnMapping {
+  [csvColumn: string]: AppField | null;
+}
+
+export interface ParsedCSVData {
+  headers: string[];
+  rows: any[];
+}
+
+export interface ScoringWeights {
+  fielding: {
+    field: number;  // % weight for field score
+    throw: number;  // % weight for throw score
+  };
+  hitting: {
+    power: number;   // % weight for hit power
+    form: number;    // % weight for hit form
+    contact: number; // % weight for hit contact
+  };
+  pitching: {
+    strength: number; // % weight for pitching strength
+    form: number;     // % weight for pitching form
+  };
+  catching: number;   // % weight for catch score
+  running: number;    // % weight for running score
+}
+
+// Default weights based on evaluation criteria
+export const DEFAULT_SCORING_WEIGHTS: ScoringWeights = {
+  fielding: {
+    field: 15.0,
+    throw: 13.0,
+  },
+  hitting: {
+    power: 9.0,
+    form: 9.0,
+    contact: 9.0,
+  },
+  pitching: {
+    strength: 20.0,
+    form: 15.0,
+  },
+  catching: 5.0,
+  running: 5.0,
+};
+
+// Division types for multi-division support
+export type DivisionPreset = 'majors' | 'aaa' | 'aa' | 'custom';
+
+export interface DivisionAgeRange {
+  min: number;
+  max: number;
+}
+
+export interface Division {
+  id: string;
+  name: string;
+  preset: DivisionPreset;
+  ageRange: DivisionAgeRange;
+  enforceAgeLimit: boolean;
+  maxPerAge: number; // Max players per age group (0 = no limit)
+  teamCount: number; // 5-10 teams
+  rosterSize: number; // Calculated: players ÷ teams
+  teams: Team[];
+  players: Player[];
+  draftState: DraftState | null;
+  scoringWeights: ScoringWeights;
+  phase: AppPhase;
+  createdAt: string; // ISO date string
+  completedAt?: string; // ISO date string
+}
+
+export interface DivisionSummary {
+  id: string;
+  name: string;
+  preset: DivisionPreset;
+  teamCount: number;
+  playerCount: number;
+  phase: AppPhase;
+  createdAt: string;
+  completedAt?: string;
+}
+
+// Preset configurations for common divisions
+export const DIVISION_PRESETS: Record<Exclude<DivisionPreset, 'custom'>, {
+  name: string;
+  ageRange: DivisionAgeRange;
+  enforceAgeLimit: boolean;
+  maxPerAge: number;
+}> = {
+  majors: {
+    name: 'Majors',
+    ageRange: { min: 10, max: 12 },
+    enforceAgeLimit: true,
+    maxPerAge: 8,
+  },
+  aaa: {
+    name: 'AAA',
+    ageRange: { min: 8, max: 10 },
+    enforceAgeLimit: true,
+    maxPerAge: 8,
+  },
+  aa: {
+    name: 'AA',
+    ageRange: { min: 7, max: 10 },
+    enforceAgeLimit: false,
+    maxPerAge: 0, // No limit
+  },
+};
+
+// Helper to create initial division state
+export function createInitialDivision(
+  id: string,
+  name: string,
+  preset: DivisionPreset,
+  teamCount: number,
+  ageRange: DivisionAgeRange,
+  enforceAgeLimit: boolean,
+  maxPerAge: number
+): Division {
+  const teams: Team[] = Array.from({ length: teamCount }, (_, i) => ({
+    id: `${id}-team-${i + 1}`,
+    name: `Team ${i + 1}`,
+    roster: [],
+    totalScore: 0,
+    draftPosition: i + 1,
+    coachKids: [],
+    assistantCoaches: [],
+  }));
+
+  return {
+    id,
+    name,
+    preset,
+    ageRange,
+    enforceAgeLimit,
+    maxPerAge,
+    teamCount,
+    rosterSize: 0,
+    teams,
+    players: [],
+    draftState: null,
+    scoringWeights: { ...DEFAULT_SCORING_WEIGHTS },
+    phase: 'upload',
+    createdAt: new Date().toISOString(),
+  };
+}
