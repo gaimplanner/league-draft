@@ -10,6 +10,26 @@ import {
 const DIVISIONS_INDEX_KEY = 'little-league-divisions-index';
 const DIVISION_PREFIX = 'little-league-division-';
 
+// Validation: A division is complete enough to persist when it has players
+export function isDivisionValid(division: Division | null): boolean {
+  if (!division) return false;
+  return (
+    division.name?.trim().length > 0 &&
+    division.teamCount > 0 &&
+    division.players?.length > 0
+  );
+}
+
+// Check if division has minimum setup (name and teams) but no players yet
+export function isDivisionPartiallySetup(division: Division | null): boolean {
+  if (!division) return false;
+  return (
+    division.name?.trim().length > 0 &&
+    division.teamCount > 0 &&
+    (!division.players || division.players.length === 0)
+  );
+}
+
 function generateDivisionId(): string {
   return `div-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 }
@@ -82,7 +102,7 @@ export function useDivisions() {
     setSummaries(loadedSummaries);
   }, []);
 
-  // Create a new division
+  // Create a new division (in-memory only until players are imported)
   const createDivision = useCallback((config: {
     name: string;
     preset: DivisionPreset;
@@ -102,22 +122,14 @@ export function useDivisions() {
       config.maxPerAge
     );
 
-    // Save to localStorage
-    saveDivision(division);
+    // DON'T save to localStorage yet - wait until players are imported
+    // This prevents incomplete divisions from being saved
 
-    // Update index
-    const newIds = [...divisionIds, id];
-    saveDivisionsIndex(newIds);
-    setDivisionIds(newIds);
-
-    // Update summaries
-    setSummaries(prev => [...prev, divisionToSummary(division)]);
-
-    // Set as active
+    // Set as active (in-memory only)
     setActiveDivision(division);
 
     return division;
-  }, [divisionIds]);
+  }, []);
 
   // Select an existing division
   const selectDivision = useCallback((divisionId: string): Division | null => {
@@ -133,14 +145,28 @@ export function useDivisions() {
     if (!activeDivision) return;
 
     const updated: Division = { ...activeDivision, ...updates };
-    saveDivision(updated);
-    setActiveDivision(updated);
+    const wasValid = isDivisionValid(activeDivision);
+    const isNowValid = isDivisionValid(updated);
 
-    // Update summary if relevant fields changed
-    setSummaries(prev => prev.map(s =>
-      s.id === updated.id ? divisionToSummary(updated) : s
-    ));
-  }, [activeDivision]);
+    // Only persist to localStorage if division is valid (has players)
+    if (isNowValid) {
+      // First time becoming valid - add to index
+      if (!wasValid && !divisionIds.includes(updated.id)) {
+        const newIds = [...divisionIds, updated.id];
+        saveDivisionsIndex(newIds);
+        setDivisionIds(newIds);
+        setSummaries(prev => [...prev, divisionToSummary(updated)]);
+      } else {
+        // Already in index - just update summary
+        setSummaries(prev => prev.map(s =>
+          s.id === updated.id ? divisionToSummary(updated) : s
+        ));
+      }
+      saveDivision(updated);
+    }
+
+    setActiveDivision(updated);
+  }, [activeDivision, divisionIds]);
 
   // Delete a division
   const deleteDivision = useCallback((divisionId: string): void => {
