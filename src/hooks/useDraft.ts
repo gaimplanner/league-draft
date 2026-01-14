@@ -116,20 +116,26 @@ export const useDraft = (divisionId?: string) => {
     setDraftState((prev) => ({ ...prev, draftOrder: order }));
   }, []);
 
-  const startDraft = useCallback(() => {
+  const startDraft = useCallback((format?: DraftFormat, order?: string[]) => {
     console.log('🚀 startDraft called');
+    console.log('🚀 Passed format:', format);
+    console.log('🚀 Passed order:', order);
 
     setDraftState((prev) => {
+      // Use passed values if provided, otherwise fall back to state
+      const draftFormat = format ?? prev.draftFormat;
+      const draftOrder = order ?? prev.draftOrder;
+
       console.log('🚀 prev.teams:', prev.teams);
-      console.log('🚀 prev.draftFormat:', prev.draftFormat);
-      console.log('🚀 prev.draftOrder:', prev.draftOrder);
+      console.log('🚀 Using draftFormat:', draftFormat);
+      console.log('🚀 Using draftOrder:', draftOrder);
 
       // Calculate the draft order for round 1
       const firstRoundOrder = calculateDraftOrder(
         prev.teams,
         1,
-        prev.draftFormat,
-        prev.draftOrder
+        draftFormat,
+        draftOrder
       );
 
       console.log('🚀 firstRoundOrder:', firstRoundOrder);
@@ -140,6 +146,8 @@ export const useDraft = (divisionId?: string) => {
 
       return {
         ...prev,
+        draftFormat,
+        draftOrder,
         currentRound: 1,
         currentPickInRound: 1,
         currentRoundOrder: firstRoundOrder,
