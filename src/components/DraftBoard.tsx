@@ -23,7 +23,6 @@ export const DraftBoard = ({ draftState, onDraftPlayer, onSkipPick, onUndo, onRe
   const isPublicView = viewMode === 'public';
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   const [showRoundInterstitial, setShowRoundInterstitial] = useState(false);
   const [interstitialData, setInterstitialData] = useState<{
     completedRound: number;
@@ -90,50 +89,10 @@ export const DraftBoard = ({ draftState, onDraftPlayer, onSkipPick, onUndo, onRe
 
   const nextTeam = draftState.teams.find((t) => t.id === nextTeamId);
 
-  const selectedPlayer = selectedPlayerId
-    ? draftState.players.find((p) => p.id === selectedPlayerId)
-    : null;
-
   const totalRounds = Math.ceil(draftState.players.length / draftState.teams.length);
   const totalPicks = draftState.teams.length * totalRounds;
   const currentPickNumber = (draftState.currentRound - 1) * draftState.teams.length + draftState.currentPickInRound;
   const isFinalRound = draftState.currentRound === totalRounds;
-
-  const handlePlayerClick = (playerId: string) => {
-    console.log('🔵 handlePlayerClick called with playerId:', playerId);
-    console.log('🔵 Current selectedPlayerId:', selectedPlayerId);
-
-    // Toggle selection - click same player to deselect
-    const newSelection = selectedPlayerId === playerId ? null : playerId;
-    console.log('🔵 Setting selectedPlayerId to:', newSelection);
-    setSelectedPlayerId(newSelection);
-  };
-
-  const handleConfirmDraft = () => {
-    console.log('🟢 handleConfirmDraft called');
-    console.log('🟢 selectedPlayerId:', selectedPlayerId);
-    console.log('🟢 selectedPlayer:', selectedPlayer);
-
-    if (selectedPlayerId) {
-      // Check for age warning (not blocking, just confirmation)
-      if (selectedPlayer && enforceAgeLimit && maxPerAge > 0) {
-        const playerAge = selectedPlayer.littleLeagueAge;
-        const currentTeamAgeCount = currentTeam?.ageBreakdown?.[playerAge] || 0;
-        if (currentTeamAgeCount >= maxPerAge) {
-          if (!window.confirm(`Warning: ${currentTeam ? getTeamDisplayName(currentTeam) : 'This team'} already has ${currentTeamAgeCount} players age ${playerAge}. Continue anyway?`)) {
-            return;
-          }
-        }
-      }
-
-      console.log('🟢 Calling onDraftPlayer with:', selectedPlayerId);
-      onDraftPlayer(selectedPlayerId);
-      console.log('🟢 Clearing selection');
-      setSelectedPlayerId(null); // Clear selection after draft
-    } else {
-      console.log('🔴 No player selected!');
-    }
-  };
 
   const handleSkipPick = () => {
     if (!currentTeam) return;
@@ -141,9 +100,6 @@ export const DraftBoard = ({ draftState, onDraftPlayer, onSkipPick, onUndo, onRe
       onSkipPick();
     }
   };
-
-  console.log('🔄 DraftBoard render - selectedPlayerId:', selectedPlayerId);
-  console.log('🔄 DraftBoard render - selectedPlayer:', selectedPlayer);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
@@ -427,26 +383,9 @@ export const DraftBoard = ({ draftState, onDraftPlayer, onSkipPick, onUndo, onRe
                 />
               </div>
 
-              {/* Draft Confirmation Button - hidden in public view */}
-              {!isPublicView && selectedPlayer && (
-                <div className="mb-4 p-4 bg-green-50 dark:bg-green-900/20 border-2 border-green-500 rounded-lg sticky top-0 z-10">
-                  <div className="text-sm text-green-800 dark:text-green-200 mb-2">
-                    Selected: <strong>{selectedPlayer.name}</strong> ({selectedPlayer.totalScore.toFixed(1)})
-                  </div>
-                  <button
-                    onClick={handleConfirmDraft}
-                    className="w-full px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold text-lg flex items-center justify-center gap-2 shadow-lg"
-                  >
-                    Draft {selectedPlayer.name}
-                    <ChevronRight className="w-5 h-5" />
-                  </button>
-                </div>
-              )}
-
               <div className="space-y-2 max-h-[600px] overflow-y-auto">
                 {availablePlayers.map((player) => {
                   const isMandatory = draftState.mandatoryPick?.playerId === player.id;
-                  const isSelected = selectedPlayerId === player.id;
 
                   // Check if this is a coach's kid assigned to another team
                   const isCoachKidForOtherTeam = player.isCoachKid &&
@@ -473,27 +412,18 @@ export const DraftBoard = ({ draftState, onDraftPlayer, onSkipPick, onUndo, onRe
                   // Player is restricted ONLY if they're a coach's kid for another team or locked sibling
                   // Age limit is a WARNING, not a restriction
                   const isRestricted = isCoachKidForOtherTeam || isSiblingLockedToOtherTeam;
-                  // In public view, all interactions are disabled
-                  const isClickable = !isPublicView && !isRestricted;
-
                   return (
                     <div
                       key={player.id}
                       id={`player-${player.id}`}
-                      onClick={() => isClickable && handlePlayerClick(player.id)}
-                      role={isClickable ? "button" : undefined}
-                      tabIndex={isClickable ? 0 : undefined}
                       className={`
                         w-full text-left p-3 rounded-lg border-2 transition-all
-                        ${isPublicView ? 'cursor-default' : ''}
                         ${
                           isRestricted && !isPublicView
-                            ? 'opacity-50 cursor-not-allowed border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-900/10'
-                            : isSelected && !isPublicView
-                            ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 shadow-lg scale-105'
+                            ? 'opacity-50 border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-900/10'
                             : isMandatory && !isPublicView
-                            ? 'border-yellow-400 bg-yellow-50 dark:bg-yellow-900/20 hover:bg-yellow-100 dark:hover:bg-yellow-900/30'
-                            : 'border-gray-200 dark:border-gray-700 hover:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20'
+                            ? 'border-yellow-400 bg-yellow-50 dark:bg-yellow-900/20'
+                            : 'border-gray-200 dark:border-gray-700'
                         }
                       `}
                     >
@@ -565,19 +495,43 @@ export const DraftBoard = ({ draftState, onDraftPlayer, onSkipPick, onUndo, onRe
                             )}
                           </div>
                         </div>
-                        {/* Scores - hidden in public view */}
+                        {/* Scores and Draft Button - hidden in public view */}
                         {!isPublicView && (
-                          <div className="ml-2 text-right">
-                            <div className={`text-lg font-bold ${
-                              isRestricted
-                                ? 'text-gray-400 dark:text-gray-600'
-                                : 'text-gray-900 dark:text-white'
-                            }`}>
-                              {player.totalScore.toFixed(1)}
+                          <div className="ml-2 flex items-center gap-3">
+                            <div className="text-right">
+                              <div className={`text-lg font-bold ${
+                                isRestricted
+                                  ? 'text-gray-400 dark:text-gray-600'
+                                  : 'text-gray-900 dark:text-white'
+                              }`}>
+                                {player.totalScore.toFixed(1)}
+                              </div>
+                              <div className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                                H:{player.hittingSubtotal.toFixed(0)} F:{player.fieldingSubtotal.toFixed(0)} P:{player.pitchingSubtotal.toFixed(0)}
+                              </div>
                             </div>
-                            <div className="text-xs text-gray-500 dark:text-gray-500 mt-1">
-                              H:{player.hittingSubtotal.toFixed(0)} F:{player.fieldingSubtotal.toFixed(0)} P:{player.pitchingSubtotal.toFixed(0)}
-                            </div>
+                            {/* Draft Button */}
+                            {!isRestricted && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  // Check for age warning confirmation
+                                  if (enforceAgeLimit && maxPerAge > 0 && currentTeamAgeCount >= maxPerAge) {
+                                    if (!window.confirm(`Warning: Team already has ${currentTeamAgeCount} players age ${playerAge} (limit: ${maxPerAge}). Continue anyway?`)) {
+                                      return;
+                                    }
+                                  }
+                                  onDraftPlayer(player.id);
+                                }}
+                                className={`px-3 py-2 rounded-lg font-semibold text-sm transition-all ${
+                                  isMandatory
+                                    ? 'bg-yellow-500 hover:bg-yellow-600 text-white'
+                                    : 'bg-green-600 hover:bg-green-700 text-white'
+                                }`}
+                              >
+                                Draft
+                              </button>
+                            )}
                           </div>
                         )}
                       </div>

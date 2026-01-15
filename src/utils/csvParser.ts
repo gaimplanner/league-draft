@@ -2,6 +2,21 @@ import Papa from 'papaparse';
 import { CSVRow, Player, ParsedCSVData, ColumnMapping, DEFAULT_SCORING_WEIGHTS, ScoringMode, ScoringWeights } from '../types';
 import { calculatePlayerScore, calculatePreWeightedScores } from './scoreCalculation';
 
+// Coach assignment extracted from CSV
+export interface CoachAssignment {
+  playerIndex: number;
+  playerId: string;
+  playerName: string;
+  teamName: string;
+  role: 'manager' | 'assistant';
+}
+
+// Result of parsing CSV with mapping
+export interface ParsedCSVResult {
+  players: Player[];
+  coachAssignments: CoachAssignment[];
+}
+
 export const parseCSVFile = (file: File): Promise<ParsedCSVData> => {
   return new Promise((resolve, reject) => {
     Papa.parse(file, {
@@ -26,7 +41,9 @@ export const parseCSVWithMapping = (
   teamCount: number = 8,
   scoringMode: ScoringMode = 'pre-weighted',
   weights: ScoringWeights = DEFAULT_SCORING_WEIGHTS
-): Player[] => {
+): ParsedCSVResult => {
+  const coachAssignments: CoachAssignment[] = [];
+
   const players: Player[] = csvData.rows.map((row, index) => {
     // Helper function to get mapped value
     const getMappedValue = (field: string): string => {
@@ -142,8 +159,35 @@ export const parseCSVWithMapping = (
     const isCoachKid = getMappedValue('isCoachKid').toUpperCase() === 'TRUE';
     const sibling = getMappedValue('sibling') || undefined;
 
+    // Parse team assignments from CSV (for coach import)
+    const managerTeam = getMappedValue('managerTeam');
+    const assistantTeam = getMappedValue('assistantTeam');
+
+    // Generate player ID here so we can use it for coach assignments
+    const playerId = `player-${index}-${Date.now()}`;
+
+    // Collect coach assignments for later processing
+    if (managerTeam) {
+      coachAssignments.push({
+        playerIndex: index,
+        playerId,
+        playerName: fullName,
+        teamName: managerTeam,
+        role: 'manager',
+      });
+    }
+    if (assistantTeam) {
+      coachAssignments.push({
+        playerIndex: index,
+        playerId,
+        playerName: fullName,
+        teamName: assistantTeam,
+        role: 'assistant',
+      });
+    }
+
     return {
-      id: `player-${index}-${Date.now()}`,
+      id: playerId,
       bib,
       firstName,
       lastName,
@@ -187,7 +231,10 @@ export const parseCSVWithMapping = (
       projectedRound: Math.ceil((index + 1) / teamCount),
     }));
 
-  return sortedPlayers;
+  return {
+    players: sortedPlayers,
+    coachAssignments,
+  };
 };
 
 // Legacy function for backward compatibility

@@ -21,7 +21,7 @@ import {
   DivisionAgeRange,
   ScoringMode,
 } from './types';
-import { parseCSVWithMapping } from './utils/csvParser';
+import { parseCSVWithMapping, CoachAssignment } from './utils/csvParser';
 
 type AppMode = 'selector' | 'creator' | 'draft';
 
@@ -142,24 +142,99 @@ function App() {
   const handleMappingComplete = (mapping: ColumnMapping) => {
     if (!csvData || !activeDivision) return;
 
-    const loadedPlayers = parseCSVWithMapping(
+    const { players: loadedPlayers, coachAssignments } = parseCSVWithMapping(
       csvData,
       mapping,
       activeDivision.teamCount,
       activeDivision.scoringMode,
       activeDivision.scoringWeights
     );
-    setAllPlayers(loadedPlayers);
-    setPlayers(loadedPlayers);
 
-    // Update division with players
+    // Process coach assignments from CSV
+    let updatedTeams = [...activeDivision.teams];
+    let updatedPlayers = [...loadedPlayers];
+
+    if (coachAssignments.length > 0) {
+      // Group assignments by team name
+      const teamAssignments = new Map<string, CoachAssignment[]>();
+      coachAssignments.forEach(assignment => {
+        const existing = teamAssignments.get(assignment.teamName) || [];
+        existing.push(assignment);
+        teamAssignments.set(assignment.teamName, existing);
+      });
+
+      // Process each team's assignments
+      teamAssignments.forEach((assignments, teamName) => {
+        // Find or create team by name
+        let team = updatedTeams.find(t =>
+          t.name.toLowerCase() === teamName.toLowerCase()
+        );
+
+        // If team not found by name, find first unnamed team and name it
+        if (!team) {
+          team = updatedTeams.find(t => !t.name || t.name.trim() === '');
+          if (team) {
+            team.name = teamName;
+          }
+        }
+
+        if (team) {
+          assignments.forEach(assignment => {
+            // Find the player and mark as coach's kid
+            const playerIndex = updatedPlayers.findIndex(p => p.id === assignment.playerId);
+            if (playerIndex !== -1) {
+              const player = updatedPlayers[playerIndex];
+
+              if (assignment.role === 'manager') {
+                // Manager's kid - mark as coach's kid and assign to team
+                updatedPlayers[playerIndex] = {
+                  ...player,
+                  isCoachKid: true,
+                  coachTeamId: team!.id,
+                };
+                // Add to team's coachKids list
+                if (!team!.coachKids.includes(player.id)) {
+                  team!.coachKids.push(player.id);
+                }
+              } else {
+                // Assistant coach's kid - also mark as coach's kid
+                updatedPlayers[playerIndex] = {
+                  ...player,
+                  isCoachKid: true,
+                  coachTeamId: team!.id,
+                };
+                if (!team!.coachKids.includes(player.id)) {
+                  team!.coachKids.push(player.id);
+                }
+                // Track assistant coach by player's last name
+                if (!team!.assistantCoaches.includes(player.lastName)) {
+                  team!.assistantCoaches.push(player.lastName);
+                }
+              }
+            }
+          });
+        }
+      });
+
+      console.log('Coach assignments processed from CSV:', coachAssignments.length);
+      console.log('Teams with coaches:', updatedTeams.filter(t => t.coachKids.length > 0).map(t => ({
+        name: t.name,
+        coachKids: t.coachKids.length,
+        assistants: t.assistantCoaches
+      })));
+    }
+
+    setAllPlayers(updatedPlayers);
+    setPlayers(updatedPlayers);
+
+    // Update division with players and potentially updated teams
     updateActiveDivision({
-      players: loadedPlayers,
-      rosterSize: Math.ceil(loadedPlayers.length / activeDivision.teamCount),
+      players: updatedPlayers,
+      teams: updatedTeams,
+      rosterSize: Math.ceil(updatedPlayers.length / activeDivision.teamCount),
     });
 
-    // Teams are already initialized from division creation
-    setTeamsState(activeDivision.teams);
+    setTeamsState(updatedTeams);
 
     setPhase('review');
   };

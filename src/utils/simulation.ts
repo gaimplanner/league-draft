@@ -93,8 +93,8 @@ export function runSimulation(
         pickReason = mandatoryResult.reason;
         console.log(`Team ${team.name}: MANDATORY ${pickReason} - ${playerToDraft.firstName} ${playerToDraft.lastName}`);
       } else {
-        // USE THE SAME getBestAvailable function - pass teamId to filter out restricted players
-        playerToDraft = getBestAvailable(simPlayers, teamId);
+        // USE THE SAME getBestAvailable function - pass teamId and options to respect checkbox settings
+        playerToDraft = getBestAvailable(simPlayers, teamId, options);
         if (playerToDraft) {
           console.log(`Team ${team.name}: Best available - ${playerToDraft.firstName} ${playerToDraft.lastName} (score: ${playerToDraft.totalScore})`);
         }

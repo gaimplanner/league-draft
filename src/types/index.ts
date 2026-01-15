@@ -151,7 +151,9 @@ export type AppField =
   | 'isAllStar'
   | 'isDNE'
   | 'isCoachKid'
-  | 'sibling';
+  | 'sibling'
+  | 'managerTeam'
+  | 'assistantTeam';
 
 export interface ColumnMapping {
   [csvColumn: string]: AppField | null;

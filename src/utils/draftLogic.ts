@@ -100,25 +100,26 @@ export function lockSiblingToTeam(
 
 /**
  * Get the best available player for a team (highest score, not drafted, not restricted).
- * Excludes:
- * - Coach's kids assigned to OTHER teams
- * - Siblings locked to OTHER teams
+ * When options.includeCoachKids is true, excludes coach's kids assigned to OTHER teams.
+ * When options.includeSiblings is true, excludes siblings locked to OTHER teams.
+ * When these options are false, those players are treated as regular available players.
  */
 export function getBestAvailable(
   players: Player[],
-  currentTeamId?: string
+  currentTeamId?: string,
+  options: { includeCoachKids: boolean; includeSiblings: boolean } = { includeCoachKids: true, includeSiblings: true }
 ): Player | null {
   return players
     .filter(p => {
       if (p.isDrafted) return false;
 
-      // Exclude coach's kids assigned to OTHER teams
-      if (p.isCoachKid && p.coachTeamId && p.coachTeamId !== currentTeamId) {
+      // Only exclude coach's kids from other teams if includeCoachKids is ON
+      if (options.includeCoachKids && p.isCoachKid && p.coachTeamId && p.coachTeamId !== currentTeamId) {
         return false;
       }
 
-      // Exclude siblings locked to OTHER teams
-      if (p.lockedToTeamId && p.lockedToTeamId !== currentTeamId) {
+      // Only exclude siblings locked to other teams if includeSiblings is ON
+      if (options.includeSiblings && p.lockedToTeamId && p.lockedToTeamId !== currentTeamId) {
         return false;
       }
 

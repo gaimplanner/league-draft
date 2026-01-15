@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { X, Play, RotateCcw, ChevronDown, ChevronUp } from 'lucide-react';
+import { X, Play, RotateCcw, ChevronDown, ChevronUp, GitCompare } from 'lucide-react';
 import { Player, Team, DraftFormat } from '../types';
 import {
   SimulationOptions,
@@ -19,7 +19,15 @@ interface SimulationModalProps {
 // Helper to get display name for a team
 const getTeamDisplayName = (team: Team) => team.name || `Team ${team.draftPosition}`;
 
-type ModalPhase = 'options' | 'results';
+// Format comparison results
+interface FormatComparison {
+  format: DraftFormat;
+  label: string;
+  result: SimulationResult;
+  stats: { highest: number; lowest: number; spread: number; average: number };
+}
+
+type ModalPhase = 'options' | 'results' | 'comparison';
 
 export const SimulationModal = ({
   players,
@@ -35,6 +43,7 @@ export const SimulationModal = ({
   });
   const [result, setResult] = useState<SimulationResult | null>(null);
   const [expandedTeamId, setExpandedTeamId] = useState<string | null>(null);
+  const [comparisonResults, setComparisonResults] = useState<FormatComparison[]>([]);
 
   const handleRunSimulation = () => {
     const simResult = runSimulation(players, teams, draftOrder, draftFormat, options);
@@ -47,9 +56,29 @@ export const SimulationModal = ({
     setResult(simResult);
   };
 
+  const handleCompareFormats = () => {
+    const formats: { format: DraftFormat; label: string }[] = [
+      { format: 'straight', label: 'Straight' },
+      { format: 'snake', label: 'Snake' },
+      { format: 'recalculated', label: 'Recalculated' },
+    ];
+
+    const comparisons: FormatComparison[] = formats.map(({ format, label }) => {
+      const result = runSimulation(players, teams, draftOrder, format, options);
+      const stats = getSimulationStats(result);
+      return { format, label, result, stats };
+    });
+
+    // Sort by spread (lowest first = most balanced)
+    comparisons.sort((a, b) => a.stats.spread - b.stats.spread);
+    setComparisonResults(comparisons);
+    setPhase('comparison');
+  };
+
   const handleBackToOptions = () => {
     setPhase('options');
     setExpandedTeamId(null);
+    setComparisonResults([]);
   };
 
   // Sort teams by total score for display
@@ -77,7 +106,9 @@ export const SimulationModal = ({
           <div className="flex items-center gap-3">
             <span className="text-2xl">🔮</span>
             <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-              {phase === 'options' ? 'Draft Simulation Options' : 'Simulation Results'}
+              {phase === 'options' && 'Draft Simulation Options'}
+              {phase === 'results' && 'Simulation Results'}
+              {phase === 'comparison' && 'Format Comparison'}
             </h2>
           </div>
           <button
@@ -90,7 +121,7 @@ export const SimulationModal = ({
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6">
-          {phase === 'options' ? (
+          {phase === 'options' && (
             /* Options Phase */
             <div className="space-y-6">
               <p className="text-gray-600 dark:text-gray-400">
@@ -138,11 +169,13 @@ export const SimulationModal = ({
                   <strong>Draft logic:</strong> Best available player by score (after mandatory picks)
                 </div>
                 <div className="text-sm text-blue-700 dark:text-blue-300 mt-1">
-                  <strong>Format:</strong> {draftFormat}
+                  <strong>Current format:</strong> {draftFormat}
                 </div>
               </div>
             </div>
-          ) : (
+          )}
+
+          {phase === 'results' && (
             /* Results Phase */
             <div className="space-y-6">
               {/* Warning Banner */}
@@ -226,40 +259,42 @@ export const SimulationModal = ({
                           </div>
                         </button>
 
-                        {/* Expanded Roster View */}
+                        {/* Expanded Roster View - matches DraftComplete format */}
                         {isExpanded && (
                           <div className="mt-2 ml-9 p-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg">
                             <div className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
                               Projected Roster
                             </div>
-                            <div className="space-y-1">
+                            <div className="space-y-2">
                               {team.roster
-                                .sort((a, b) => (a.draftedInRound ?? 99) - (b.draftedInRound ?? 99))
-                                .map(player => (
+                                .sort((a, b) => (a.draftedAtPick || 0) - (b.draftedAtPick || 0))
+                                .map((player, playerIndex) => (
                                   <div
                                     key={player.id}
-                                    className="flex items-center justify-between text-sm py-1"
+                                    className="p-2 bg-gray-50 dark:bg-gray-700 rounded text-sm"
                                   >
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-gray-500 dark:text-gray-400 w-8">
-                                        R{player.draftedInRound}:
-                                      </span>
-                                      <span className="text-gray-900 dark:text-white">
-                                        {player.firstName} {player.lastName}
-                                      </span>
-                                      {player.isCoachKid && (
-                                        <span className="text-blue-600" title="Coach's Kid">🔵</span>
-                                      )}
-                                      {player.isAllStar && (
-                                        <span className="text-yellow-500" title="All-Star">⭐</span>
-                                      )}
-                                      {player.siblingId && (
-                                        <span className="text-purple-600" title="Sibling">👥</span>
-                                      )}
+                                    <div className="flex justify-between items-start">
+                                      <div className="flex-1 min-w-0">
+                                        <div className="font-medium text-gray-900 dark:text-white truncate">
+                                          {playerIndex + 1}. {player.firstName} {player.lastName}
+                                          {player.isAllStar && (
+                                            <span className="ml-1 text-yellow-500" title="All-Star">⭐</span>
+                                          )}
+                                          {player.isCoachKid && (
+                                            <span className="ml-1 text-blue-600 dark:text-blue-400" title="Coach's Kid">🔵</span>
+                                          )}
+                                          {player.siblingId && (
+                                            <span className="ml-1 text-purple-600" title="Sibling">👥</span>
+                                          )}
+                                        </div>
+                                        <div className="text-xs text-gray-600 dark:text-gray-400">
+                                          Pick #{player.draftedAtPick} • Round {player.draftedInRound}
+                                        </div>
+                                      </div>
+                                      <div className="ml-2 font-medium text-gray-900 dark:text-white">
+                                        {player.totalScore.toFixed(1)}
+                                      </div>
                                     </div>
-                                    <span className="text-gray-600 dark:text-gray-400">
-                                      {player.totalScore.toFixed(1)}
-                                    </span>
                                   </div>
                                 ))}
                             </div>
@@ -281,13 +316,134 @@ export const SimulationModal = ({
                   })}
                 </div>
               </div>
+
+              {/* Legend */}
+              <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                <div className="flex items-center gap-6 text-sm text-gray-600 dark:text-gray-400 flex-wrap">
+                  <span className="font-medium text-gray-900 dark:text-white">Legend:</span>
+                  <span className="flex items-center gap-1">
+                    <span className="text-yellow-500">⭐</span> All-Star
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="text-blue-600 dark:text-blue-400">🔵</span> Coach's Kid
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="text-purple-600">👥</span> Sibling
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {phase === 'comparison' && (
+            /* Format Comparison Phase */
+            <div className="space-y-6">
+              {/* Info Banner */}
+              <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg flex items-center gap-2">
+                <GitCompare className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                <span className="text-sm text-blue-800 dark:text-blue-200">
+                  Comparing all draft formats with the same options. Sorted by balance (lowest spread first).
+                </span>
+              </div>
+
+              {/* Comparison Cards */}
+              <div className="space-y-4">
+                {comparisonResults.map((comparison, index) => {
+                  const maxScoreInFormat = Math.max(...comparison.result.teams.map(t => t.totalScore));
+                  const isRecommended = index === 0;
+
+                  return (
+                    <div
+                      key={comparison.format}
+                      className={`p-4 rounded-lg border ${
+                        isRecommended
+                          ? 'bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-700'
+                          : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700'
+                      }`}
+                    >
+                      {/* Format Header */}
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg font-semibold text-gray-900 dark:text-white">
+                            {comparison.label}
+                          </span>
+                          {isRecommended && (
+                            <span className="px-2 py-0.5 bg-green-600 text-white text-xs font-medium rounded">
+                              Most Balanced
+                            </span>
+                          )}
+                          {comparison.format === draftFormat && (
+                            <span className="px-2 py-0.5 bg-blue-600 text-white text-xs font-medium rounded">
+                              Current
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-right">
+                          <div className="text-sm text-gray-600 dark:text-gray-400">
+                            Spread: <span className="font-bold text-gray-900 dark:text-white">{comparison.stats.spread.toFixed(1)}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Stats Row */}
+                      <div className="grid grid-cols-3 gap-2 mb-3 text-center">
+                        <div className="bg-gray-100 dark:bg-gray-700 rounded p-2">
+                          <div className="text-sm font-medium text-gray-900 dark:text-white">
+                            {comparison.stats.highest.toFixed(1)}
+                          </div>
+                          <div className="text-xs text-gray-500">Highest</div>
+                        </div>
+                        <div className="bg-gray-100 dark:bg-gray-700 rounded p-2">
+                          <div className="text-sm font-medium text-gray-900 dark:text-white">
+                            {comparison.stats.lowest.toFixed(1)}
+                          </div>
+                          <div className="text-xs text-gray-500">Lowest</div>
+                        </div>
+                        <div className="bg-gray-100 dark:bg-gray-700 rounded p-2">
+                          <div className="text-sm font-medium text-gray-900 dark:text-white">
+                            {comparison.stats.average.toFixed(1)}
+                          </div>
+                          <div className="text-xs text-gray-500">Average</div>
+                        </div>
+                      </div>
+
+                      {/* Team Bars - Compact View */}
+                      <div className="space-y-1">
+                        {[...comparison.result.teams]
+                          .sort((a, b) => b.totalScore - a.totalScore)
+                          .map((team) => {
+                            const barWidth = (team.totalScore / maxScoreInFormat) * 100;
+                            return (
+                              <div key={team.id} className="flex items-center gap-2 text-xs">
+                                <span className="w-20 truncate text-gray-700 dark:text-gray-300">
+                                  {getTeamDisplayName(team)}
+                                </span>
+                                <div className="flex-1 h-4 bg-gray-200 dark:bg-gray-600 rounded overflow-hidden">
+                                  <div
+                                    className={`h-full rounded ${
+                                      isRecommended ? 'bg-green-500' : 'bg-blue-500'
+                                    }`}
+                                    style={{ width: `${barWidth}%` }}
+                                  />
+                                </div>
+                                <span className="w-12 text-right font-medium text-gray-900 dark:text-white">
+                                  {team.totalScore.toFixed(1)}
+                                </span>
+                              </div>
+                            );
+                          })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>
 
         {/* Footer */}
         <div className="flex justify-between gap-3 p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 flex-shrink-0">
-          {phase === 'options' ? (
+          {phase === 'options' && (
             <>
               <button
                 onClick={onClose}
@@ -295,15 +451,26 @@ export const SimulationModal = ({
               >
                 Cancel
               </button>
-              <button
-                onClick={handleRunSimulation}
-                className="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg font-medium flex items-center gap-2"
-              >
-                <Play className="w-4 h-4" />
-                Run Simulation
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleCompareFormats}
+                  className="px-4 py-2 bg-purple-600 text-white hover:bg-purple-700 rounded-lg font-medium flex items-center gap-2"
+                >
+                  <GitCompare className="w-4 h-4" />
+                  Compare All Formats
+                </button>
+                <button
+                  onClick={handleRunSimulation}
+                  className="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg font-medium flex items-center gap-2"
+                >
+                  <Play className="w-4 h-4" />
+                  Run Simulation
+                </button>
+              </div>
             </>
-          ) : (
+          )}
+
+          {phase === 'results' && (
             <>
               <button
                 onClick={handleBackToOptions}
@@ -314,6 +481,32 @@ export const SimulationModal = ({
               <div className="flex gap-2">
                 <button
                   onClick={handleRunAgain}
+                  className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 rounded-lg font-medium flex items-center gap-2"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  Run Again
+                </button>
+                <button
+                  onClick={onClose}
+                  className="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg font-medium"
+                >
+                  Close
+                </button>
+              </div>
+            </>
+          )}
+
+          {phase === 'comparison' && (
+            <>
+              <button
+                onClick={handleBackToOptions}
+                className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+              >
+                ← Back to Options
+              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleCompareFormats}
                   className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 rounded-lg font-medium flex items-center gap-2"
                 >
                   <RotateCcw className="w-4 h-4" />

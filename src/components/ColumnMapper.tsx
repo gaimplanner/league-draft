@@ -37,6 +37,9 @@ const OPTIONAL_FIELDS: { field: AppField; label: string }[] = [
   // Draft rules
   { field: 'isCoachKid', label: "Coach's Kid" },
   { field: 'sibling', label: 'Sibling' },
+  // Team assignments from CSV
+  { field: 'managerTeam', label: 'Manager Team (creates team)' },
+  { field: 'assistantTeam', label: 'Assistant Team (adds to team)' },
 ];
 
 export const ColumnMapper = ({ csvData, onMappingComplete }: ColumnMapperProps) => {
@@ -91,10 +94,14 @@ export const ColumnMapper = ({ csvData, onMappingComplete }: ColumnMapperProps) 
         autoMapping[header] = 'isAllStar';
       } else if (lowerHeader === 'dne') {
         autoMapping[header] = 'isDNE';
-      } else if (lowerHeader.includes('coach')) {
+      } else if (lowerHeader.includes('coach') && !lowerHeader.includes('manager') && !lowerHeader.includes('assistant')) {
         autoMapping[header] = 'isCoachKid';
       } else if (lowerHeader.includes('sibling')) {
         autoMapping[header] = 'sibling';
+      } else if (lowerHeader.includes('manager') && lowerHeader.includes('team')) {
+        autoMapping[header] = 'managerTeam';
+      } else if (lowerHeader.includes('assistant') && lowerHeader.includes('team')) {
+        autoMapping[header] = 'assistantTeam';
       }
     });
 
