@@ -111,8 +111,11 @@ export const DraftComplete = ({ draftState, onReset }: DraftCompleteProps) => {
                         <div className="flex-1 min-w-0">
                           <div className="font-medium text-gray-900 dark:text-white truncate">
                             {index + 1}. {player.name}
+                            {player.isAllStar && (
+                              <span className="ml-1 text-yellow-500" title="All-Star">⭐</span>
+                            )}
                             {player.isCoachKid && (
-                              <span className="ml-1 text-blue-600 dark:text-blue-400">★</span>
+                              <span className="ml-1 text-blue-600 dark:text-blue-400" title="Coach's Kid">🔵</span>
                             )}
                           </div>
                           <div className="text-xs text-gray-600 dark:text-gray-400">
@@ -128,6 +131,19 @@ export const DraftComplete = ({ draftState, onReset }: DraftCompleteProps) => {
               </div>
             </div>
           ))}
+        </div>
+
+        {/* Legend */}
+        <div className="mt-6 p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+          <div className="flex items-center gap-6 text-sm text-gray-600 dark:text-gray-400">
+            <span className="font-medium text-gray-900 dark:text-white">Legend:</span>
+            <span className="flex items-center gap-1">
+              <span className="text-yellow-500">⭐</span> All-Star
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="text-blue-600 dark:text-blue-400">🔵</span> Coach's Kid
+            </span>
+          </div>
         </div>
       </div>
     </div>

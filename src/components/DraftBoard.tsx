@@ -161,9 +161,9 @@ export const DraftBoard = ({ draftState, onDraftPlayer, onUndo, onReset }: Draft
                           playerElement?.scrollIntoView({ behavior: 'smooth', block: 'center' });
                         }
                       }}
-                      className="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-white font-semibold rounded-lg flex items-center gap-2 shadow-md"
+                      className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg flex items-center gap-2 shadow-md"
                     >
-                      Select {mandatoryPlayer?.name}
+                      Draft {mandatoryPlayer?.name}
                       <ChevronRight className="w-4 h-4" />
                     </button>
                   </div>
@@ -289,16 +289,26 @@ export const DraftBoard = ({ draftState, onDraftPlayer, onUndo, onReset }: Draft
                     ? draftState.teams.find(t => t.id === player.coachTeamId)
                     : null;
 
+                  // Check if this is a sibling locked to another team
+                  const isSiblingLockedToOtherTeam = player.lockedToTeamId &&
+                                                      player.lockedToTeamId !== draftState.currentTeamId;
+                  const siblingLockedTeam = isSiblingLockedToOtherTeam
+                    ? draftState.teams.find(t => t.id === player.lockedToTeamId)
+                    : null;
+
+                  // Player is restricted if they're a coach's kid for another team OR locked sibling
+                  const isRestricted = isCoachKidForOtherTeam || isSiblingLockedToOtherTeam;
+
                   return (
                     <button
                       key={player.id}
                       id={`player-${player.id}`}
-                      onClick={() => !isCoachKidForOtherTeam && handlePlayerClick(player.id)}
-                      disabled={isCoachKidForOtherTeam || undefined}
+                      onClick={() => !isRestricted && handlePlayerClick(player.id)}
+                      disabled={isRestricted || undefined}
                       className={`
                         w-full text-left p-3 rounded-lg border-2 transition-all
                         ${
-                          isCoachKidForOtherTeam
+                          isRestricted
                             ? 'opacity-50 cursor-not-allowed border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-900/10'
                             : isSelected
                             ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 shadow-lg scale-105'
@@ -323,11 +333,16 @@ export const DraftBoard = ({ draftState, onDraftPlayer, onUndo, onReset }: Draft
                               ⚠ Coach's kid - Can only be drafted by {coachTeam?.name}
                             </div>
                           )}
+                          {isSiblingLockedToOtherTeam && !isCoachKidForOtherTeam && (
+                            <div className="text-xs text-red-600 dark:text-red-400 mt-2 font-semibold">
+                              ⚠ Sibling locked - Must be drafted by {siblingLockedTeam?.name}
+                            </div>
+                          )}
 
                           <div className="flex gap-1 mt-1 flex-wrap">
                             {player.isCoachKid && (
                               <span className={`text-xs px-2 py-0.5 rounded ${
-                                isCoachKidForOtherTeam
+                                isRestricted
                                   ? 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200'
                                   : 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200'
                               }`}>
@@ -345,15 +360,21 @@ export const DraftBoard = ({ draftState, onDraftPlayer, onUndo, onReset }: Draft
                               </span>
                             )}
                             {player.sibling && (
-                              <span className="text-xs bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 px-2 py-0.5 rounded">
-                                Sibling
+                              <span className={`text-xs px-2 py-0.5 rounded ${
+                                isSiblingLockedToOtherTeam
+                                  ? 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200'
+                                  : player.lockedToTeamId
+                                  ? 'bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200'
+                                  : 'bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200'
+                              }`}>
+                                Sibling{player.lockedToTeamId ? ` → ${draftState.teams.find(t => t.id === player.lockedToTeamId)?.name}` : ''}
                               </span>
                             )}
                           </div>
                         </div>
                         <div className="ml-2 text-right">
                           <div className={`text-lg font-bold ${
-                            isCoachKidForOtherTeam
+                            isRestricted
                               ? 'text-gray-400 dark:text-gray-600'
                               : 'text-gray-900 dark:text-white'
                           }`}>

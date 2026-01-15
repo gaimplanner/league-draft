@@ -457,48 +457,67 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
     }
 
     // Handle same-round coach's kid conflicts
-    // Find coach's kids grouped by projected round
-    const coachKidsByRound: Record<number, Player[]> = {};
+    // A conflict only occurs when the SAME TEAM has multiple coach's kids in the SAME ROUND
+    // (Different teams having kids in the same round is NOT a conflict)
+
+    // Group coach's kids by their assigned team
+    const coachKidsByTeam: Record<string, Player[]> = {};
     players.filter(p => p.isCoachKid && p.coachTeamId).forEach(p => {
-      const round = p.projectedRound;
-      if (!coachKidsByRound[round]) {
-        coachKidsByRound[round] = [];
+      const teamId = p.coachTeamId!;
+      if (!coachKidsByTeam[teamId]) {
+        coachKidsByTeam[teamId] = [];
       }
-      coachKidsByRound[round].push(p);
+      coachKidsByTeam[teamId].push(p);
     });
 
-    // Check for conflicts (multiple coach's kids from different teams in same round)
-    for (const [roundStr, kidsInRound] of Object.entries(coachKidsByRound)) {
-      const round = parseInt(roundStr);
-      const uniqueTeams = new Set(kidsInRound.map(p => p.coachTeamId));
+    // Check each team for same-round conflicts
+    for (const [teamId, teamKids] of Object.entries(coachKidsByTeam)) {
+      // Group this team's kids by round
+      const kidsByRound: Record<number, Player[]> = {};
+      teamKids.forEach(kid => {
+        const round = kid.projectedRound;
+        if (!kidsByRound[round]) {
+          kidsByRound[round] = [];
+        }
+        kidsByRound[round].push(kid);
+      });
 
-      if (uniqueTeams.size > 1) {
-        // Conflict! Multiple teams have coach's kids in the same round
-        // Ask user how to resolve
-        const conflictInfo = kidsInRound.map(p => {
-          const team = teams.find(t => t.id === p.coachTeamId);
-          return `${p.name} (${team?.name})`;
-        }).join('\n• ');
+      // Check for conflicts (same team has multiple kids in same round)
+      for (const [roundStr, kidsInRound] of Object.entries(kidsByRound)) {
+        if (kidsInRound.length > 1) {
+          const round = parseInt(roundStr);
+          const team = teams.find(t => t.id === teamId);
 
-        const message = `Coach's kid conflict in Round ${round}:\n\n• ${conflictInfo}\n\nMultiple teams cannot all pick their coach's kids in the same round. The system will automatically adjust:\n- First pick in that round drafts their coach's kid\n- Others get pushed to Round ${round + 1}\n\nContinue?`;
+          // Sort by score descending - highest score stays in original round
+          const sortedKids = [...kidsInRound].sort((a, b) => b.totalScore - a.totalScore);
 
-        if (!window.confirm(message)) {
+          const conflictInfo = sortedKids.map((p, idx) => {
+            const action = idx === 0 ? '(stays in Round ' + round + ')' : '(moves to Round ' + (round + idx) + ')';
+            return `${p.name} - Score: ${p.totalScore.toFixed(1)} ${action}`;
+          }).join('\n• ');
+
+          const message = `${team?.name} has ${kidsInRound.length} coach's kids in Round ${round}:\n\n• ${conflictInfo}\n\nA team can only draft one coach's kid per round. The highest-scored kid stays, others are moved to subsequent rounds.\n\nContinue?`;
+
+          if (!window.confirm(message)) {
+            return;
+          }
+
+          // Auto-resolve: highest score stays, others get bumped
+          sortedKids.forEach((kid, index) => {
+            if (index === 0) {
+              // Highest score stays in their projected round
+              // Set lockedToRound explicitly so mandatory pick works
+              onUpdatePlayerField(kid.id, { lockedToRound: round });
+            } else {
+              // Lower scores get bumped to subsequent rounds
+              onUpdatePlayerField(kid.id, { lockedToRound: round + index });
+            }
+          });
+
+          // State updates are async - delay calling onNext to allow state to settle
+          setTimeout(() => onNext(), 0);
           return;
         }
-
-        // Auto-resolve: spread them across rounds based on the draft order
-        // For now, we'll just push subsequent ones to later rounds
-        // The first one in initial draft order keeps their round, others get lockedToRound = round + offset
-        let offset = 0;
-        kidsInRound.forEach((kid, index) => {
-          if (index === 0) {
-            // First one keeps their projected round (no lock needed)
-          } else {
-            // Push to next available round
-            offset++;
-            onUpdatePlayerField(kid.id, { lockedToRound: round + offset });
-          }
-        });
       }
     }
 
