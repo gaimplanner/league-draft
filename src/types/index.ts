@@ -68,6 +68,7 @@ export interface DraftPick {
   teamId: string;
   playerId?: string;
   timestamp?: number;
+  wasSkipped?: boolean;
 }
 
 export type DraftFormat = 'straight' | 'snake' | 'recalculated';
@@ -94,6 +95,17 @@ export interface DraftState {
     reason: 'coach-kid' | 'sibling';
     siblingName?: string;
   };
+  trades: Trade[];
+}
+
+export interface Trade {
+  id: string;
+  timestamp: number;
+  team1Id: string;
+  team2Id: string;
+  player1Id: string; // moving FROM team1 TO team2
+  player2Id: string; // moving FROM team2 TO team1
+  reason: string;
 }
 
 export interface CSVRow {

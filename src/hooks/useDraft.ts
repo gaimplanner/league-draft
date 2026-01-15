@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Player, Team, DraftState, DraftFormat, DraftPick, AppPhase, Division } from '../types';
+import { Player, Team, DraftState, DraftFormat, DraftPick, AppPhase, Division, Trade } from '../types';
 import { getNextPick, calculateDraftOrder } from '../utils/draftOrder';
 
 const STORAGE_KEY_PREFIX = 'little-league-draft-';
@@ -20,6 +20,7 @@ const initialDraftState: DraftState = {
   currentTeamId: null,
   isDraftComplete: false,
   mandatoryPick: undefined,
+  trades: [],
 };
 
 export const useDraft = (divisionId?: string) => {
@@ -524,6 +525,201 @@ export const useDraft = (divisionId?: string) => {
     }
   }, [checkMandatoryPicks, phase]);
 
+  // Skip the current pick (only allowed in final round)
+  const skipPick = useCallback(() => {
+    setDraftState((prev) => {
+      const { currentRound, currentPickInRound, currentTeamId, teams } = prev;
+
+      if (!currentTeamId) return prev;
+
+      // Record the skip
+      const skipRecord: DraftPick = {
+        round: currentRound,
+        pick: (currentRound - 1) * teams.length + currentPickInRound,
+        teamId: currentTeamId,
+        playerId: undefined,
+        timestamp: Date.now(),
+        wasSkipped: true,
+      };
+
+      const updatedPicks = [...prev.picks, skipRecord];
+
+      // Calculate next pick
+      const { round: nextRound, pickInRound: nextPickInRound } = getNextPick(
+        currentRound,
+        currentPickInRound,
+        teams.length
+      );
+
+      const availablePlayers = prev.players.filter((p) => !p.isDrafted);
+
+      // Check if draft is complete (no more available players)
+      if (availablePlayers.length === 0) {
+        setTimeout(() => setPhase('complete'), 500);
+        return {
+          ...prev,
+          picks: updatedPicks,
+          isDraftComplete: true,
+          mandatoryPick: undefined,
+        };
+      }
+
+      // If we're advancing to a new round, recalculate the draft order
+      let nextRoundOrder = prev.currentRoundOrder;
+
+      if (nextRound !== currentRound) {
+        nextRoundOrder = calculateDraftOrder(
+          teams,
+          nextRound,
+          prev.draftFormat,
+          prev.draftOrder
+        );
+      }
+
+      const nextTeamId = nextRoundOrder[nextPickInRound - 1];
+
+      // Check for mandatory picks for next team
+      setTimeout(() => {
+        checkMandatoryPicks(prev.players, teams, nextTeamId, nextRound);
+      }, 0);
+
+      console.log('⏭️ Pick skipped for team', currentTeamId);
+
+      return {
+        ...prev,
+        picks: updatedPicks,
+        currentRound: nextRound,
+        currentPickInRound: nextPickInRound,
+        currentRoundOrder: nextRoundOrder,
+        currentTeamId: nextTeamId,
+        mandatoryPick: undefined,
+      };
+    });
+  }, [checkMandatoryPicks, setPhase]);
+
+  // Execute a trade between two teams
+  const executeTrade = useCallback((
+    team1Id: string,
+    team2Id: string,
+    player1Id: string, // moving FROM team1 TO team2
+    player2Id: string, // moving FROM team2 TO team1
+    reason: string
+  ) => {
+    setDraftState((prev) => {
+      const team1 = prev.teams.find(t => t.id === team1Id);
+      const team2 = prev.teams.find(t => t.id === team2Id);
+      const player1 = prev.players.find(p => p.id === player1Id);
+      const player2 = prev.players.find(p => p.id === player2Id);
+
+      if (!team1 || !team2 || !player1 || !player2) {
+        console.error('Trade failed: Invalid team or player IDs');
+        return prev;
+      }
+
+      // Validate players are on the correct teams
+      if (player1.draftedByTeamId !== team1Id || player2.draftedByTeamId !== team2Id) {
+        console.error('Trade failed: Players not on expected teams');
+        return prev;
+      }
+
+      // Create the trade record
+      const trade: Trade = {
+        id: `trade-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        timestamp: Date.now(),
+        team1Id,
+        team2Id,
+        player1Id,
+        player2Id,
+        reason,
+      };
+
+      // Update players with new team assignments
+      const updatedPlayers = prev.players.map((p) => {
+        if (p.id === player1Id) {
+          return { ...p, draftedByTeamId: team2Id };
+        }
+        if (p.id === player2Id) {
+          return { ...p, draftedByTeamId: team1Id };
+        }
+        return p;
+      });
+
+      // Update teams - swap players between rosters
+      const updatedTeams = prev.teams.map((t) => {
+        if (t.id === team1Id) {
+          // Remove player1, add player2
+          const newRoster = t.roster.filter(p => p.id !== player1Id);
+          const updatedPlayer2 = updatedPlayers.find(p => p.id === player2Id)!;
+          newRoster.push(updatedPlayer2);
+
+          // Update age breakdown: remove player1's age, add player2's age
+          const newAgeBreakdown = { ...(t.ageBreakdown || {}) };
+          const age1 = player1.littleLeagueAge;
+          const age2 = player2.littleLeagueAge;
+
+          // Decrement player1's age
+          if (newAgeBreakdown[age1] > 1) {
+            newAgeBreakdown[age1] = newAgeBreakdown[age1] - 1;
+          } else {
+            delete newAgeBreakdown[age1];
+          }
+          // Increment player2's age
+          newAgeBreakdown[age2] = (newAgeBreakdown[age2] || 0) + 1;
+
+          return {
+            ...t,
+            roster: newRoster,
+            totalScore: newRoster.reduce((sum, p) => sum + p.totalScore, 0),
+            ageBreakdown: newAgeBreakdown,
+          };
+        }
+        if (t.id === team2Id) {
+          // Remove player2, add player1
+          const newRoster = t.roster.filter(p => p.id !== player2Id);
+          const updatedPlayer1 = updatedPlayers.find(p => p.id === player1Id)!;
+          newRoster.push(updatedPlayer1);
+
+          // Update age breakdown: remove player2's age, add player1's age
+          const newAgeBreakdown = { ...(t.ageBreakdown || {}) };
+          const age1 = player1.littleLeagueAge;
+          const age2 = player2.littleLeagueAge;
+
+          // Decrement player2's age
+          if (newAgeBreakdown[age2] > 1) {
+            newAgeBreakdown[age2] = newAgeBreakdown[age2] - 1;
+          } else {
+            delete newAgeBreakdown[age2];
+          }
+          // Increment player1's age
+          newAgeBreakdown[age1] = (newAgeBreakdown[age1] || 0) + 1;
+
+          return {
+            ...t,
+            roster: newRoster,
+            totalScore: newRoster.reduce((sum, p) => sum + p.totalScore, 0),
+            ageBreakdown: newAgeBreakdown,
+          };
+        }
+        return t;
+      });
+
+      console.log('✅ Trade executed:', {
+        trade,
+        player1: `${player1.firstName} ${player1.lastName}`,
+        player2: `${player2.firstName} ${player2.lastName}`,
+        team1: team1.name,
+        team2: team2.name,
+      });
+
+      return {
+        ...prev,
+        players: updatedPlayers,
+        teams: updatedTeams,
+        trades: [...prev.trades, trade],
+      };
+    });
+  }, []);
+
   return {
     phase,
     setPhase,
@@ -534,8 +730,10 @@ export const useDraft = (divisionId?: string) => {
     setDraftOrder,
     startDraft,
     draftPlayer,
+    skipPick,
     undoLastPick,
     resetDraft,
     loadDivisionState,
+    executeTrade,
   };
 };

@@ -51,9 +51,11 @@ function App() {
     setTeams,
     startDraft,
     draftPlayer,
+    skipPick,
     undoLastPick,
     resetDraft,
     loadDivisionState,
+    executeTrade,
   } = useDraft(activeDivision?.id);
 
   const { players, updatePlayer, updatePlayerField, linkSiblings, unlinkSibling, setAllPlayers } = usePlayerScoring(
@@ -346,11 +348,12 @@ function App() {
 
       <div className={phase !== 'upload' && phase !== 'complete' ? 'pt-12' : ''}>
         {phase === 'upload' && (
-          <div className="relative">
-            <div className="absolute top-4 left-4 z-10">
+          <div>
+            {/* Back button - separate bar above content */}
+            <div className="bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-2">
               <button
                 onClick={handleBackToSelector}
-                className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
+                className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors text-sm flex items-center gap-1"
               >
                 ← Back to Divisions
               </button>
@@ -394,6 +397,7 @@ function App() {
           <DraftBoard
             draftState={draftState}
             onDraftPlayer={draftPlayer}
+            onSkipPick={skipPick}
             onUndo={undoLastPick}
             onReset={handleReset}
             enforceAgeLimit={activeDivision?.enforceAgeLimit ?? false}
@@ -418,18 +422,21 @@ function App() {
         )}
 
         {phase === 'complete' && (
-          <div className="relative">
-            <div className="absolute top-4 left-4 z-10">
+          <div>
+            {/* Back button - separate bar above content */}
+            <div className="bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-2">
               <button
                 onClick={handleBackToSelector}
-                className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
+                className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors text-sm flex items-center gap-1"
               >
                 ← Back to Divisions
               </button>
             </div>
             <DraftComplete
               draftState={draftState}
+              division={activeDivision}
               onReset={handleReset}
+              onExecuteTrade={executeTrade}
             />
           </div>
         )}

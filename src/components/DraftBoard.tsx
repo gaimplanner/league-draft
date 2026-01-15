@@ -11,13 +11,14 @@ const getTeamDisplayName = (team: Team) => team.name || `Team ${team.draftPositi
 interface DraftBoardProps {
   draftState: DraftState;
   onDraftPlayer: (playerId: string) => void;
+  onSkipPick: () => void;
   onUndo: () => void;
   onReset: () => void;
   enforceAgeLimit: boolean;
   maxPerAge: number;
 }
 
-export const DraftBoard = ({ draftState, onDraftPlayer, onUndo, onReset, enforceAgeLimit, maxPerAge }: DraftBoardProps) => {
+export const DraftBoard = ({ draftState, onDraftPlayer, onSkipPick, onUndo, onReset, enforceAgeLimit, maxPerAge }: DraftBoardProps) => {
   const viewMode = useViewMode();
   const isPublicView = viewMode === 'public';
 
@@ -93,8 +94,10 @@ export const DraftBoard = ({ draftState, onDraftPlayer, onUndo, onReset, enforce
     ? draftState.players.find((p) => p.id === selectedPlayerId)
     : null;
 
-  const totalPicks = draftState.teams.length * Math.ceil(draftState.players.length / draftState.teams.length);
+  const totalRounds = Math.ceil(draftState.players.length / draftState.teams.length);
+  const totalPicks = draftState.teams.length * totalRounds;
   const currentPickNumber = (draftState.currentRound - 1) * draftState.teams.length + draftState.currentPickInRound;
+  const isFinalRound = draftState.currentRound === totalRounds;
 
   const handlePlayerClick = (playerId: string) => {
     console.log('🔵 handlePlayerClick called with playerId:', playerId);
@@ -112,12 +115,30 @@ export const DraftBoard = ({ draftState, onDraftPlayer, onUndo, onReset, enforce
     console.log('🟢 selectedPlayer:', selectedPlayer);
 
     if (selectedPlayerId) {
+      // Check for age warning (not blocking, just confirmation)
+      if (selectedPlayer && enforceAgeLimit && maxPerAge > 0) {
+        const playerAge = selectedPlayer.littleLeagueAge;
+        const currentTeamAgeCount = currentTeam?.ageBreakdown?.[playerAge] || 0;
+        if (currentTeamAgeCount >= maxPerAge) {
+          if (!window.confirm(`Warning: ${currentTeam ? getTeamDisplayName(currentTeam) : 'This team'} already has ${currentTeamAgeCount} players age ${playerAge}. Continue anyway?`)) {
+            return;
+          }
+        }
+      }
+
       console.log('🟢 Calling onDraftPlayer with:', selectedPlayerId);
       onDraftPlayer(selectedPlayerId);
       console.log('🟢 Clearing selection');
       setSelectedPlayerId(null); // Clear selection after draft
     } else {
       console.log('🔴 No player selected!');
+    }
+  };
+
+  const handleSkipPick = () => {
+    if (!currentTeam) return;
+    if (window.confirm(`Skip pick for ${getTeamDisplayName(currentTeam)}? They will have one fewer player.`)) {
+      onSkipPick();
     }
   };
 
@@ -240,6 +261,17 @@ export const DraftBoard = ({ draftState, onDraftPlayer, onUndo, onReset, enforce
             {/* Admin controls - hidden in public view */}
             {!isPublicView && (
               <div className="flex gap-2">
+                {/* Skip Pick - only available in final round */}
+                {isFinalRound && (
+                  <button
+                    onClick={handleSkipPick}
+                    className="px-3 py-2 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg font-medium flex items-center gap-2 backdrop-blur-sm"
+                    title="Skip this team's pick"
+                  >
+                    <span>⏭️</span>
+                    <span className="hidden sm:inline">Skip Pick</span>
+                  </button>
+                )}
                 <button
                   onClick={onUndo}
                   disabled={draftState.picks.length === 0}
@@ -431,13 +463,16 @@ export const DraftBoard = ({ draftState, onDraftPlayer, onUndo, onReset, enforce
                     ? draftState.teams.find(t => t.id === player.lockedToTeamId)
                     : null;
 
-                  // Check if player's age is maxed out for current team (only if age limit is enforced)
+                  // Check if player's age is at/over limit for current team (only if age limit is enforced)
+                  // This is now a WARNING, not a block
                   const playerAge = player.littleLeagueAge;
                   const currentTeamAgeCount = currentTeam?.ageBreakdown?.[playerAge] || 0;
+                  const isAgeWarning = enforceAgeLimit && maxPerAge > 0 && currentTeamAgeCount >= maxPerAge - 1;
                   const isAgeMaxed = enforceAgeLimit && maxPerAge > 0 && currentTeamAgeCount >= maxPerAge;
 
-                  // Player is restricted if they're a coach's kid for another team, locked sibling, or age maxed
-                  const isRestricted = isCoachKidForOtherTeam || isSiblingLockedToOtherTeam || isAgeMaxed;
+                  // Player is restricted ONLY if they're a coach's kid for another team or locked sibling
+                  // Age limit is a WARNING, not a restriction
+                  const isRestricted = isCoachKidForOtherTeam || isSiblingLockedToOtherTeam;
                   // In public view, all interactions are disabled
                   const isClickable = !isPublicView && !isRestricted;
 
@@ -487,8 +522,13 @@ export const DraftBoard = ({ draftState, onDraftPlayer, onUndo, onReset, enforce
                             </div>
                           )}
                           {isAgeMaxed && !isCoachKidForOtherTeam && !isSiblingLockedToOtherTeam && (
-                            <div className="text-xs text-red-600 dark:text-red-400 mt-2 font-semibold">
-                              ⚠ Age limit - Team has maximum {maxPerAge} players age {playerAge}
+                            <div className="text-xs text-orange-600 dark:text-orange-400 mt-2 font-semibold">
+                              ⚠️ Warning: Team has {currentTeamAgeCount} players age {playerAge} (limit: {maxPerAge})
+                            </div>
+                          )}
+                          {isAgeWarning && !isAgeMaxed && !isCoachKidForOtherTeam && !isSiblingLockedToOtherTeam && (
+                            <div className="text-xs text-yellow-600 dark:text-yellow-400 mt-2">
+                              ⚠️ Team has {currentTeamAgeCount} players age {playerAge}
                             </div>
                           )}
 
