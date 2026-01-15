@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { ChevronRight, CheckCircle, AlertCircle } from 'lucide-react';
 import { Team, Player, DraftFormat } from '../types';
+import { SimulationModal } from './SimulationModal';
 
 interface DraftConfigProps {
   teams: Team[];
@@ -51,6 +52,7 @@ export const DraftConfig = ({ teams, players, onConfigComplete }: DraftConfigPro
   const [draftFormat, setDraftFormat] = useState<DraftFormat | null>(null);
   // Store position by team ID
   const [teamPositions, setTeamPositions] = useState<Record<string, number | null>>({});
+  const [showSimulation, setShowSimulation] = useState(false);
 
   // Compute resolved players with lockedToRound set for coach's kids with conflicts
   // This is a defensive fix to handle cases where lockedToRound wasn't set in PlayerReview
@@ -241,18 +243,31 @@ export const DraftConfig = ({ teams, players, onConfigComplete }: DraftConfigPro
             </p>
           </div>
 
-          <button
-            onClick={handleStart}
-            disabled={!validation.valid || !draftFormat}
-            className={`px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors ${
-              validation.valid && draftFormat
-                ? 'bg-blue-500 hover:bg-blue-600 text-white'
-                : 'bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed'
-            }`}
-          >
-            Start Draft
-            <ChevronRight className="w-5 h-5" />
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowSimulation(true)}
+              disabled={!validation.valid || !draftFormat}
+              className={`px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors ${
+                validation.valid && draftFormat
+                  ? 'bg-purple-500 hover:bg-purple-600 text-white'
+                  : 'bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed'
+              }`}
+            >
+              🔮 Run Simulation
+            </button>
+            <button
+              onClick={handleStart}
+              disabled={!validation.valid || !draftFormat}
+              className={`px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors ${
+                validation.valid && draftFormat
+                  ? 'bg-blue-500 hover:bg-blue-600 text-white'
+                  : 'bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed'
+              }`}
+            >
+              Start Draft
+              <ChevronRight className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Coach's Kids Summary */}
@@ -425,6 +440,17 @@ export const DraftConfig = ({ teams, players, onConfigComplete }: DraftConfigPro
           </div>
         </div>
       </div>
+
+      {/* Simulation Modal */}
+      {showSimulation && draftFormat && (
+        <SimulationModal
+          players={resolvedPlayers}
+          teams={teams}
+          draftOrder={draftOrder}
+          draftFormat={draftFormat}
+          onClose={() => setShowSimulation(false)}
+        />
+      )}
     </div>
   );
 };
