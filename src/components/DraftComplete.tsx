@@ -227,33 +227,38 @@ export const DraftComplete = ({ draftState, division, onReset, onExecuteTrade }:
         {/* Team Rankings */}
         <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700 mb-6">
           <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-4">
-            Team Rankings by Total Score
+            Team Rankings
           </h2>
           <div className="space-y-2">
-            {sortedTeams.map((team, index) => (
-              <div
-                key={team.id}
-                className="flex items-center gap-4 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg"
-              >
-                <div className="text-2xl font-bold text-gray-400 dark:text-gray-500 w-8">
-                  #{index + 1}
-                </div>
-                <div className="flex-1">
-                  <div className="font-semibold text-lg text-gray-900 dark:text-white">
-                    {getTeamDisplayName(team)}
+            {sortedTeams.map((team, index) => {
+              const avgScore = team.roster.length > 0 ? team.totalScore / team.roster.length : 0;
+              return (
+                <div
+                  key={team.id}
+                  className="flex items-center gap-4 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg"
+                >
+                  <div className="text-2xl font-bold text-gray-400 dark:text-gray-500 w-8">
+                    #{index + 1}
                   </div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">
-                    {team.roster.length} players
+                  <div className="flex-1">
+                    <div className="font-semibold text-lg text-gray-900 dark:text-white">
+                      {getTeamDisplayName(team)}
+                    </div>
+                    <div className="text-sm text-gray-600 dark:text-gray-400">
+                      {team.roster.length} players
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                      {team.totalScore.toFixed(1)} pts
+                    </div>
+                    <div className="text-xs text-gray-600 dark:text-gray-400">
+                      Avg: {avgScore.toFixed(1)} pts/player
+                    </div>
                   </div>
                 </div>
-                <div className="text-right">
-                  <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                    {team.totalScore.toFixed(1)}
-                  </div>
-                  <div className="text-xs text-gray-600 dark:text-gray-400">Total Score</div>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 

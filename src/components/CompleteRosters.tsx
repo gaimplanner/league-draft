@@ -38,7 +38,11 @@ export const CompleteRosters = ({ teams, isSimulation = false }: CompleteRosters
                 {getTeamDisplayName(team)}
               </h3>
               <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                Total Score: <span className="font-bold">{team.totalScore.toFixed(1)}</span>
+                Total: <span className="font-bold">{team.totalScore.toFixed(1)}</span> pts
+                {' | '}
+                Avg: <span className="font-bold">{team.roster.length > 0 ? (team.totalScore / team.roster.length).toFixed(1) : '0.0'}</span> pts
+                {' | '}
+                {team.roster.length} players
               </div>
             </div>
 

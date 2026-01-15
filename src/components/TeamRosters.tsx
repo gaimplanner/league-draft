@@ -42,9 +42,11 @@ export const TeamRosters = ({ teams, currentTeamId, enforceAgeLimit = false, max
           {/* Team score - hidden in public view */}
           {!isPublicView && (
             <div className="mb-3">
-              <div className="text-sm text-gray-600 dark:text-gray-400">Total Score</div>
               <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                {team.totalScore.toFixed(1)}
+                {team.totalScore.toFixed(1)} pts
+              </div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">
+                Avg: {team.roster.length > 0 ? (team.totalScore / team.roster.length).toFixed(1) : '0.0'} pts | {team.roster.length} players
               </div>
             </div>
           )}
