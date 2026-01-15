@@ -50,6 +50,15 @@ const CATEGORY_GROUPS: { category: EvaluationCategory; shortName: string; colSpa
 type SortField = 'rank' | 'proj' | 'bib' | 'name' | 'age' | 'coach' | 'sibling' | 'adjust' | 'total' | string;
 type SortDirection = 'asc' | 'desc';
 
+// Helper function to get sibling bib numbers for a player
+function getSiblingBibs(player: EvaluationPlayer, allPlayers: EvaluationPlayer[]): string {
+  if (!player.siblingGroupId) return '';
+  const siblings = allPlayers.filter(
+    p => p.siblingGroupId === player.siblingGroupId && p.bib !== player.bib
+  );
+  return siblings.map(s => s.bib).join(', ');
+}
+
 export function PlayerSummaryTable({
   players,
   fieldWeights,
@@ -62,8 +71,10 @@ export function PlayerSummaryTable({
   onResetWeights,
   onTeamCountChange,
   onTeamNameChange,
-  onToggleCoachKid,
-  // onSetCoachKidTeam is available via props but not used directly in this component
+  // onToggleCoachKid and onSetCoachKidTeam are available via props but not used directly
+  // Coach kid status is display-only in this table (use auto-detect or Teams panel)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  onToggleCoachKid: _onToggleCoachKid,
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   onSetCoachKidTeam: _onSetCoachKidTeam,
   onAutoDetectCoachKids,
@@ -412,11 +423,11 @@ export function PlayerSummaryTable({
                 <th rowSpan={2} className="px-2 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-300 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 w-10" onClick={() => handleSort('age')}>
                   Age<SortIndicator field="age" />
                 </th>
-                <th rowSpan={2} className="px-1 py-2 text-center text-xs font-semibold text-blue-600 dark:text-blue-400 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 w-10" onClick={() => handleSort('coach')}>
-                  🔵<SortIndicator field="coach" />
+                <th rowSpan={2} className="px-1 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-300 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 w-16" onClick={() => handleSort('coach')}>
+                  Coach<SortIndicator field="coach" />
                 </th>
-                <th rowSpan={2} className="px-1 py-2 text-center text-xs font-semibold text-green-600 dark:text-green-400 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 w-10" onClick={() => handleSort('sibling')}>
-                  🟢<SortIndicator field="sibling" />
+                <th rowSpan={2} className="px-1 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-300 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 w-14" onClick={() => handleSort('sibling')}>
+                  Sib<SortIndicator field="sibling" />
                 </th>
                 {CATEGORY_GROUPS.map(({ category, shortName, colSpan }) => (
                   <th
@@ -490,22 +501,19 @@ export function PlayerSummaryTable({
                   </td>
                   {/* Coach's Kid */}
                   <td className="px-1 py-1 text-center">
-                    <input
-                      type="checkbox"
-                      checked={player.isCoachKid}
-                      onChange={(e) => onToggleCoachKid(player.bib, e.target.checked, null)}
-                      className="w-3.5 h-3.5 rounded border-gray-300 text-blue-500 focus:ring-blue-500"
-                    />
+                    {player.isCoachKid ? (
+                      <span className="text-xs px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 whitespace-nowrap">
+                        Coach Kid
+                      </span>
+                    ) : null}
                   </td>
-                  {/* Sibling Group */}
+                  {/* Sibling - shows sibling's bib number(s) */}
                   <td className="px-1 py-1 text-center">
                     {player.siblingGroupId ? (
-                      <span className="inline-flex items-center justify-center w-5 h-5 text-xs font-bold text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-900/30 rounded-full">
-                        {player.siblingGroupId}
+                      <span className="text-blue-600 dark:text-blue-400 text-xs font-medium">
+                        {getSiblingBibs(player, players)}
                       </span>
-                    ) : (
-                      <span className="text-gray-300">-</span>
-                    )}
+                    ) : null}
                   </td>
                   {FIELD_COLUMNS.map((col, idx) => {
                     const score = getFieldScore(player, col.fieldId);
@@ -548,7 +556,7 @@ export function PlayerSummaryTable({
 
       {/* Hint */}
       <p className="text-xs text-gray-500 dark:text-gray-500 text-center">
-        🔵 = Coach's Kid &nbsp; 🟢 = Sibling Group &nbsp; Click headers to sort. Edit Adj column to add/subtract points.
+        Coach = Coach's Kid badge &nbsp; Sib = Sibling's BIB# &nbsp; Click headers to sort. Edit Adj column to add/subtract points.
       </p>
     </div>
   );
