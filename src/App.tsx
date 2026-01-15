@@ -47,6 +47,7 @@ function App() {
     phase,
     setPhase,
     draftState,
+    pendingComplete,
     setPlayers,
     setTeams,
     startDraft,
@@ -56,6 +57,8 @@ function App() {
     resetDraft,
     loadDivisionState,
     executeTrade,
+    finalizeDraft,
+    cancelPendingComplete,
   } = useDraft(activeDivision?.id);
 
   const { players, updatePlayer, updatePlayerField, linkSiblings, unlinkSibling, setAllPlayers } = usePlayerScoring(
@@ -477,6 +480,9 @@ function App() {
             onReset={handleReset}
             enforceAgeLimit={activeDivision?.enforceAgeLimit ?? false}
             maxPerAge={activeDivision?.maxPerAge ?? 0}
+            pendingComplete={pendingComplete}
+            onFinalizeDraft={finalizeDraft}
+            onCancelComplete={cancelPendingComplete}
           />
         )}
 

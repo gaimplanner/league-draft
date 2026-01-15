@@ -27,6 +27,7 @@ const initialDraftState: DraftState = {
 export const useDraft = (divisionId?: string) => {
   const [phase, setPhase] = useState<AppPhase>('upload');
   const [draftState, setDraftState] = useState<DraftState>(initialDraftState);
+  const [pendingComplete, setPendingComplete] = useState(false);
   const currentDivisionId = useRef<string | undefined>(divisionId);
 
   // Track if we've loaded initial state
@@ -311,7 +312,8 @@ export const useDraft = (divisionId?: string) => {
 
         // Check if draft is complete
         if (availablePlayers.length === 0) {
-          setTimeout(() => setPhase('complete'), 500);
+          // Don't auto-navigate - show confirmation modal first
+          setTimeout(() => setPendingComplete(true), 300);
           return {
             ...prev,
             players: updatedPlayers,
@@ -499,7 +501,8 @@ export const useDraft = (divisionId?: string) => {
 
       // Check if draft is complete (no more available players)
       if (availablePlayers.length === 0) {
-        setTimeout(() => setPhase('complete'), 500);
+        // Don't auto-navigate - show confirmation modal first
+        setTimeout(() => setPendingComplete(true), 300);
         return {
           ...prev,
           picks: updatedPicks,
@@ -664,10 +667,22 @@ export const useDraft = (divisionId?: string) => {
     });
   }, []);
 
+  // Finalize draft and navigate to complete phase
+  const finalizeDraft = useCallback(() => {
+    setPendingComplete(false);
+    setPhase('complete');
+  }, [setPhase]);
+
+  // Cancel pending complete (go back to review draft)
+  const cancelPendingComplete = useCallback(() => {
+    setPendingComplete(false);
+  }, []);
+
   return {
     phase,
     setPhase,
     draftState,
+    pendingComplete,
     setPlayers,
     setTeams,
     setDraftFormat,
@@ -679,5 +694,7 @@ export const useDraft = (divisionId?: string) => {
     resetDraft,
     loadDivisionState,
     executeTrade,
+    finalizeDraft,
+    cancelPendingComplete,
   };
 };
