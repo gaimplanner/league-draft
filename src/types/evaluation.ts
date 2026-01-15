@@ -265,6 +265,12 @@ export interface EvaluationPlayer {
   weightedTotal: number;
   rank: number;
 
+  // Draft planning
+  projectedRound: number;
+  isCoachKid: boolean;
+  coachTeamIndex: number | null; // Index into teams array (0-based)
+  siblingGroupId: string | null; // Groups siblings together (e.g., 'A', 'B', 'C')
+
   // Tracking
   missingCategories: EvaluationCategory[];
   tabsFound: string[];

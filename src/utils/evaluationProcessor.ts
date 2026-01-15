@@ -208,6 +208,10 @@ function createEmptyPlayer(bib: string): EvaluationPlayer {
     manualAdjust: 0,
     weightedTotal: 0,
     rank: 0,
+    projectedRound: 0,
+    isCoachKid: false,
+    coachTeamIndex: null,
+    siblingGroupId: null,
     missingCategories: [],
     tabsFound: [],
     isPartial: false,
@@ -401,13 +405,17 @@ export function convertToPlayers(
 /**
  * Generate summary CSV from processed players with all field scores
  */
-export function generateEvaluationCSV(players: EvaluationPlayer[]): string {
+export function generateEvaluationCSV(players: EvaluationPlayer[], teamNames: string[] = []): string {
   const headers = [
     'Rank',
+    'Proj Round',
     'BIB',
     'First Name',
     'Last Name',
     'Age',
+    'Coach Kid',
+    'Team',
+    'Sibling Group',
     // Pitching fields
     'P.Form',
     'P.Arm',
@@ -431,10 +439,14 @@ export function generateEvaluationCSV(players: EvaluationPlayer[]): string {
 
   const rows = players.map((p) => [
     p.rank.toString(),
+    p.projectedRound.toString(),
     p.bib,
     p.firstName,
     p.lastName,
     p.age?.toString() || '',
+    p.isCoachKid ? 'Yes' : '',
+    p.coachTeamIndex !== null && teamNames[p.coachTeamIndex] ? teamNames[p.coachTeamIndex] : '',
+    p.siblingGroupId || '',
     // Pitching
     getFieldScore(p, 'pitchingForm')?.toFixed(0) || '',
     getFieldScore(p, 'armStrength')?.toFixed(0) || '',

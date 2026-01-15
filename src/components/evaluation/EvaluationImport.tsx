@@ -16,6 +16,8 @@ export function EvaluationImport({ teamCount, onComplete, onCancel }: Evaluation
   const {
     state,
     totalWeight,
+    teamCount: currentTeamCount,
+    teamNames,
     reset,
     goToStep,
     uploadWorkbook,
@@ -23,6 +25,14 @@ export function EvaluationImport({ teamCount, onComplete, onCancel }: Evaluation
     toggleField,
     resetWeights,
     updatePlayerAdjustment,
+    updateTeamCount,
+    updateTeamName,
+    toggleCoachKid,
+    setCoachKidTeam,
+    autoDetectCoachKids,
+    autoDetectSiblings,
+    clearCoachKids,
+    clearSiblings,
     getPlayers,
     exportCSV,
   } = useEvaluationImport(teamCount);
@@ -103,7 +113,7 @@ export function EvaluationImport({ teamCount, onComplete, onCancel }: Evaluation
 
         {/* Summary Step (includes weights panel) */}
         {(state.step === 'summary' || state.step === 'weights') && (
-          <div className="space-y-6">
+          <div className="space-y-6 pb-24">
             <div className="text-center mb-4">
               <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
                 Player Summary
@@ -117,10 +127,20 @@ export function EvaluationImport({ teamCount, onComplete, onCancel }: Evaluation
               players={state.players}
               fieldWeights={state.fieldWeights}
               totalWeight={totalWeight}
+              teamCount={currentTeamCount}
+              teamNames={teamNames}
               onAdjustChange={updatePlayerAdjustment}
               onWeightChange={updateFieldWeight}
               onToggleField={toggleField}
               onResetWeights={resetWeights}
+              onTeamCountChange={updateTeamCount}
+              onTeamNameChange={updateTeamName}
+              onToggleCoachKid={toggleCoachKid}
+              onSetCoachKidTeam={setCoachKidTeam}
+              onAutoDetectCoachKids={autoDetectCoachKids}
+              onAutoDetectSiblings={autoDetectSiblings}
+              onClearCoachKids={clearCoachKids}
+              onClearSiblings={clearSiblings}
             />
 
             <ExportControls
