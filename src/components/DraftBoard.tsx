@@ -198,30 +198,26 @@ export const DraftBoard = ({
                 )}
                 {/* Age Breakdown - only show if age limit is enforced */}
                 {enforceAgeLimit && maxPerAge > 0 && (
-                  <div className="mt-2 text-sm flex items-center justify-center gap-2 flex-wrap">
-                    <span className="opacity-80">Ages:</span>
+                  <div className="mt-2 flex items-center justify-center gap-2 text-sm">
+                    <span className="text-white/60">Roster:</span>
                     {Object.entries(currentTeam.ageBreakdown || {})
                       .sort(([a], [b]) => Number(a) - Number(b))
-                      .map(([age, count]) => {
-                        const isWarning = count === maxPerAge - 1;
-                        const isMaxed = count >= maxPerAge;
-                        return (
-                          <span
-                            key={age}
-                            className={`px-2 py-0.5 rounded text-sm font-medium ${
-                              isMaxed
-                                ? 'bg-red-500/80 text-white'
-                                : isWarning
-                                ? 'bg-yellow-400/80 text-yellow-900'
-                                : 'bg-white/20'
-                            }`}
-                          >
-                            {age}({count}){isMaxed ? '🚫' : isWarning ? '⚠️' : ''}
-                          </span>
-                        );
-                      })}
+                      .map(([age, count]) => (
+                        <span
+                          key={age}
+                          className={`px-2 py-1 rounded ${
+                            count >= maxPerAge
+                              ? 'bg-red-500/30 text-red-300'
+                              : count >= maxPerAge - 1
+                              ? 'bg-yellow-500/30 text-yellow-300'
+                              : 'bg-white/20 text-white/90'
+                          }`}
+                        >
+                          {age}yr: {count}
+                        </span>
+                      ))}
                     {Object.keys(currentTeam.ageBreakdown || {}).length === 0 && (
-                      <span className="opacity-60">None yet</span>
+                      <span className="text-white/60">Empty</span>
                     )}
                   </div>
                 )}
