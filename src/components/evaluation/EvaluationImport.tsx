@@ -5,6 +5,7 @@ import { WorkbookUpload } from './WorkbookUpload';
 import { TabOverview } from './TabOverview';
 import { PlayerSummaryTable } from './PlayerSummaryTable';
 import { ExportControls } from './ExportControls';
+import { DetectionModal } from './DetectionModal';
 
 interface EvaluationImportProps {
   teamCount: number;
@@ -18,6 +19,12 @@ export function EvaluationImport({ teamCount, onComplete, onCancel }: Evaluation
     totalWeight,
     teamCount: currentTeamCount,
     teamNames,
+    assistantCoaches,
+    showDetectionModal,
+    coachKidMatches,
+    siblingMatches,
+    selectedCoachKids,
+    selectedSiblings,
     reset,
     goToStep,
     uploadWorkbook,
@@ -27,10 +34,16 @@ export function EvaluationImport({ teamCount, onComplete, onCancel }: Evaluation
     updatePlayerAdjustment,
     updateTeamCount,
     updateTeamName,
+    updateAssistantCoaches,
     toggleCoachKid,
     setCoachKidTeam,
-    autoDetectCoachKids,
-    autoDetectSiblings,
+    runAutoDetection,
+    toggleCoachKidSelection,
+    toggleSiblingSelection,
+    applyDetections,
+    cancelDetection,
+    selectAllDetections,
+    deselectAllDetections,
     clearCoachKids,
     clearSiblings,
     getPlayers,
@@ -129,16 +142,17 @@ export function EvaluationImport({ teamCount, onComplete, onCancel }: Evaluation
               totalWeight={totalWeight}
               teamCount={currentTeamCount}
               teamNames={teamNames}
+              assistantCoaches={assistantCoaches}
               onAdjustChange={updatePlayerAdjustment}
               onWeightChange={updateFieldWeight}
               onToggleField={toggleField}
               onResetWeights={resetWeights}
               onTeamCountChange={updateTeamCount}
               onTeamNameChange={updateTeamName}
+              onAssistantCoachesChange={updateAssistantCoaches}
               onToggleCoachKid={toggleCoachKid}
               onSetCoachKidTeam={setCoachKidTeam}
-              onAutoDetectCoachKids={autoDetectCoachKids}
-              onAutoDetectSiblings={autoDetectSiblings}
+              onRunAutoDetection={runAutoDetection}
               onClearCoachKids={clearCoachKids}
               onClearSiblings={clearSiblings}
             />
@@ -152,6 +166,23 @@ export function EvaluationImport({ teamCount, onComplete, onCancel }: Evaluation
           </div>
         )}
       </div>
+
+      {/* Detection Confirmation Modal */}
+      {showDetectionModal && (
+        <DetectionModal
+          coachKidMatches={coachKidMatches}
+          siblingMatches={siblingMatches}
+          selectedCoachKids={selectedCoachKids}
+          selectedSiblings={selectedSiblings}
+          players={state.players}
+          onToggleCoachKid={toggleCoachKidSelection}
+          onToggleSibling={toggleSiblingSelection}
+          onSelectAll={selectAllDetections}
+          onDeselectAll={deselectAllDetections}
+          onApply={applyDetections}
+          onCancel={cancelDetection}
+        />
+      )}
     </div>
   );
 }

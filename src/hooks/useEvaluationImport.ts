@@ -16,6 +16,25 @@ import {
   downloadEvaluationCSV,
 } from '../utils/evaluationProcessor';
 
+// Types for detection results
+export interface CoachKidMatch {
+  bib: string;
+  playerName: string;
+  teamIndex: number;
+  teamName: string;
+  reason: string;
+  alreadyMarked: boolean;
+}
+
+export interface SiblingMatch {
+  bib1: string;
+  bib2: string;
+  player1Name: string;
+  player2Name: string;
+  sharedLastName: string;
+  alreadyLinked: boolean;
+}
+
 const initialState: EvaluationImportState = {
   step: 'upload',
   workbook: null,
@@ -32,6 +51,16 @@ export function useEvaluationImport(initialTeamCount: number = 8) {
   const [teamNames, setTeamNames] = useState<string[]>(() =>
     Array.from({ length: initialTeamCount }, (_, i) => `Team ${i + 1}`)
   );
+  const [assistantCoaches, setAssistantCoaches] = useState<string[][]>(() =>
+    Array.from({ length: initialTeamCount }, () => [])
+  );
+
+  // Detection modal state
+  const [showDetectionModal, setShowDetectionModal] = useState(false);
+  const [coachKidMatches, setCoachKidMatches] = useState<CoachKidMatch[]>([]);
+  const [siblingMatches, setSiblingMatches] = useState<SiblingMatch[]>([]);
+  const [selectedCoachKids, setSelectedCoachKids] = useState<Set<string>>(new Set());
+  const [selectedSiblings, setSelectedSiblings] = useState<Set<string>>(new Set());
 
   /**
    * Update projected rounds for all players based on current team count
@@ -50,6 +79,12 @@ export function useEvaluationImport(initialTeamCount: number = 8) {
     setState(initialState);
     setTeamCount(initialTeamCount);
     setTeamNames(Array.from({ length: initialTeamCount }, (_, i) => `Team ${i + 1}`));
+    setAssistantCoaches(Array.from({ length: initialTeamCount }, () => []));
+    setShowDetectionModal(false);
+    setCoachKidMatches([]);
+    setSiblingMatches([]);
+    setSelectedCoachKids(new Set());
+    setSelectedSiblings(new Set());
   }, [initialTeamCount]);
 
   /**
@@ -230,6 +265,16 @@ export function useEvaluationImport(initialTeamCount: number = 8) {
       return prev;
     });
 
+    // Adjust assistant coaches array
+    setAssistantCoaches(prev => {
+      if (newCount > prev.length) {
+        return [...prev, ...Array.from({ length: newCount - prev.length }, () => [])];
+      } else if (newCount < prev.length) {
+        return prev.slice(0, newCount);
+      }
+      return prev;
+    });
+
     // Update projected rounds for all players
     setState((prev) => ({
       ...prev,
@@ -238,12 +283,28 @@ export function useEvaluationImport(initialTeamCount: number = 8) {
   }, [updateProjectedRounds]);
 
   /**
-   * Update a team name
+   * Update a team name (head coach last name)
    */
   const updateTeamName = useCallback((index: number, name: string) => {
     setTeamNames(prev => {
       const updated = [...prev];
       updated[index] = name;
+      return updated;
+    });
+  }, []);
+
+  /**
+   * Update assistant coaches for a team (comma-separated string)
+   */
+  const updateAssistantCoaches = useCallback((index: number, coachesText: string) => {
+    const coaches = coachesText
+      .split(',')
+      .map(name => name.trim())
+      .filter(name => name.length > 0);
+
+    setAssistantCoaches(prev => {
+      const updated = [...prev];
+      updated[index] = coaches;
       return updated;
     });
   }, []);
@@ -275,28 +336,210 @@ export function useEvaluationImport(initialTeamCount: number = 8) {
   }, []);
 
   /**
-   * Auto-detect coach's kids by matching last names to team names
+   * Run auto-detection and show confirmation modal
    */
-  const autoDetectCoachKids = useCallback(() => {
-    setState((prev) => {
-      const updatedPlayers = prev.players.map((player) => {
+  const runAutoDetection = useCallback(() => {
+    const players = state.players;
+    const matches: CoachKidMatch[] = [];
+    const siblings: SiblingMatch[] = [];
+
+    // Detect coach's kids by matching last names to team names and assistant coaches
+    for (let teamIndex = 0; teamIndex < teamNames.length; teamIndex++) {
+      const headCoach = teamNames[teamIndex].trim().toLowerCase();
+      const assistants = assistantCoaches[teamIndex] || [];
+
+      // Skip default team names like "Team 1"
+      if (headCoach.startsWith('team ')) continue;
+
+      for (const player of players) {
         const lastName = player.lastName.trim().toLowerCase();
-        if (!lastName) return player;
+        if (!lastName) continue;
 
-        // Find matching team
-        const teamIndex = teamNames.findIndex((name) => {
-          const teamName = name.trim().toLowerCase();
-          // Skip default team names like "Team 1"
-          if (teamName.startsWith('team ')) return false;
-          return teamName === lastName;
-        });
+        // Check if already marked for this team
+        const alreadyMarked = player.isCoachKid && player.coachTeamIndex === teamIndex;
 
-        if (teamIndex !== -1) {
-          return {
-            ...player,
-            isCoachKid: true,
-            coachTeamIndex: teamIndex,
-          };
+        // Check head coach match
+        if (headCoach === lastName) {
+          matches.push({
+            bib: player.bib,
+            playerName: `${player.firstName} ${player.lastName}`,
+            teamIndex,
+            teamName: teamNames[teamIndex],
+            reason: `Last name "${player.lastName}" matches head coach "${teamNames[teamIndex]}"`,
+            alreadyMarked,
+          });
+          continue;
+        }
+
+        // Check assistant coaches
+        for (const assistant of assistants) {
+          if (assistant.trim().toLowerCase() === lastName) {
+            matches.push({
+              bib: player.bib,
+              playerName: `${player.firstName} ${player.lastName}`,
+              teamIndex,
+              teamName: teamNames[teamIndex],
+              reason: `Last name "${player.lastName}" matches assistant coach "${assistant}"`,
+              alreadyMarked,
+            });
+            break;
+          }
+        }
+      }
+    }
+
+    // Detect siblings by matching last names
+    const lastNameGroups = new Map<string, EvaluationPlayer[]>();
+    for (const player of players) {
+      const lastName = player.lastName.trim().toLowerCase();
+      if (!lastName) continue;
+      if (!lastNameGroups.has(lastName)) {
+        lastNameGroups.set(lastName, []);
+      }
+      lastNameGroups.get(lastName)!.push(player);
+    }
+
+    const processed = new Set<string>();
+    for (const [, playersWithName] of lastNameGroups) {
+      if (playersWithName.length < 2) continue;
+
+      // Create pairs for all siblings in this group
+      for (let i = 0; i < playersWithName.length; i++) {
+        for (let j = i + 1; j < playersWithName.length; j++) {
+          const p1 = playersWithName[i];
+          const p2 = playersWithName[j];
+          const pairKey = [p1.bib, p2.bib].sort().join('-');
+
+          if (processed.has(pairKey)) continue;
+          processed.add(pairKey);
+
+          // Check if already linked
+          const alreadyLinked = p1.siblingGroupId !== null &&
+            p1.siblingGroupId === p2.siblingGroupId;
+
+          siblings.push({
+            bib1: p1.bib,
+            bib2: p2.bib,
+            player1Name: `${p1.firstName} ${p1.lastName}`,
+            player2Name: `${p2.firstName} ${p2.lastName}`,
+            sharedLastName: p1.lastName,
+            alreadyLinked,
+          });
+        }
+      }
+    }
+
+    // Pre-select only new matches (not already marked/linked)
+    const selectedKids = new Set(matches.filter(m => !m.alreadyMarked).map(m => m.bib));
+    const selectedSibs = new Set(siblings.filter(s => !s.alreadyLinked).map(s => `${s.bib1}-${s.bib2}`));
+
+    setCoachKidMatches(matches);
+    setSiblingMatches(siblings);
+    setSelectedCoachKids(selectedKids);
+    setSelectedSiblings(selectedSibs);
+
+    if (matches.length > 0 || siblings.length > 0) {
+      setShowDetectionModal(true);
+    }
+  }, [state.players, teamNames, assistantCoaches]);
+
+  /**
+   * Toggle selection of a coach kid match
+   */
+  const toggleCoachKidSelection = useCallback((bib: string) => {
+    setSelectedCoachKids(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(bib)) {
+        newSet.delete(bib);
+      } else {
+        newSet.add(bib);
+      }
+      return newSet;
+    });
+  }, []);
+
+  /**
+   * Toggle selection of a sibling pair
+   */
+  const toggleSiblingSelection = useCallback((pairKey: string) => {
+    setSelectedSiblings(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(pairKey)) {
+        newSet.delete(pairKey);
+      } else {
+        newSet.add(pairKey);
+      }
+      return newSet;
+    });
+  }, []);
+
+  /**
+   * Apply selected detections from the modal
+   */
+  const applyDetections = useCallback(() => {
+    setState((prev) => {
+      // Build sibling group assignments
+      const siblingGroups = new Map<string, string>();
+      let groupIndex = 0;
+      const groupLabels = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+      // Group selected siblings
+      const siblingPairs: Array<[string, string]> = [];
+      for (const pairKey of selectedSiblings) {
+        const [bib1, bib2] = pairKey.split('-');
+        siblingPairs.push([bib1, bib2]);
+      }
+
+      // Assign group IDs using union-find-like logic
+      for (const [bib1, bib2] of siblingPairs) {
+        const existing1 = siblingGroups.get(bib1);
+        const existing2 = siblingGroups.get(bib2);
+
+        if (existing1 && existing2) {
+          // Merge groups - assign all of group2 to group1
+          const targetGroup = existing1;
+          for (const [bib, group] of siblingGroups.entries()) {
+            if (group === existing2) {
+              siblingGroups.set(bib, targetGroup);
+            }
+          }
+        } else if (existing1) {
+          siblingGroups.set(bib2, existing1);
+        } else if (existing2) {
+          siblingGroups.set(bib1, existing2);
+        } else {
+          const newGroup = groupLabels[groupIndex % 26];
+          siblingGroups.set(bib1, newGroup);
+          siblingGroups.set(bib2, newGroup);
+          groupIndex++;
+        }
+      }
+
+      // Build coach kid assignments
+      const coachKidAssignments = new Map<string, number>();
+      for (const match of coachKidMatches) {
+        if (selectedCoachKids.has(match.bib)) {
+          coachKidAssignments.set(match.bib, match.teamIndex);
+        }
+      }
+
+      // Update players
+      const updatedPlayers = prev.players.map((player) => {
+        const updates: Partial<EvaluationPlayer> = {};
+
+        // Apply coach kid assignment
+        if (coachKidAssignments.has(player.bib)) {
+          updates.isCoachKid = true;
+          updates.coachTeamIndex = coachKidAssignments.get(player.bib)!;
+        }
+
+        // Apply sibling group
+        if (siblingGroups.has(player.bib)) {
+          updates.siblingGroupId = siblingGroups.get(player.bib)!;
+        }
+
+        if (Object.keys(updates).length > 0) {
+          return { ...player, ...updates };
         }
         return player;
       });
@@ -306,52 +549,40 @@ export function useEvaluationImport(initialTeamCount: number = 8) {
         players: updatedPlayers,
       };
     });
-  }, [teamNames]);
+
+    // Close modal and clear state
+    setShowDetectionModal(false);
+    setCoachKidMatches([]);
+    setSiblingMatches([]);
+    setSelectedCoachKids(new Set());
+    setSelectedSiblings(new Set());
+  }, [coachKidMatches, selectedCoachKids, selectedSiblings]);
 
   /**
-   * Auto-detect siblings by matching last names
+   * Cancel detection modal
    */
-  const autoDetectSiblings = useCallback(() => {
-    setState((prev) => {
-      // Group players by last name
-      const lastNameGroups = new Map<string, EvaluationPlayer[]>();
+  const cancelDetection = useCallback(() => {
+    setShowDetectionModal(false);
+    setCoachKidMatches([]);
+    setSiblingMatches([]);
+    setSelectedCoachKids(new Set());
+    setSelectedSiblings(new Set());
+  }, []);
 
-      for (const player of prev.players) {
-        const lastName = player.lastName.trim().toLowerCase();
-        if (!lastName) continue;
+  /**
+   * Select all detections
+   */
+  const selectAllDetections = useCallback(() => {
+    setSelectedCoachKids(new Set(coachKidMatches.map(m => m.bib)));
+    setSelectedSiblings(new Set(siblingMatches.map(s => `${s.bib1}-${s.bib2}`)));
+  }, [coachKidMatches, siblingMatches]);
 
-        if (!lastNameGroups.has(lastName)) {
-          lastNameGroups.set(lastName, []);
-        }
-        lastNameGroups.get(lastName)!.push(player);
-      }
-
-      // Create sibling groups (A, B, C, etc.)
-      const siblingBibToGroup = new Map<string, string>();
-      let groupIndex = 0;
-      const groupLabels = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-
-      for (const [, players] of lastNameGroups) {
-        if (players.length >= 2) {
-          const groupId = groupLabels[groupIndex % 26];
-          for (const player of players) {
-            siblingBibToGroup.set(player.bib, groupId);
-          }
-          groupIndex++;
-        }
-      }
-
-      // Update players with sibling groups
-      const updatedPlayers = prev.players.map((player) => ({
-        ...player,
-        siblingGroupId: siblingBibToGroup.get(player.bib) || null,
-      }));
-
-      return {
-        ...prev,
-        players: updatedPlayers,
-      };
-    });
+  /**
+   * Deselect all detections
+   */
+  const deselectAllDetections = useCallback(() => {
+    setSelectedCoachKids(new Set());
+    setSelectedSiblings(new Set());
   }, []);
 
   /**
@@ -432,6 +663,14 @@ export function useEvaluationImport(initialTeamCount: number = 8) {
     totalWeight,
     teamCount,
     teamNames,
+    assistantCoaches,
+
+    // Detection modal state
+    showDetectionModal,
+    coachKidMatches,
+    siblingMatches,
+    selectedCoachKids,
+    selectedSiblings,
 
     // Actions
     reset,
@@ -443,10 +682,16 @@ export function useEvaluationImport(initialTeamCount: number = 8) {
     updatePlayerAdjustment,
     updateTeamCount,
     updateTeamName,
+    updateAssistantCoaches,
     toggleCoachKid,
     setCoachKidTeam,
-    autoDetectCoachKids,
-    autoDetectSiblings,
+    runAutoDetection,
+    toggleCoachKidSelection,
+    toggleSiblingSelection,
+    applyDetections,
+    cancelDetection,
+    selectAllDetections,
+    deselectAllDetections,
     toggleSiblingGroup,
     clearCoachKids,
     clearSiblings,

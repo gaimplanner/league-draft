@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { Search, X, AlertTriangle, ChevronDown, ChevronUp, RotateCcw, Users, UserCheck } from 'lucide-react';
+import { Search, X, AlertTriangle, ChevronDown, ChevronUp, RotateCcw, Wand2 } from 'lucide-react';
 import { EvaluationPlayer, FieldWeight, EvaluationCategory, getCategoryDisplayName } from '../../types/evaluation';
 import { getFieldScore } from '../../utils/evaluationProcessor';
 
@@ -9,16 +9,17 @@ interface PlayerSummaryTableProps {
   totalWeight: number;
   teamCount: number;
   teamNames: string[];
+  assistantCoaches: string[][];
   onAdjustChange: (bib: string, adjustment: number) => void;
   onWeightChange: (fieldId: string, weight: number) => void;
   onToggleField: (fieldId: string, enabled: boolean) => void;
   onResetWeights: () => void;
   onTeamCountChange: (count: number) => void;
   onTeamNameChange: (index: number, name: string) => void;
+  onAssistantCoachesChange: (index: number, coaches: string) => void;
   onToggleCoachKid: (bib: string, isCoachKid: boolean, teamIndex: number | null) => void;
   onSetCoachKidTeam: (bib: string, teamIndex: number | null) => void;
-  onAutoDetectCoachKids: () => void;
-  onAutoDetectSiblings: () => void;
+  onRunAutoDetection: () => void;
   onClearCoachKids: () => void;
   onClearSiblings: () => void;
 }
@@ -65,20 +66,21 @@ export function PlayerSummaryTable({
   totalWeight,
   teamCount,
   teamNames,
+  assistantCoaches,
   onAdjustChange,
   onWeightChange,
   onToggleField,
   onResetWeights,
   onTeamCountChange,
   onTeamNameChange,
+  onAssistantCoachesChange,
   // onToggleCoachKid and onSetCoachKidTeam are available via props but not used directly
   // Coach kid status is display-only in this table (use auto-detect or Teams panel)
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   onToggleCoachKid: _onToggleCoachKid,
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   onSetCoachKidTeam: _onSetCoachKidTeam,
-  onAutoDetectCoachKids,
-  onAutoDetectSiblings,
+  onRunAutoDetection,
   onClearCoachKids,
   onClearSiblings,
 }: PlayerSummaryTableProps) {
@@ -236,40 +238,55 @@ export function PlayerSummaryTable({
                 />
               </div>
 
-              {/* Team Names Grid */}
-              <div>
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
-                  Team Names (enter coach last names for auto-detection):
-                </label>
-                <div className="grid grid-cols-4 gap-2">
-                  {teamNames.map((name, index) => (
-                    <input
-                      key={index}
-                      type="text"
-                      value={name}
-                      onChange={(e) => onTeamNameChange(index, e.target.value)}
-                      placeholder={`Team ${index + 1}`}
-                      className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400"
-                    />
-                  ))}
-                </div>
+              {/* Team Names & Coaches Grid - matches PlayerReview layout */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {teamNames.map((name, index) => {
+                  const teamCoachKids = players.filter(p => p.coachTeamIndex === index);
+                  return (
+                    <div key={index} className="space-y-2">
+                      <div>
+                        <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
+                          Head Coach (Team Name)
+                        </label>
+                        <input
+                          type="text"
+                          value={name}
+                          onChange={(e) => onTeamNameChange(index, e.target.value)}
+                          placeholder={`Coach Name (e.g., Smith)`}
+                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
+                          Assistant Coaches (comma-separated)
+                        </label>
+                        <input
+                          type="text"
+                          value={(assistantCoaches[index] || []).join(', ')}
+                          onChange={(e) => onAssistantCoachesChange(index, e.target.value)}
+                          placeholder="Smith, Jones"
+                          className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400"
+                        />
+                      </div>
+                      {teamCoachKids.length > 0 && (
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          Coach's Kids: {teamCoachKids.map(p => `${p.firstName} ${p.lastName}`).join(', ')}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
 
-              {/* Detection Buttons */}
-              <div className="flex items-center gap-3 pt-2">
+              {/* Detection Button */}
+              <div className="flex items-center gap-3 pt-2 border-t border-gray-200 dark:border-gray-700">
                 <button
-                  onClick={onAutoDetectCoachKids}
-                  className="flex items-center gap-2 px-3 py-1.5 text-sm bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-900/50"
+                  onClick={onRunAutoDetection}
+                  className="flex items-center gap-2 px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg font-medium"
+                  title="Auto-detect coach's kids and siblings by matching last names"
                 >
-                  <UserCheck className="w-4 h-4" />
-                  Find Coach Kids
-                </button>
-                <button
-                  onClick={onAutoDetectSiblings}
-                  className="flex items-center gap-2 px-3 py-1.5 text-sm bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-lg hover:bg-green-200 dark:hover:bg-green-900/50"
-                >
-                  <Users className="w-4 h-4" />
-                  Find Siblings
+                  <Wand2 className="w-4 h-4" />
+                  Find Coach Kids & Siblings
                 </button>
                 {(coachKidCount > 0 || siblingCount > 0) && (
                   <>
