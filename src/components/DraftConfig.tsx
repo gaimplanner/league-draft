@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { ChevronRight, CheckCircle, AlertCircle } from 'lucide-react';
+import { ChevronRight, CheckCircle, AlertCircle, Users } from 'lucide-react';
 import { Team, Player, DraftFormat } from '../types';
 import { SimulationModal } from './SimulationModal';
 
@@ -73,16 +73,19 @@ export const DraftConfig = ({ teams, players, onConfigComplete }: DraftConfigPro
     for (const [, teamKids] of Object.entries(coachKidsByTeam)) {
       const assignedRounds = new Set<number>();
 
-      // Sort by projected round, then by score (descending) within each round
+      // Sort by effective round (lockedToRound or projectedRound), then by score (descending) within each round
       const sortedKids = [...teamKids].sort((a, b) => {
-        if (a.projectedRound !== b.projectedRound) {
-          return a.projectedRound - b.projectedRound;
+        const aRound = a.lockedToRound ?? a.projectedRound;
+        const bRound = b.lockedToRound ?? b.projectedRound;
+        if (aRound !== bRound) {
+          return aRound - bRound;
         }
         return b.totalScore - a.totalScore;
       });
 
       for (const kid of sortedKids) {
-        let targetRound = kid.projectedRound;
+        // Use existing lockedToRound if set, otherwise projectedRound
+        let targetRound = kid.lockedToRound ?? kid.projectedRound;
         // Find next available round
         while (assignedRounds.has(targetRound)) {
           targetRound++;
@@ -131,6 +134,25 @@ export const DraftConfig = ({ teams, players, onConfigComplete }: DraftConfigPro
   }, [teams]);
 
   const coachKids = resolvedPlayers.filter((p) => p.isCoachKid);
+
+  // Find sibling groups (pairs of players linked as siblings)
+  const siblingGroups = useMemo(() => {
+    const groups: Array<{ player1: Player; player2: Player }> = [];
+    const processed = new Set<string>();
+
+    resolvedPlayers.forEach(player => {
+      if (player.siblingId && !processed.has(player.id)) {
+        const sibling = resolvedPlayers.find(p => p.id === player.siblingId);
+        if (sibling) {
+          groups.push({ player1: player, player2: sibling });
+          processed.add(player.id);
+          processed.add(sibling.id);
+        }
+      }
+    });
+
+    return groups;
+  }, [resolvedPlayers]);
 
   // Convert positions to array for validation
   const positionsArray = useMemo(() => {
@@ -317,6 +339,30 @@ export const DraftConfig = ({ teams, players, onConfigComplete }: DraftConfigPro
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Sibling Groups Summary */}
+        {siblingGroups.length > 0 && (
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700 mb-6">
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
+              Sibling Groups
+            </h2>
+            <div className="flex items-start gap-3 p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800">
+              <Users className="w-5 h-5 text-purple-600 dark:text-purple-400 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <div className="font-medium text-purple-800 dark:text-purple-200 mb-2">
+                  {siblingGroups.length} sibling group{siblingGroups.length !== 1 ? 's' : ''} linked
+                </div>
+                <div className="space-y-1">
+                  {siblingGroups.map(({ player1, player2 }) => (
+                    <div key={`${player1.id}-${player2.id}`} className="text-sm text-purple-700 dark:text-purple-300">
+                      • {player1.name} ↔ {player2.name}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
         )}
 

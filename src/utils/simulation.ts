@@ -1,5 +1,6 @@
 import { Player, Team, DraftFormat } from '../types';
 import { calculateDraftOrder } from './draftOrder';
+import { getMandatoryPick, lockSiblingToTeam, getBestAvailable } from './draftLogic';
 
 export interface SimulationOptions {
   includeCoachKids: boolean;
@@ -14,45 +15,8 @@ export interface SimulationResult {
 }
 
 /**
- * Get mandatory coach's kid for a team in a given round
- */
-function getMandatoryCoachKid(
-  players: Player[],
-  teamId: string,
-  round: number
-): Player | null {
-  return players.find(
-    (p) =>
-      !p.isDrafted &&
-      p.isCoachKid &&
-      p.coachTeamId === teamId &&
-      (p.lockedToRound ?? p.projectedRound) === round
-  ) || null;
-}
-
-/**
- * Get mandatory sibling for a team in a given round
- */
-function getMandatorySibling(
-  players: Player[],
-  teamId: string,
-  round: number
-): Player | null {
-  return players.find((p) => {
-    if (p.isDrafted || !p.siblingId) return false;
-
-    // If locked to this team, must draft in their locked/projected round
-    if (p.lockedToTeamId === teamId) {
-      const requiredRound = p.lockedToRound ?? p.projectedRound;
-      return requiredRound === round;
-    }
-
-    return false;
-  }) || null;
-}
-
-/**
- * Run a draft simulation without affecting real data
+ * Run a draft simulation without affecting real data.
+ * Uses the SAME logic as the real draft (getMandatoryPick, calculateDraftOrder).
  */
 export function runSimulation(
   players: Player[],
@@ -61,9 +25,29 @@ export function runSimulation(
   draftFormat: DraftFormat,
   options: SimulationOptions
 ): SimulationResult {
+  console.log('=== SIMULATION START ===');
+  console.log('Options:', options);
+  console.log('Draft format:', draftFormat);
+  console.log('Initial draft order:', draftOrder.map(id => teams.find(t => t.id === id)?.name));
+
   // Deep clone to avoid mutating real state
   const simPlayers: Player[] = JSON.parse(JSON.stringify(players));
   const simTeams: Team[] = JSON.parse(JSON.stringify(teams));
+
+  // Debug: verify coach kids data
+  console.log('=== Coach Kids Verification ===');
+  simPlayers.filter(p => p.isCoachKid).forEach(p => {
+    const team = simTeams.find(t => t.id === p.coachTeamId);
+    const effectiveRound = p.lockedToRound ?? p.projectedRound;
+    console.log(`${p.firstName} ${p.lastName}: coachTeamId=${p.coachTeamId}, teamName=${team?.name ?? 'NOT FOUND'}, effectiveRound=${effectiveRound}`);
+  });
+
+  // Debug: verify sibling data
+  console.log('=== Sibling Verification ===');
+  simPlayers.filter(p => p.siblingId).forEach(p => {
+    const sibling = simPlayers.find(s => s.id === p.siblingId);
+    console.log(`${p.firstName} ${p.lastName}: siblingId=${p.siblingId}, siblingName=${sibling?.firstName} ${sibling?.lastName}, lockedToTeamId=${p.lockedToTeamId}`);
+  });
 
   // Reset all draft state on cloned data
   simPlayers.forEach(p => {
@@ -71,6 +55,7 @@ export function runSimulation(
     p.draftedByTeamId = undefined;
     p.draftedInRound = undefined;
     p.draftedAtPick = undefined;
+    // Note: Don't reset lockedToTeamId - it may have been set for siblings of coach's kids
   });
 
   simTeams.forEach(t => {
@@ -83,8 +68,11 @@ export function runSimulation(
   let overallPick = 0;
 
   for (let round = 1; round <= totalRounds; round++) {
-    // Calculate draft order for this round
+    // USE THE SAME calculateDraftOrder function as real draft
     const roundOrder = calculateDraftOrder(simTeams, round, draftFormat, draftOrder);
+
+    console.log(`\n=== ROUND ${round} ===`);
+    console.log('Draft order:', roundOrder.map(id => simTeams.find(t => t.id === id)?.name));
 
     for (const teamId of roundOrder) {
       const team = simTeams.find(t => t.id === teamId);
@@ -95,21 +83,21 @@ export function runSimulation(
       if (availablePlayers.length === 0) break;
 
       let playerToDraft: Player | null = null;
+      let pickReason = 'best-available';
 
-      // Check for mandatory coach's kid
-      if (options.includeCoachKids) {
-        playerToDraft = getMandatoryCoachKid(simPlayers, teamId, round);
-      }
+      // USE THE SAME getMandatoryPick function as real draft
+      const mandatoryResult = getMandatoryPick(simPlayers, teamId, round, options);
 
-      // Check for mandatory sibling
-      if (!playerToDraft && options.includeSiblings) {
-        playerToDraft = getMandatorySibling(simPlayers, teamId, round);
-      }
-
-      // Otherwise, pick best available
-      if (!playerToDraft) {
-        playerToDraft = availablePlayers
-          .sort((a, b) => b.totalScore - a.totalScore)[0] || null;
+      if (mandatoryResult) {
+        playerToDraft = mandatoryResult.player;
+        pickReason = mandatoryResult.reason;
+        console.log(`Team ${team.name}: MANDATORY ${pickReason} - ${playerToDraft.firstName} ${playerToDraft.lastName}`);
+      } else {
+        // USE THE SAME getBestAvailable function - pass teamId to filter out restricted players
+        playerToDraft = getBestAvailable(simPlayers, teamId);
+        if (playerToDraft) {
+          console.log(`Team ${team.name}: Best available - ${playerToDraft.firstName} ${playerToDraft.lastName} (score: ${playerToDraft.totalScore})`);
+        }
       }
 
       if (playerToDraft) {
@@ -129,16 +117,22 @@ export function runSimulation(
         const age = playerToDraft.littleLeagueAge;
         team.ageBreakdown[age] = (team.ageBreakdown[age] || 0) + 1;
 
-        // If this player has a sibling, lock them to this team
-        if (options.includeSiblings && playerToDraft.siblingId) {
-          const sibling = simPlayers.find(p => p.id === playerToDraft!.siblingId);
-          if (sibling && !sibling.isDrafted) {
-            sibling.lockedToTeamId = team.id;
-          }
+        // Lock siblings to this team (same as real draft)
+        if (options.includeSiblings) {
+          lockSiblingToTeam(simPlayers, playerToDraft, team.id);
         }
       }
     }
   }
+
+  console.log('\n=== SIMULATION COMPLETE ===');
+  simTeams.forEach(team => {
+    console.log(`${team.name}: ${team.totalScore.toFixed(1)} pts`);
+    team.roster.forEach(p => {
+      const tag = p.isCoachKid ? ' [COACH KID]' : p.siblingId ? ' [SIBLING]' : '';
+      console.log(`  R${p.draftedInRound}: ${p.firstName} ${p.lastName}${tag}`);
+    });
+  });
 
   return {
     teams: simTeams,

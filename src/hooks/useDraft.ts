@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { Player, Team, DraftState, DraftFormat, DraftPick, AppPhase, Division, Trade } from '../types';
 import { getNextPick, calculateDraftOrder } from '../utils/draftOrder';
+import { getMandatoryPick } from '../utils/draftLogic';
 
 const STORAGE_KEY_PREFIX = 'little-league-draft-';
 
@@ -185,85 +186,28 @@ export const useDraft = (divisionId?: string) => {
       const team = teams.find((t) => t.id === teamId);
       if (!team) return;
 
-      // TRACE 9: Log mandatory pick check
-      console.log(`=== TRACE 9: checkMandatoryPicks for team ${team.name || teamId} round ${round} ===`);
-      const coachKidsForTeam = players.filter(p =>
-        p.isCoachKid && p.coachTeamId === teamId && !p.isDrafted
-      );
-      console.log('Undrafted coach kids for this team:', coachKidsForTeam.map(p => ({
-        name: `${p.firstName} ${p.lastName}`,
-        projected: p.projectedRound,
-        locked: p.lockedToRound,
-        effectiveRound: p.lockedToRound ?? p.projectedRound
-      })));
+      // Use shared getMandatoryPick function (single source of truth)
+      console.log(`=== checkMandatoryPicks for team ${team.name || teamId} round ${round} ===`);
 
-      // Check for coach's kids that must be drafted this round
-      // Use lockedToRound if set (for same-round conflicts), otherwise use projectedRound
-      const coachKidToDraft = players.find(
-        (p) =>
-          !p.isDrafted &&
-          p.isCoachKid &&
-          p.coachTeamId === teamId &&
-          (p.lockedToRound ?? p.projectedRound) === round
-      );
+      const result = getMandatoryPick(players, teamId, round);
 
-      console.log('Coach kid match found:', coachKidToDraft ? `${coachKidToDraft.firstName} ${coachKidToDraft.lastName}` : 'NONE');
-
-      if (coachKidToDraft) {
+      if (result) {
+        console.log(`Mandatory ${result.reason}: ${result.player.firstName} ${result.player.lastName}`);
         setDraftState((prev) => ({
           ...prev,
           mandatoryPick: {
-            playerId: coachKidToDraft.id,
-            reason: 'coach-kid',
+            playerId: result.player.id,
+            reason: result.reason,
+            siblingName: result.siblingName,
           },
         }));
-        return;
-      }
-
-      // Check for sibling requirements
-      // A sibling must be drafted when:
-      // 1. They are locked to this team (lockedToTeamId === teamId), OR
-      // 2. Their sibling was drafted by this team and it's their projected round
-      const siblingToDraft = players.find((p) => {
-        if (p.isDrafted || !p.siblingId) return false;
-
-        // If locked to this team, must draft in their lockedToRound or projectedRound
-        if (p.lockedToTeamId === teamId) {
-          const requiredRound = p.lockedToRound ?? p.projectedRound;
-          return requiredRound === round;
-        }
-
-        // Legacy check: sibling by name match in effective round
-        if (p.sibling && (p.lockedToRound ?? p.projectedRound) === round) {
-          const sibling = players.find(
-            (other) =>
-              other.name.toLowerCase() === p.sibling!.toLowerCase() &&
-              other.draftedByTeamId === teamId
-          );
-          return !!sibling;
-        }
-
-        return false;
-      });
-
-      if (siblingToDraft) {
-        const siblingPlayer = players.find(p => p.id === siblingToDraft.siblingId);
+      } else {
+        console.log('No mandatory pick');
         setDraftState((prev) => ({
           ...prev,
-          mandatoryPick: {
-            playerId: siblingToDraft.id,
-            reason: 'sibling',
-            siblingName: siblingPlayer?.name || siblingToDraft.sibling,
-          },
+          mandatoryPick: undefined,
         }));
-        return;
       }
-
-      // No mandatory pick
-      setDraftState((prev) => ({
-        ...prev,
-        mandatoryPick: undefined,
-      }));
     },
     []
   );

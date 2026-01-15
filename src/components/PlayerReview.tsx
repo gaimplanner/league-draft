@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ChevronRight, ChevronDown, Edit2, Users, Link, X, Wand2, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { ChevronRight, ChevronDown, Edit2, Users, Link, X, Search, Wand2, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { Player, Team, ScoringMode } from '../types';
 import { autoDetectCoachKids, autoDetectSiblings, CoachKidMatch, SiblingMatch } from '../utils/coachKidDetection';
 import { useScoringWeights } from '../hooks/useScoringWeights';
@@ -626,10 +626,10 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
             <button
               onClick={handleAutoDetect}
               className="px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg font-medium flex items-center gap-2"
-              title="Auto-detect coach's kids by matching last names with team names"
+              title="Auto-detect coach's kids and siblings by matching last names"
             >
-              <Wand2 className="w-5 h-5" />
-              <span className="hidden sm:inline">Auto-Detect Coaches</span>
+              <Search className="w-5 h-5" />
+              <span className="hidden sm:inline">Find Coaches' Kids and Siblings</span>
             </button>
 
             <button
