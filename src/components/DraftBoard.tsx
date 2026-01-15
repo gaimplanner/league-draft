@@ -180,57 +180,57 @@ export const DraftBoard = ({
       <div className="max-w-7xl mx-auto">
         {/* Prominent Draft Header - ESPN Style */}
         <div className="bg-gradient-to-r from-blue-600 to-blue-500 rounded-lg p-6 sm:p-8 mb-4 text-white shadow-lg">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <div className="flex-1">
-              {currentTeam && (
-                <>
-                  <div className="text-sm uppercase tracking-wide opacity-90 mb-1">
-                    Round {draftState.currentRound}, Pick {currentPickNumber} of {totalPicks}
+          {/* Header with centered content and absolute-positioned buttons */}
+          <div className="relative">
+            {/* Centered content - full width */}
+            {currentTeam && (
+              <div className="text-center">
+                <div className="text-sm uppercase tracking-wide opacity-90 mb-1">
+                  Round {draftState.currentRound}, Pick {currentPickNumber} of {totalPicks}
+                </div>
+                <h1 className="text-3xl sm:text-4xl font-bold mb-2">
+                  Now Drafting: {getTeamDisplayName(currentTeam)}
+                </h1>
+                {nextTeam && (
+                  <div className="text-lg opacity-80">
+                    Up Next: {getTeamDisplayName(nextTeam)}
                   </div>
-                  <h1 className="text-3xl sm:text-4xl font-bold mb-2">
-                    Now Drafting: {getTeamDisplayName(currentTeam)}
-                  </h1>
-                  {nextTeam && (
-                    <div className="text-lg opacity-80">
-                      Up Next: {getTeamDisplayName(nextTeam)}
-                    </div>
-                  )}
-                  {/* Age Breakdown - only show if age limit is enforced */}
-                  {enforceAgeLimit && maxPerAge > 0 && (
-                    <div className="mt-2 text-sm flex items-center gap-2 flex-wrap">
-                      <span className="opacity-80">Ages:</span>
-                      {Object.entries(currentTeam.ageBreakdown || {})
-                        .sort(([a], [b]) => Number(a) - Number(b))
-                        .map(([age, count]) => {
-                          const isWarning = count === maxPerAge - 1;
-                          const isMaxed = count >= maxPerAge;
-                          return (
-                            <span
-                              key={age}
-                              className={`px-2 py-0.5 rounded text-sm font-medium ${
-                                isMaxed
-                                  ? 'bg-red-500/80 text-white'
-                                  : isWarning
-                                  ? 'bg-yellow-400/80 text-yellow-900'
-                                  : 'bg-white/20'
-                              }`}
-                            >
-                              {age}({count}){isMaxed ? '🚫' : isWarning ? '⚠️' : ''}
-                            </span>
-                          );
-                        })}
-                      {Object.keys(currentTeam.ageBreakdown || {}).length === 0 && (
-                        <span className="opacity-60">None yet</span>
-                      )}
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
+                )}
+                {/* Age Breakdown - only show if age limit is enforced */}
+                {enforceAgeLimit && maxPerAge > 0 && (
+                  <div className="mt-2 text-sm flex items-center justify-center gap-2 flex-wrap">
+                    <span className="opacity-80">Ages:</span>
+                    {Object.entries(currentTeam.ageBreakdown || {})
+                      .sort(([a], [b]) => Number(a) - Number(b))
+                      .map(([age, count]) => {
+                        const isWarning = count === maxPerAge - 1;
+                        const isMaxed = count >= maxPerAge;
+                        return (
+                          <span
+                            key={age}
+                            className={`px-2 py-0.5 rounded text-sm font-medium ${
+                              isMaxed
+                                ? 'bg-red-500/80 text-white'
+                                : isWarning
+                                ? 'bg-yellow-400/80 text-yellow-900'
+                                : 'bg-white/20'
+                            }`}
+                          >
+                            {age}({count}){isMaxed ? '🚫' : isWarning ? '⚠️' : ''}
+                          </span>
+                        );
+                      })}
+                    {Object.keys(currentTeam.ageBreakdown || {}).length === 0 && (
+                      <span className="opacity-60">None yet</span>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
-            {/* Admin controls - hidden in public view */}
+            {/* Admin controls - absolute positioned top-right */}
             {!isPublicView && (
-              <div className="flex gap-2">
+              <div className="absolute top-0 right-0 flex gap-2">
                 {/* Skip Pick - only available in final round */}
                 {isFinalRound && (
                   <button
@@ -261,9 +261,9 @@ export const DraftBoard = ({
                 </button>
               </div>
             )}
-            {/* Public view indicator */}
+            {/* Public view indicator - absolute positioned */}
             {isPublicView && (
-              <div className="px-3 py-2 bg-white/20 text-white rounded-lg font-medium backdrop-blur-sm">
+              <div className="absolute top-0 right-0 px-3 py-2 bg-white/20 text-white rounded-lg font-medium backdrop-blur-sm">
                 Live View
               </div>
             )}
@@ -273,37 +273,37 @@ export const DraftBoard = ({
           {draftState.mandatoryPick && !isPublicView && (() => {
             const mandatoryPlayer = draftState.players.find((p) => p.id === draftState.mandatoryPick?.playerId);
             return (
-              <div className="mt-4 p-4 bg-yellow-50 dark:bg-yellow-900/30 border-2 border-yellow-400 dark:border-yellow-600 rounded-lg">
-                <div className="flex items-start gap-3">
-                  <AlertCircle className="w-6 h-6 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
-                  <div className="flex-1">
-                    <div className="font-bold text-lg text-yellow-800 dark:text-yellow-200">
+              <div className="mt-4 flex justify-center">
+                <div className="bg-yellow-50 dark:bg-yellow-900/30 border-2 border-yellow-400 dark:border-yellow-600 rounded-lg p-4 inline-block text-center">
+                  <div className="flex items-center justify-center gap-2 mb-2">
+                    <AlertCircle className="w-6 h-6 text-yellow-600 dark:text-yellow-400 flex-shrink-0" />
+                    <span className="font-bold text-lg text-yellow-800 dark:text-yellow-200">
                       Mandatory Pick Required
-                    </div>
-                    <div className="text-sm text-yellow-700 dark:text-yellow-300 mt-1 mb-3">
-                      {draftState.mandatoryPick.reason === 'coach-kid' ? (
-                        <>
-                          <strong>{mandatoryPlayer?.name}</strong> is a coach's kid and must be drafted in Round {draftState.currentRound}.
-                        </>
-                      ) : (
-                        <>
-                          <strong>{mandatoryPlayer?.name}</strong> must be drafted with their sibling ({draftState.mandatoryPick.siblingName}).
-                        </>
-                      )}
-                    </div>
-                    <button
-                      onClick={() => {
-                        if (mandatoryPlayer) {
-                          // Directly draft the mandatory player
-                          onDraftPlayer(mandatoryPlayer.id);
-                        }
-                      }}
-                      className="w-full sm:w-auto px-4 py-3 bg-green-600 hover:bg-green-700 text-white font-bold text-lg rounded-lg flex items-center justify-center gap-2 shadow-lg"
-                    >
-                      Draft {mandatoryPlayer?.name}
-                      <ChevronRight className="w-5 h-5" />
-                    </button>
+                    </span>
                   </div>
+                  <div className="text-sm text-yellow-700 dark:text-yellow-300 mb-3">
+                    {draftState.mandatoryPick.reason === 'coach-kid' ? (
+                      <>
+                        <strong>{mandatoryPlayer?.name}</strong> is a coach's kid and must be drafted in Round {draftState.currentRound}.
+                      </>
+                    ) : (
+                      <>
+                        <strong>{mandatoryPlayer?.name}</strong> must be drafted with their sibling ({draftState.mandatoryPick.siblingName}).
+                      </>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (mandatoryPlayer) {
+                        // Directly draft the mandatory player
+                        onDraftPlayer(mandatoryPlayer.id);
+                      }
+                    }}
+                    className="px-4 py-3 bg-green-600 hover:bg-green-700 text-white font-bold text-lg rounded-lg inline-flex items-center justify-center gap-2 shadow-lg"
+                  >
+                    Draft {mandatoryPlayer?.name}
+                    <ChevronRight className="w-5 h-5" />
+                  </button>
                 </div>
               </div>
             );
@@ -324,11 +324,12 @@ export const DraftBoard = ({
             if (ages.length === 0) return null;
 
             return (
-              <div className="mt-4 p-4 bg-white/10 rounded-lg">
-                <div className="text-sm font-semibold text-white/80 mb-3">
-                  📊 BEST AVAILABLE BY AGE
-                </div>
-                <div className="flex gap-3 flex-wrap">
+              <div className="mt-4 flex justify-center">
+                <div className="bg-white/10 rounded-lg p-4 inline-block">
+                  <div className="text-sm font-semibold text-white/80 mb-3 text-center">
+                    📊 BEST AVAILABLE BY AGE
+                  </div>
+                  <div className="inline-flex gap-3 flex-wrap justify-center">
                   {ages.map(age => {
                     const player = bestByAge[age];
                     // Check if this player is restricted for the current team
@@ -363,6 +364,7 @@ export const DraftBoard = ({
                       </div>
                     );
                   })}
+                  </div>
                 </div>
               </div>
             );
