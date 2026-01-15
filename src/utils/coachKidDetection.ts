@@ -6,6 +6,7 @@ export interface CoachKidMatch {
   playerName: string;
   teamName: string;
   reason: string;
+  alreadyMarked: boolean; // true if already marked as coach's kid for this team
 }
 
 export interface SiblingMatch {
@@ -15,6 +16,7 @@ export interface SiblingMatch {
   player2Name: string;
   sharedLastName: string;
   reason: string;
+  alreadyLinked: boolean; // true if these siblings are already linked
 }
 
 /**
@@ -37,11 +39,11 @@ export function autoDetectCoachKids(
     for (const player of players) {
       const lastName = player.lastName.trim().toLowerCase();
 
-      // Skip if already marked as coach's kid
-      if (player.isCoachKid && player.coachTeamId) continue;
-
       // Skip empty last names
       if (!lastName) continue;
+
+      // Check if already marked as coach's kid for THIS team
+      const alreadyMarkedForThisTeam = player.isCoachKid && player.coachTeamId === team.id;
 
       // Check if matches head coach (team name) - EXACT match only
       if (teamName === lastName) {
@@ -51,6 +53,7 @@ export function autoDetectCoachKids(
           playerName: player.name,
           teamName: team.name,
           reason: `Last name "${player.lastName}" matches team "${team.name}"`,
+          alreadyMarked: alreadyMarkedForThisTeam,
         });
         continue; // Don't check assistant coaches if already matched head coach
       }
@@ -69,6 +72,7 @@ export function autoDetectCoachKids(
               playerName: player.name,
               teamName: team.name,
               reason: `Last name "${player.lastName}" matches assistant coach "${assistantCoach}" on team "${team.name}"`,
+              alreadyMarked: alreadyMarkedForThisTeam,
             });
             break; // Found a match, no need to check other assistant coaches
           }
@@ -96,7 +100,7 @@ export function isLastNameMatch(playerLastName: string, teamName: string): boole
 
 /**
  * Auto-detect potential siblings by matching last names
- * Returns pairs of players who share the same last name and aren't already linked
+ * Returns pairs of players who share the same last name (including already linked)
  */
 export function autoDetectSiblings(players: Player[]): SiblingMatch[] {
   const matches: SiblingMatch[] = [];
@@ -108,8 +112,8 @@ export function autoDetectSiblings(players: Player[]): SiblingMatch[] {
   for (const player of players) {
     const lastName = player.lastName.trim().toLowerCase();
 
-    // Skip empty last names or already linked siblings
-    if (!lastName || player.siblingId) continue;
+    // Skip empty last names only (include already-linked siblings)
+    if (!lastName) continue;
 
     if (!lastNameGroups.has(lastName)) {
       lastNameGroups.set(lastName, []);
@@ -132,6 +136,9 @@ export function autoDetectSiblings(players: Player[]): SiblingMatch[] {
         if (processed.has(pairKey)) continue;
         processed.add(pairKey);
 
+        // Check if already linked to each other
+        const alreadyLinked = player1.siblingId === player2.id || player2.siblingId === player1.id;
+
         matches.push({
           player1Id: player1.id,
           player2Id: player2.id,
@@ -139,6 +146,7 @@ export function autoDetectSiblings(players: Player[]): SiblingMatch[] {
           player2Name: player2.name,
           sharedLastName: player1.lastName,
           reason: `Both players share last name "${player1.lastName}"`,
+          alreadyLinked,
         });
       }
     }

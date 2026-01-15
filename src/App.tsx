@@ -232,33 +232,13 @@ function App() {
         }
       });
 
-      // Auto-detect coach's kids by lastName matching (for teamColumn format)
-      teamCoachInfo.forEach((coachInfo, teamId) => {
-        const team = updatedTeams.find(t => t.id === teamId);
-        if (!team) return;
+      // NOTE: We do NOT auto-mark coach's kids here during import.
+      // The user should use "Find Coaches' Kids and Siblings" button to review
+      // and confirm matches before they are applied.
 
-        updatedPlayers.forEach((player, idx) => {
-          const playerLastName = player.lastName.toLowerCase();
-          const isManagerKid = playerLastName === coachInfo.managerName.toLowerCase();
-          const isAssistantKid = coachInfo.assistantName && playerLastName === coachInfo.assistantName.toLowerCase();
-
-          if (isManagerKid || isAssistantKid) {
-            updatedPlayers[idx] = {
-              ...player,
-              isCoachKid: true,
-              coachTeamId: team.id,
-            };
-            if (!team.coachKids.includes(player.id)) {
-              team.coachKids.push(player.id);
-            }
-          }
-        });
-      });
-
-      console.log('Coach assignments processed from CSV:', coachAssignments.length);
-      console.log('Teams with coaches:', updatedTeams.filter(t => t.coachKids.length > 0).map(t => ({
+      console.log('Teams created from CSV:', coachAssignments.length);
+      console.log('Teams with names:', updatedTeams.filter(t => t.name).map(t => ({
         name: t.name,
-        coachKids: t.coachKids.length,
         assistants: t.assistantCoaches
       })));
     }

@@ -99,8 +99,8 @@ export const ColumnMapper = ({ csvData, onMappingComplete }: ColumnMapperProps) 
         autoMapping[header] = 'isCoachKid';
       } else if (lowerHeader.includes('sibling')) {
         autoMapping[header] = 'sibling';
-      } else if (lowerHeader === 'team') {
-        // Exact match for "Team" column - new format
+      } else if (lowerHeader === 'team' || lowerHeader === 'teams') {
+        // Match both "Team" and "Teams" column names
         autoMapping[header] = 'teamColumn';
       } else if (lowerHeader.includes('manager') && lowerHeader.includes('team')) {
         autoMapping[header] = 'managerTeam';
