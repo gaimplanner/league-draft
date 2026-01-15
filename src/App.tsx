@@ -7,6 +7,7 @@ import { DivisionSelector } from './components/DivisionSelector';
 import { DivisionCreator } from './components/DivisionCreator';
 import { FileUpload } from './components/FileUpload';
 import { ColumnMapper } from './components/ColumnMapper';
+import { ImportTypeSelector, EvaluationImport } from './components/evaluation';
 import { PlayerReview } from './components/PlayerReview';
 import { DraftConfig } from './components/DraftConfig';
 import { DraftBoard } from './components/DraftBoard';
@@ -31,6 +32,7 @@ function App() {
 
   const [mode, setMode] = useState<AppMode>('selector');
   const [csvData, setCSVData] = useState<ParsedCSVData | null>(null);
+  const [importMode, setImportMode] = useState<'csv' | 'excel' | null>(null);
 
   const {
     summaries,
@@ -258,6 +260,23 @@ function App() {
     setPhase('review');
   };
 
+  // Handle Excel evaluation import completion
+  const handleEvaluationComplete = (importedPlayers: Player[]) => {
+    if (!activeDivision) return;
+
+    setAllPlayers(importedPlayers);
+    setPlayers(importedPlayers);
+
+    // Update division with imported players
+    updateActiveDivision({
+      players: importedPlayers,
+      rosterSize: Math.ceil(importedPlayers.length / activeDivision.teamCount),
+    });
+
+    setImportMode(null);
+    setPhase('review');
+  };
+
   // Handle scoring mode change
   const handleScoringModeChange = (mode: ScoringMode) => {
     if (!activeDivision) return;
@@ -346,6 +365,7 @@ function App() {
     clearActiveDivision();
     setMode('selector');
     setCSVData(null);
+    setImportMode(null);
   };
 
   // Handle reset - this resets within current division
@@ -446,16 +466,37 @@ function App() {
             {/* Back button - separate bar above content */}
             <div className="bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-2">
               <button
-                onClick={handleBackToSelector}
+                onClick={importMode ? () => setImportMode(null) : handleBackToSelector}
                 className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors text-sm flex items-center gap-1"
               >
-                ← Back to Divisions
+                ← {importMode ? 'Back to Import Selection' : 'Back to Divisions'}
               </button>
             </div>
-            <FileUpload
-              onCSVParsed={handleCSVParsed}
-              onNext={() => setPhase('mapping')}
-            />
+
+            {/* Import Type Selection */}
+            {!importMode && (
+              <ImportTypeSelector
+                onSelectCSV={() => setImportMode('csv')}
+                onSelectExcel={() => setImportMode('excel')}
+              />
+            )}
+
+            {/* CSV Import Flow */}
+            {importMode === 'csv' && (
+              <FileUpload
+                onCSVParsed={handleCSVParsed}
+                onNext={() => setPhase('mapping')}
+              />
+            )}
+
+            {/* Excel Evaluation Import Flow */}
+            {importMode === 'excel' && (
+              <EvaluationImport
+                teamCount={activeDivision?.teamCount ?? 8}
+                onComplete={handleEvaluationComplete}
+                onCancel={() => setImportMode(null)}
+              />
+            )}
           </div>
         )}
 
