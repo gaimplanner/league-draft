@@ -215,24 +215,27 @@ function createEmptyPlayer(bib: string): EvaluationPlayer {
 }
 
 /**
+ * Field mapping from fieldId to normalized score location
+ */
+export const FIELD_MAPPING: Record<string, { category: EvaluationCategory; field: string }> = {
+  'pitchingForm': { category: 'pitching', field: 'form' },
+  'armStrength': { category: 'pitching', field: 'armStrength' },
+  'hittingForm': { category: 'hitting', field: 'form' },
+  'contactPower': { category: 'hitting', field: 'contactPower' },
+  'hits': { category: 'hitting', field: 'hits' },
+  'field': { category: 'fielding', field: 'field' },
+  'throw': { category: 'fielding', field: 'throw' },
+  'catches': { category: 'flyBalls', field: 'catches' },
+  'flyBallForm': { category: 'flyBalls', field: 'form' },
+  'bestTime': { category: 'baserunning', field: 'bestTime' },
+  'baserunningForm': { category: 'baserunning', field: 'form' },
+};
+
+/**
  * Map fieldId to the actual score location in normalizedScores
  */
-function getFieldScore(player: EvaluationPlayer, fieldId: string): number | null {
-  const fieldMapping: Record<string, { category: EvaluationCategory; field: string }> = {
-    'pitchingForm': { category: 'pitching', field: 'form' },
-    'armStrength': { category: 'pitching', field: 'armStrength' },
-    'hittingForm': { category: 'hitting', field: 'form' },
-    'contactPower': { category: 'hitting', field: 'contactPower' },
-    'hits': { category: 'hitting', field: 'hits' },
-    'field': { category: 'fielding', field: 'field' },
-    'throw': { category: 'fielding', field: 'throw' },
-    'catches': { category: 'flyBalls', field: 'catches' },
-    'flyBallForm': { category: 'flyBalls', field: 'form' },
-    'bestTime': { category: 'baserunning', field: 'bestTime' },
-    'baserunningForm': { category: 'baserunning', field: 'form' },
-  };
-
-  const mapping = fieldMapping[fieldId];
+export function getFieldScore(player: EvaluationPlayer, fieldId: string): number | null {
+  const mapping = FIELD_MAPPING[fieldId];
   if (!mapping) return null;
 
   return player.normalizedScores[mapping.category]?.[mapping.field] ?? null;
@@ -396,7 +399,7 @@ export function convertToPlayers(
 }
 
 /**
- * Generate summary CSV from processed players
+ * Generate summary CSV from processed players with all field scores
  */
 export function generateEvaluationCSV(players: EvaluationPlayer[]): string {
   const headers = [
@@ -405,11 +408,23 @@ export function generateEvaluationCSV(players: EvaluationPlayer[]): string {
     'First Name',
     'Last Name',
     'Age',
-    'Fielding',
-    'Pitching',
-    'Hitting',
-    'Fly Balls',
-    'Baserunning',
+    // Pitching fields
+    'P.Form',
+    'P.Arm',
+    // Hitting fields
+    'H.Form',
+    'H.Power',
+    'H.Hits',
+    // Fielding fields
+    'Field',
+    'Throw',
+    // Fly Balls fields
+    'F.Catches',
+    'F.Form',
+    // Baserunning fields
+    'R.Time',
+    'R.Form',
+    // Totals
     'Adjust',
     'Total',
   ];
@@ -420,11 +435,23 @@ export function generateEvaluationCSV(players: EvaluationPlayer[]): string {
     p.firstName,
     p.lastName,
     p.age?.toString() || '',
-    p.categoryScores.fielding?.toFixed(1) || '',
-    p.categoryScores.pitching?.toFixed(1) || '',
-    p.categoryScores.hitting?.toFixed(1) || '',
-    p.categoryScores.flyBalls?.toFixed(1) || '',
-    p.categoryScores.baserunning?.toFixed(1) || '',
+    // Pitching
+    getFieldScore(p, 'pitchingForm')?.toFixed(0) || '',
+    getFieldScore(p, 'armStrength')?.toFixed(0) || '',
+    // Hitting
+    getFieldScore(p, 'hittingForm')?.toFixed(0) || '',
+    getFieldScore(p, 'contactPower')?.toFixed(0) || '',
+    getFieldScore(p, 'hits')?.toFixed(0) || '',
+    // Fielding
+    getFieldScore(p, 'field')?.toFixed(0) || '',
+    getFieldScore(p, 'throw')?.toFixed(0) || '',
+    // Fly Balls
+    getFieldScore(p, 'catches')?.toFixed(0) || '',
+    getFieldScore(p, 'flyBallForm')?.toFixed(0) || '',
+    // Baserunning
+    getFieldScore(p, 'bestTime')?.toFixed(0) || '',
+    getFieldScore(p, 'baserunningForm')?.toFixed(0) || '',
+    // Totals
     p.manualAdjust.toString(),
     p.weightedTotal.toFixed(1),
   ]);
