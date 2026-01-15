@@ -3,6 +3,7 @@ import { Undo, RotateCcw, AlertCircle, Search, ChevronRight } from 'lucide-react
 import { DraftState, Team } from '../types';
 import { TeamRosters } from './TeamRosters';
 import { getNextPick, calculateDraftOrder } from '../utils/draftOrder';
+import { useViewMode } from '../contexts/ViewContext';
 
 // Helper to get display name for a team (fallback when empty)
 const getTeamDisplayName = (team: Team) => team.name || `Team ${team.draftPosition}`;
@@ -12,9 +13,14 @@ interface DraftBoardProps {
   onDraftPlayer: (playerId: string) => void;
   onUndo: () => void;
   onReset: () => void;
+  enforceAgeLimit: boolean;
+  maxPerAge: number;
 }
 
-export const DraftBoard = ({ draftState, onDraftPlayer, onUndo, onReset }: DraftBoardProps) => {
+export const DraftBoard = ({ draftState, onDraftPlayer, onUndo, onReset, enforceAgeLimit, maxPerAge }: DraftBoardProps) => {
+  const viewMode = useViewMode();
+  const isPublicView = viewMode === 'public';
+
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   const [showRoundInterstitial, setShowRoundInterstitial] = useState(false);
@@ -198,29 +204,67 @@ export const DraftBoard = ({ draftState, onDraftPlayer, onUndo, onReset }: Draft
                       Up Next: {getTeamDisplayName(nextTeam)}
                     </div>
                   )}
+                  {/* Age Breakdown - only show if age limit is enforced */}
+                  {enforceAgeLimit && maxPerAge > 0 && (
+                    <div className="mt-2 text-sm flex items-center gap-2 flex-wrap">
+                      <span className="opacity-80">Ages:</span>
+                      {Object.entries(currentTeam.ageBreakdown || {})
+                        .sort(([a], [b]) => Number(a) - Number(b))
+                        .map(([age, count]) => {
+                          const isWarning = count === maxPerAge - 1;
+                          const isMaxed = count >= maxPerAge;
+                          return (
+                            <span
+                              key={age}
+                              className={`px-2 py-0.5 rounded text-sm font-medium ${
+                                isMaxed
+                                  ? 'bg-red-500/80 text-white'
+                                  : isWarning
+                                  ? 'bg-yellow-400/80 text-yellow-900'
+                                  : 'bg-white/20'
+                              }`}
+                            >
+                              {age}({count}){isMaxed ? '🚫' : isWarning ? '⚠️' : ''}
+                            </span>
+                          );
+                        })}
+                      {Object.keys(currentTeam.ageBreakdown || {}).length === 0 && (
+                        <span className="opacity-60">None yet</span>
+                      )}
+                    </div>
+                  )}
                 </>
               )}
             </div>
 
-            <div className="flex gap-2">
-              <button
-                onClick={onUndo}
-                disabled={draftState.picks.length === 0}
-                className="px-3 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg font-medium flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed backdrop-blur-sm"
-                title="Undo last pick"
-              >
-                <Undo className="w-4 h-4" />
-                <span className="hidden sm:inline">Undo</span>
-              </button>
-              <button
-                onClick={onReset}
-                className="px-3 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg font-medium flex items-center gap-2 backdrop-blur-sm"
-                title="Reset entire draft"
-              >
-                <RotateCcw className="w-4 h-4" />
-                <span className="hidden sm:inline">Reset</span>
-              </button>
-            </div>
+            {/* Admin controls - hidden in public view */}
+            {!isPublicView && (
+              <div className="flex gap-2">
+                <button
+                  onClick={onUndo}
+                  disabled={draftState.picks.length === 0}
+                  className="px-3 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg font-medium flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed backdrop-blur-sm"
+                  title="Undo last pick"
+                >
+                  <Undo className="w-4 h-4" />
+                  <span className="hidden sm:inline">Undo</span>
+                </button>
+                <button
+                  onClick={onReset}
+                  className="px-3 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg font-medium flex items-center gap-2 backdrop-blur-sm"
+                  title="Reset entire draft"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  <span className="hidden sm:inline">Reset</span>
+                </button>
+              </div>
+            )}
+            {/* Public view indicator */}
+            {isPublicView && (
+              <div className="px-3 py-2 bg-white/20 text-white rounded-lg font-medium backdrop-blur-sm">
+                Live View
+              </div>
+            )}
           </div>
 
           {/* Mandatory Pick Warning */}
@@ -351,8 +395,8 @@ export const DraftBoard = ({ draftState, onDraftPlayer, onUndo, onReset }: Draft
                 />
               </div>
 
-              {/* Draft Confirmation Button */}
-              {selectedPlayer && (
+              {/* Draft Confirmation Button - hidden in public view */}
+              {!isPublicView && selectedPlayer && (
                 <div className="mb-4 p-4 bg-green-50 dark:bg-green-900/20 border-2 border-green-500 rounded-lg sticky top-0 z-10">
                   <div className="text-sm text-green-800 dark:text-green-200 mb-2">
                     Selected: <strong>{selectedPlayer.name}</strong> ({selectedPlayer.totalScore.toFixed(1)})
@@ -387,23 +431,32 @@ export const DraftBoard = ({ draftState, onDraftPlayer, onUndo, onReset }: Draft
                     ? draftState.teams.find(t => t.id === player.lockedToTeamId)
                     : null;
 
-                  // Player is restricted if they're a coach's kid for another team OR locked sibling
-                  const isRestricted = isCoachKidForOtherTeam || isSiblingLockedToOtherTeam;
+                  // Check if player's age is maxed out for current team (only if age limit is enforced)
+                  const playerAge = player.littleLeagueAge;
+                  const currentTeamAgeCount = currentTeam?.ageBreakdown?.[playerAge] || 0;
+                  const isAgeMaxed = enforceAgeLimit && maxPerAge > 0 && currentTeamAgeCount >= maxPerAge;
+
+                  // Player is restricted if they're a coach's kid for another team, locked sibling, or age maxed
+                  const isRestricted = isCoachKidForOtherTeam || isSiblingLockedToOtherTeam || isAgeMaxed;
+                  // In public view, all interactions are disabled
+                  const isClickable = !isPublicView && !isRestricted;
 
                   return (
-                    <button
+                    <div
                       key={player.id}
                       id={`player-${player.id}`}
-                      onClick={() => !isRestricted && handlePlayerClick(player.id)}
-                      disabled={isRestricted || undefined}
+                      onClick={() => isClickable && handlePlayerClick(player.id)}
+                      role={isClickable ? "button" : undefined}
+                      tabIndex={isClickable ? 0 : undefined}
                       className={`
                         w-full text-left p-3 rounded-lg border-2 transition-all
+                        ${isPublicView ? 'cursor-default' : ''}
                         ${
-                          isRestricted
+                          isRestricted && !isPublicView
                             ? 'opacity-50 cursor-not-allowed border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-900/10'
-                            : isSelected
+                            : isSelected && !isPublicView
                             ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 shadow-lg scale-105'
-                            : isMandatory
+                            : isMandatory && !isPublicView
                             ? 'border-yellow-400 bg-yellow-50 dark:bg-yellow-900/20 hover:bg-yellow-100 dark:hover:bg-yellow-900/30'
                             : 'border-gray-200 dark:border-gray-700 hover:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20'
                         }
@@ -431,6 +484,11 @@ export const DraftBoard = ({ draftState, onDraftPlayer, onUndo, onReset }: Draft
                           {isSiblingLockedToOtherTeam && !isCoachKidForOtherTeam && (
                             <div className="text-xs text-red-600 dark:text-red-400 mt-2 font-semibold">
                               ⚠ Sibling locked - Must be drafted by {siblingLockedTeam ? getTeamDisplayName(siblingLockedTeam) : 'Unknown'}
+                            </div>
+                          )}
+                          {isAgeMaxed && !isCoachKidForOtherTeam && !isSiblingLockedToOtherTeam && (
+                            <div className="text-xs text-red-600 dark:text-red-400 mt-2 font-semibold">
+                              ⚠ Age limit - Team has maximum {maxPerAge} players age {playerAge}
                             </div>
                           )}
 
@@ -467,20 +525,23 @@ export const DraftBoard = ({ draftState, onDraftPlayer, onUndo, onReset }: Draft
                             )}
                           </div>
                         </div>
-                        <div className="ml-2 text-right">
-                          <div className={`text-lg font-bold ${
-                            isRestricted
-                              ? 'text-gray-400 dark:text-gray-600'
-                              : 'text-gray-900 dark:text-white'
-                          }`}>
-                            {player.totalScore.toFixed(1)}
+                        {/* Scores - hidden in public view */}
+                        {!isPublicView && (
+                          <div className="ml-2 text-right">
+                            <div className={`text-lg font-bold ${
+                              isRestricted
+                                ? 'text-gray-400 dark:text-gray-600'
+                                : 'text-gray-900 dark:text-white'
+                            }`}>
+                              {player.totalScore.toFixed(1)}
+                            </div>
+                            <div className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                              H:{player.hittingSubtotal.toFixed(0)} F:{player.fieldingSubtotal.toFixed(0)} P:{player.pitchingSubtotal.toFixed(0)}
+                            </div>
                           </div>
-                          <div className="text-xs text-gray-500 dark:text-gray-500 mt-1">
-                            H:{player.hittingSubtotal.toFixed(0)} F:{player.fieldingSubtotal.toFixed(0)} P:{player.pitchingSubtotal.toFixed(0)}
-                          </div>
-                        </div>
+                        )}
                       </div>
-                    </button>
+                    </div>
                   );
                 })}
               </div>
@@ -489,7 +550,12 @@ export const DraftBoard = ({ draftState, onDraftPlayer, onUndo, onReset }: Draft
 
           {/* Team Rosters */}
           <div className="lg:col-span-2">
-            <TeamRosters teams={draftState.teams} currentTeamId={draftState.currentTeamId} />
+            <TeamRosters
+              teams={draftState.teams}
+              currentTeamId={draftState.currentTeamId}
+              enforceAgeLimit={enforceAgeLimit}
+              maxPerAge={maxPerAge}
+            />
           </div>
         </div>
       </div>

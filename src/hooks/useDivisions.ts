@@ -205,6 +205,26 @@ export function useDivisions() {
     setSummaries(loadedSummaries);
   }, []);
 
+  // Refresh active division from storage (for public view sync)
+  const refreshActiveDivision = useCallback((): void => {
+    if (!activeDivision) return;
+    const division = loadDivision(activeDivision.id);
+    if (division) {
+      setActiveDivision(division);
+    }
+  }, [activeDivision]);
+
+  // Full refresh - both summaries and active division
+  const refreshDivisions = useCallback((): void => {
+    refreshSummaries();
+    if (activeDivision) {
+      const division = loadDivision(activeDivision.id);
+      if (division) {
+        setActiveDivision(division);
+      }
+    }
+  }, [activeDivision, refreshSummaries]);
+
   return {
     summaries,
     activeDivision,
@@ -214,5 +234,7 @@ export function useDivisions() {
     deleteDivision,
     clearActiveDivision,
     refreshSummaries,
+    refreshActiveDivision,
+    refreshDivisions,
   };
 }

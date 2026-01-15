@@ -168,6 +168,25 @@ export const DraftConfig = ({ teams, players, onConfigComplete }: DraftConfigPro
     return validation.duplicates.includes(position);
   };
 
+  // Randomize draft order using Fisher-Yates shuffle
+  const handleRandomizeOrder = () => {
+    const teamIds = [...teams.map(t => t.id)];
+
+    // Fisher-Yates shuffle
+    for (let i = teamIds.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [teamIds[i], teamIds[j]] = [teamIds[j], teamIds[i]];
+    }
+
+    // Assign positions 1 through N
+    const newPositions: Record<string, number | null> = {};
+    teamIds.forEach((id, index) => {
+      newPositions[id] = index + 1;
+    });
+
+    setTeamPositions(newPositions);
+  };
+
   const handleStart = () => {
     // Validate draft format is selected
     if (!draftFormat) {
@@ -321,9 +340,17 @@ export const DraftConfig = ({ teams, players, onConfigComplete }: DraftConfigPro
 
           {/* Draft Order */}
           <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
-              Draft Order
-            </h2>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                Draft Order
+              </h2>
+              <button
+                onClick={handleRandomizeOrder}
+                className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm font-medium flex items-center gap-1"
+              >
+                🎲 Randomize
+              </button>
+            </div>
             <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
               Enter a position number (1-{teams.length}) for each team. Position 1 picks first in round 1.
             </p>

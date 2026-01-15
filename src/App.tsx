@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useDivisions } from './hooks/useDivisions';
 import { useDraft } from './hooks/useDraft';
 import { usePlayerScoring } from './hooks/usePlayerScoring';
+import { useViewMode } from './contexts/ViewContext';
 import { DivisionSelector } from './components/DivisionSelector';
 import { DivisionCreator } from './components/DivisionCreator';
 import { FileUpload } from './components/FileUpload';
@@ -25,6 +26,9 @@ import { parseCSVWithMapping } from './utils/csvParser';
 type AppMode = 'selector' | 'creator' | 'draft';
 
 function App() {
+  const viewMode = useViewMode();
+  const isPublicView = viewMode === 'public';
+
   const [mode, setMode] = useState<AppMode>('selector');
   const [csvData, setCSVData] = useState<ParsedCSVData | null>(null);
 
@@ -36,6 +40,7 @@ function App() {
     updateActiveDivision,
     deleteDivision,
     clearActiveDivision,
+    refreshDivisions,
   } = useDivisions();
 
   const {
@@ -73,6 +78,22 @@ function App() {
       loadDivisionState(activeDivision);
     }
   }, [activeDivision?.id]); // Only trigger when division changes
+
+  // Auto-refresh for public view - listen for localStorage changes from admin view
+  useEffect(() => {
+    if (!isPublicView) return;
+
+    const handleStorageChange = (e: StorageEvent) => {
+      // Only refresh if the change is to a division key
+      if (e.key?.startsWith('little-league-division-')) {
+        console.log('🔄 Public view: Storage change detected, refreshing...');
+        refreshDivisions();
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, [isPublicView, refreshDivisions]);
 
   // Save phase changes back to division
   useEffect(() => {
@@ -245,6 +266,7 @@ function App() {
           totalScore: 0,
           coachKids: [],
           assistantCoaches: [],
+          ageBreakdown: {},
         })),
         draftState: null,
         phase: 'upload',
@@ -374,6 +396,8 @@ function App() {
             onDraftPlayer={draftPlayer}
             onUndo={undoLastPick}
             onReset={handleReset}
+            enforceAgeLimit={activeDivision?.enforceAgeLimit ?? false}
+            maxPerAge={activeDivision?.maxPerAge ?? 0}
           />
         )}
 

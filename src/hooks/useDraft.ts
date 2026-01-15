@@ -328,10 +328,17 @@ export const useDraft = (divisionId?: string) => {
         const updatedTeams = teams.map((t) => {
           if (t.id === currentTeamId) {
             const newRoster = [...t.roster, draftedPlayer];
+            // Update age breakdown
+            const age = draftedPlayer.littleLeagueAge;
+            const newAgeBreakdown = {
+              ...(t.ageBreakdown || {}),
+              [age]: ((t.ageBreakdown || {})[age] || 0) + 1,
+            };
             return {
               ...t,
               roster: newRoster,
               totalScore: newRoster.reduce((sum, p) => sum + p.totalScore, 0),
+              ageBreakdown: newAgeBreakdown,
             };
           }
           return t;
@@ -446,13 +453,26 @@ export const useDraft = (divisionId?: string) => {
       });
 
       // Revert team
+      const undraftedPlayer = prev.players.find(p => p.id === lastPick.playerId);
       const updatedTeams = prev.teams.map((t) => {
         if (t.id === lastPick.teamId) {
           const newRoster = t.roster.filter((p) => p.id !== lastPick.playerId);
+          // Update age breakdown - decrement count for undrafted player's age
+          let newAgeBreakdown = { ...(t.ageBreakdown || {}) };
+          if (undraftedPlayer) {
+            const age = undraftedPlayer.littleLeagueAge;
+            const currentCount = newAgeBreakdown[age] || 0;
+            if (currentCount > 1) {
+              newAgeBreakdown[age] = currentCount - 1;
+            } else {
+              delete newAgeBreakdown[age];
+            }
+          }
           return {
             ...t,
             roster: newRoster,
             totalScore: newRoster.reduce((sum, p) => sum + p.totalScore, 0),
+            ageBreakdown: newAgeBreakdown,
           };
         }
         return t;

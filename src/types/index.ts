@@ -59,6 +59,7 @@ export interface Team {
   draftPosition: number; // 1-8
   coachKids: string[]; // player IDs
   assistantCoaches: string[]; // assistant coach last names
+  ageBreakdown: Record<number, number>; // { 10: 3, 11: 4, 12: 2 } - count per age
 }
 
 export interface DraftPick {
@@ -272,6 +273,7 @@ export function createInitialDivision(
     draftPosition: i + 1,
     coachKids: [],
     assistantCoaches: [],
+    ageBreakdown: {},
   }));
 
   return {
