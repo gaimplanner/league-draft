@@ -9,6 +9,7 @@ export interface CoachAssignment {
   playerName: string;
   teamName: string;
   role: 'manager' | 'assistant';
+  assistantName?: string; // For teamColumn format: tracks assistant coach name
 }
 
 // Result of parsing CSV with mapping
@@ -166,7 +167,27 @@ export const parseCSVWithMapping = (
     // Generate player ID here so we can use it for coach assignments
     const playerId = `player-${index}-${Date.now()}`;
 
-    // Collect coach assignments for later processing
+    // Parse new "Team" column format: "Manager, Assistant"
+    const teamColumn = getMappedValue('teamColumn');
+    if (teamColumn && teamColumn.trim()) {
+      const parts = teamColumn.split(',').map(s => s.trim()).filter(Boolean);
+      if (parts.length > 0) {
+        const managerName = parts[0];
+        const assistantName = parts[1] || undefined;
+
+        // Add assignment with team info
+        coachAssignments.push({
+          playerIndex: index,
+          playerId,
+          playerName: fullName,
+          teamName: managerName, // Team name = manager's last name
+          role: 'manager', // All teamColumn entries track team creation
+          assistantName, // Track assistant for auto-detection
+        });
+      }
+    }
+
+    // Legacy: Collect coach assignments from separate columns
     if (managerTeam) {
       coachAssignments.push({
         playerIndex: index,

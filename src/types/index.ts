@@ -153,7 +153,8 @@ export type AppField =
   | 'isCoachKid'
   | 'sibling'
   | 'managerTeam'
-  | 'assistantTeam';
+  | 'assistantTeam'
+  | 'teamColumn'; // "Manager, Assistant" format for auto team creation
 
 export interface ColumnMapping {
   [csvColumn: string]: AppField | null;

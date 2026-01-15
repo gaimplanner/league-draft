@@ -38,8 +38,9 @@ const OPTIONAL_FIELDS: { field: AppField; label: string }[] = [
   { field: 'isCoachKid', label: "Coach's Kid" },
   { field: 'sibling', label: 'Sibling' },
   // Team assignments from CSV
-  { field: 'managerTeam', label: 'Manager Team (creates team)' },
-  { field: 'assistantTeam', label: 'Assistant Team (adds to team)' },
+  { field: 'teamColumn', label: 'Team (Manager, Assistant)' },
+  { field: 'managerTeam', label: 'Manager Team (legacy)' },
+  { field: 'assistantTeam', label: 'Assistant Team (legacy)' },
 ];
 
 export const ColumnMapper = ({ csvData, onMappingComplete }: ColumnMapperProps) => {
@@ -98,6 +99,9 @@ export const ColumnMapper = ({ csvData, onMappingComplete }: ColumnMapperProps) 
         autoMapping[header] = 'isCoachKid';
       } else if (lowerHeader.includes('sibling')) {
         autoMapping[header] = 'sibling';
+      } else if (lowerHeader === 'team') {
+        // Exact match for "Team" column - new format
+        autoMapping[header] = 'teamColumn';
       } else if (lowerHeader.includes('manager') && lowerHeader.includes('team')) {
         autoMapping[header] = 'managerTeam';
       } else if (lowerHeader.includes('assistant') && lowerHeader.includes('team')) {

@@ -166,7 +166,10 @@ function App() {
         teamAssignments.set(assignment.teamName, existing);
       });
 
-      // Process each team's assignments
+      // Track team coach info for auto-detection (from teamColumn format)
+      const teamCoachInfo = new Map<string, { managerName: string; assistantName?: string }>();
+
+      // Process each team's assignments - create teams and track coach names
       teamAssignments.forEach((assignments, teamName) => {
         // Find or create team by name
         let team = updatedTeams.find(t =>
@@ -182,41 +185,74 @@ function App() {
         }
 
         if (team) {
-          assignments.forEach(assignment => {
-            // Find the player and mark as coach's kid
-            const playerIndex = updatedPlayers.findIndex(p => p.id === assignment.playerId);
-            if (playerIndex !== -1) {
-              const player = updatedPlayers[playerIndex];
+          // Check if any assignment has assistantName (teamColumn format)
+          const teamColumnAssignment = assignments.find(a => a.assistantName !== undefined);
+          if (teamColumnAssignment) {
+            // Track coach names for auto-detection
+            teamCoachInfo.set(team.id, {
+              managerName: teamName,
+              assistantName: teamColumnAssignment.assistantName,
+            });
+            // Track assistant coach name if present
+            if (teamColumnAssignment.assistantName && !team.assistantCoaches.includes(teamColumnAssignment.assistantName)) {
+              team.assistantCoaches.push(teamColumnAssignment.assistantName);
+            }
+          } else {
+            // Legacy format - process individual player assignments
+            assignments.forEach(assignment => {
+              const playerIndex = updatedPlayers.findIndex(p => p.id === assignment.playerId);
+              if (playerIndex !== -1) {
+                const player = updatedPlayers[playerIndex];
 
-              if (assignment.role === 'manager') {
-                // Manager's kid - mark as coach's kid and assign to team
-                updatedPlayers[playerIndex] = {
-                  ...player,
-                  isCoachKid: true,
-                  coachTeamId: team!.id,
-                };
-                // Add to team's coachKids list
-                if (!team!.coachKids.includes(player.id)) {
-                  team!.coachKids.push(player.id);
-                }
-              } else {
-                // Assistant coach's kid - also mark as coach's kid
-                updatedPlayers[playerIndex] = {
-                  ...player,
-                  isCoachKid: true,
-                  coachTeamId: team!.id,
-                };
-                if (!team!.coachKids.includes(player.id)) {
-                  team!.coachKids.push(player.id);
-                }
-                // Track assistant coach by player's last name
-                if (!team!.assistantCoaches.includes(player.lastName)) {
-                  team!.assistantCoaches.push(player.lastName);
+                if (assignment.role === 'manager') {
+                  updatedPlayers[playerIndex] = {
+                    ...player,
+                    isCoachKid: true,
+                    coachTeamId: team!.id,
+                  };
+                  if (!team!.coachKids.includes(player.id)) {
+                    team!.coachKids.push(player.id);
+                  }
+                } else {
+                  updatedPlayers[playerIndex] = {
+                    ...player,
+                    isCoachKid: true,
+                    coachTeamId: team!.id,
+                  };
+                  if (!team!.coachKids.includes(player.id)) {
+                    team!.coachKids.push(player.id);
+                  }
+                  if (!team!.assistantCoaches.includes(player.lastName)) {
+                    team!.assistantCoaches.push(player.lastName);
+                  }
                 }
               }
-            }
-          });
+            });
+          }
         }
+      });
+
+      // Auto-detect coach's kids by lastName matching (for teamColumn format)
+      teamCoachInfo.forEach((coachInfo, teamId) => {
+        const team = updatedTeams.find(t => t.id === teamId);
+        if (!team) return;
+
+        updatedPlayers.forEach((player, idx) => {
+          const playerLastName = player.lastName.toLowerCase();
+          const isManagerKid = playerLastName === coachInfo.managerName.toLowerCase();
+          const isAssistantKid = coachInfo.assistantName && playerLastName === coachInfo.assistantName.toLowerCase();
+
+          if (isManagerKid || isAssistantKid) {
+            updatedPlayers[idx] = {
+              ...player,
+              isCoachKid: true,
+              coachTeamId: team.id,
+            };
+            if (!team.coachKids.includes(player.id)) {
+              team.coachKids.push(player.id);
+            }
+          }
+        });
       });
 
       console.log('Coach assignments processed from CSV:', coachAssignments.length);
