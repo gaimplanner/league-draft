@@ -10,6 +10,7 @@ import {
   copyToClipboard,
 } from '../utils/exports';
 import { TradeModal } from './TradeModal';
+import { CompleteRosters } from './CompleteRosters';
 
 // Helper to get display name for a team (fallback when empty)
 const getTeamDisplayName = (team: Team) => team.name || `Team ${team.draftPosition}`;
@@ -257,70 +258,7 @@ export const DraftComplete = ({ draftState, division, onReset, onExecuteTrade }:
         </div>
 
         {/* Full Rosters */}
-        <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-4">
-          Complete Rosters
-        </h2>
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {sortedTeams.map((team) => (
-            <div
-              key={team.id}
-              className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700"
-            >
-              <div className="mb-4">
-                <h3 className="text-xl font-semibold text-gray-900 dark:text-white">
-                  {getTeamDisplayName(team)}
-                </h3>
-                <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                  Total Score: <span className="font-bold">{team.totalScore.toFixed(1)}</span>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                {team.roster
-                  .sort((a, b) => (a.draftedAtPick || 0) - (b.draftedAtPick || 0))
-                  .map((player, index) => (
-                    <div
-                      key={player.id}
-                      className="p-2 bg-gray-50 dark:bg-gray-700 rounded text-sm"
-                    >
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1 min-w-0">
-                          <div className="font-medium text-gray-900 dark:text-white truncate">
-                            {index + 1}. {player.name}
-                            {player.isAllStar && (
-                              <span className="ml-1 text-yellow-500" title="All-Star">⭐</span>
-                            )}
-                            {player.isCoachKid && (
-                              <span className="ml-1 text-blue-600 dark:text-blue-400" title="Coach's Kid">🔵</span>
-                            )}
-                          </div>
-                          <div className="text-xs text-gray-600 dark:text-gray-400">
-                            Pick #{player.draftedAtPick} • Round {player.draftedInRound}
-                          </div>
-                        </div>
-                        <div className="ml-2 font-medium text-gray-900 dark:text-white">
-                          {player.totalScore.toFixed(1)}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Legend */}
-        <div className="mt-6 p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-          <div className="flex items-center gap-6 text-sm text-gray-600 dark:text-gray-400">
-            <span className="font-medium text-gray-900 dark:text-white">Legend:</span>
-            <span className="flex items-center gap-1">
-              <span className="text-yellow-500">⭐</span> All-Star
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="text-blue-600 dark:text-blue-400">🔵</span> Coach's Kid
-            </span>
-          </div>
-        </div>
+        <CompleteRosters teams={draftState.teams} />
 
         {/* Trade History */}
         {draftState.trades.length > 0 && (

@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { X, Play, RotateCcw, ChevronDown, ChevronUp, GitCompare } from 'lucide-react';
+import { X, Play, RotateCcw, GitCompare } from 'lucide-react';
 import { Player, Team, DraftFormat } from '../types';
 import {
   SimulationOptions,
@@ -7,6 +7,7 @@ import {
   runSimulation,
   getSimulationStats,
 } from '../utils/simulation';
+import { CompleteRosters } from './CompleteRosters';
 
 interface SimulationModalProps {
   players: Player[];
@@ -42,7 +43,6 @@ export const SimulationModal = ({
     includeSiblings: true,
   });
   const [result, setResult] = useState<SimulationResult | null>(null);
-  const [expandedTeamId, setExpandedTeamId] = useState<string | null>(null);
   const [comparisonResults, setComparisonResults] = useState<FormatComparison[]>([]);
 
   const handleRunSimulation = () => {
@@ -77,25 +77,12 @@ export const SimulationModal = ({
 
   const handleBackToOptions = () => {
     setPhase('options');
-    setExpandedTeamId(null);
     setComparisonResults([]);
   };
-
-  // Sort teams by total score for display
-  const sortedTeams = useMemo(() => {
-    if (!result) return [];
-    return [...result.teams].sort((a, b) => b.totalScore - a.totalScore);
-  }, [result]);
 
   const stats = useMemo(() => {
     if (!result) return null;
     return getSimulationStats(result);
-  }, [result]);
-
-  // Calculate max score for bar width
-  const maxScore = useMemo(() => {
-    if (!result) return 100;
-    return Math.max(...result.teams.map(t => t.totalScore));
   }, [result]);
 
   return (
@@ -175,17 +162,9 @@ export const SimulationModal = ({
             </div>
           )}
 
-          {phase === 'results' && (
-            /* Results Phase */
+          {phase === 'results' && result && (
+            /* Results Phase - Uses same component as real draft */
             <div className="space-y-6">
-              {/* Warning Banner */}
-              <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg flex items-center gap-2">
-                <span className="text-yellow-600">⚠️</span>
-                <span className="text-sm text-yellow-800 dark:text-yellow-200">
-                  This is a projection only. Actual draft results may vary.
-                </span>
-              </div>
-
               {/* Stats Summary */}
               {stats && (
                 <div className="grid grid-cols-3 gap-4">
@@ -210,128 +189,8 @@ export const SimulationModal = ({
                 </div>
               )}
 
-              {/* Team Balance Chart */}
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                  Projected Team Balance
-                </h3>
-                <div className="space-y-2">
-                  {sortedTeams.map((team, index) => {
-                    const barWidth = (team.totalScore / maxScore) * 100;
-                    const isExpanded = expandedTeamId === team.id;
-
-                    return (
-                      <div key={team.id}>
-                        <button
-                          onClick={() => setExpandedTeamId(isExpanded ? null : team.id)}
-                          className="w-full text-left"
-                        >
-                          <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors">
-                            <div className="w-6 text-center font-bold text-gray-500 dark:text-gray-400">
-                              {index + 1}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center justify-between mb-1">
-                                <span className="font-medium text-gray-900 dark:text-white truncate">
-                                  {getTeamDisplayName(team)}
-                                </span>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-sm text-gray-600 dark:text-gray-400">
-                                    {team.roster.length} players
-                                  </span>
-                                  <span className="font-bold text-gray-900 dark:text-white">
-                                    {team.totalScore.toFixed(1)}
-                                  </span>
-                                  {isExpanded ? (
-                                    <ChevronUp className="w-4 h-4 text-gray-500" />
-                                  ) : (
-                                    <ChevronDown className="w-4 h-4 text-gray-500" />
-                                  )}
-                                </div>
-                              </div>
-                              <div className="h-3 bg-gray-200 dark:bg-gray-600 rounded-full overflow-hidden">
-                                <div
-                                  className="h-full bg-blue-500 rounded-full transition-all duration-300"
-                                  style={{ width: `${barWidth}%` }}
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        </button>
-
-                        {/* Expanded Roster View - matches DraftComplete format */}
-                        {isExpanded && (
-                          <div className="mt-2 ml-9 p-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg">
-                            <div className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
-                              Projected Roster
-                            </div>
-                            <div className="space-y-2">
-                              {team.roster
-                                .sort((a, b) => (a.draftedAtPick || 0) - (b.draftedAtPick || 0))
-                                .map((player, playerIndex) => (
-                                  <div
-                                    key={player.id}
-                                    className="p-2 bg-gray-50 dark:bg-gray-700 rounded text-sm"
-                                  >
-                                    <div className="flex justify-between items-start">
-                                      <div className="flex-1 min-w-0">
-                                        <div className="font-medium text-gray-900 dark:text-white truncate">
-                                          {playerIndex + 1}. {player.firstName} {player.lastName}
-                                          {player.isAllStar && (
-                                            <span className="ml-1 text-yellow-500" title="All-Star">⭐</span>
-                                          )}
-                                          {player.isCoachKid && (
-                                            <span className="ml-1 text-blue-600 dark:text-blue-400" title="Coach's Kid">🔵</span>
-                                          )}
-                                          {player.siblingId && (
-                                            <span className="ml-1 text-purple-600" title="Sibling">👥</span>
-                                          )}
-                                        </div>
-                                        <div className="text-xs text-gray-600 dark:text-gray-400">
-                                          Pick #{player.draftedAtPick} • Round {player.draftedInRound}
-                                        </div>
-                                      </div>
-                                      <div className="ml-2 font-medium text-gray-900 dark:text-white">
-                                        {player.totalScore.toFixed(1)}
-                                      </div>
-                                    </div>
-                                  </div>
-                                ))}
-                            </div>
-                            <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-600 flex justify-between text-sm">
-                              <div className="text-gray-600 dark:text-gray-400">
-                                Ages: {Object.entries(team.ageBreakdown)
-                                  .sort(([a], [b]) => Number(a) - Number(b))
-                                  .map(([age, count]) => `${age}(${count})`)
-                                  .join(' ')}
-                              </div>
-                              <div className="font-semibold text-gray-900 dark:text-white">
-                                Total: {team.totalScore.toFixed(1)}
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Legend */}
-              <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                <div className="flex items-center gap-6 text-sm text-gray-600 dark:text-gray-400 flex-wrap">
-                  <span className="font-medium text-gray-900 dark:text-white">Legend:</span>
-                  <span className="flex items-center gap-1">
-                    <span className="text-yellow-500">⭐</span> All-Star
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span className="text-blue-600 dark:text-blue-400">🔵</span> Coach's Kid
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span className="text-purple-600">👥</span> Sibling
-                  </span>
-                </div>
-              </div>
+              {/* Same roster display as real draft */}
+              <CompleteRosters teams={result.teams} isSimulation={true} />
             </div>
           )}
 
