@@ -157,30 +157,62 @@ function App() {
   };
 
   // Handle review phase completion
-  const handleReviewComplete = () => {
+  const handleReviewComplete = (updatedPlayers?: Player[]) => {
+    // TRACE 5: Log what we received
+    console.log('=== TRACE 5: handleReviewComplete received ===');
+    console.log('updatedPlayers param exists:', !!updatedPlayers);
+    if (updatedPlayers) {
+      console.log('Coach kids in updatedPlayers:', updatedPlayers.filter(p => p.isCoachKid).map(p => ({
+        name: `${p.firstName} ${p.lastName}`,
+        projected: p.projectedRound,
+        locked: p.lockedToRound
+      })));
+    }
+
+    // Use passed players if available, otherwise use current state
+    const playersToSave = updatedPlayers ?? players;
+
+    // TRACE 6: Log playersToSave
+    console.log('=== TRACE 6: playersToSave ===');
+    console.log('Coach kids:', playersToSave.filter(p => p.isCoachKid).map(p => ({
+      name: `${p.firstName} ${p.lastName}`,
+      projected: p.projectedRound,
+      locked: p.lockedToRound
+    })));
+
     // Update draft state with modified players and teams
-    setPlayers(players);
+    setPlayers(playersToSave);
     setTeams(teams);
 
     // Save to division
     if (activeDivision) {
       updateActiveDivision({
-        players,
+        players: playersToSave,
         teams,
       });
+      // TRACE 7: After updateActiveDivision
+      console.log('=== TRACE 7: After updateActiveDivision ===');
     }
 
     setPhase('config');
   };
 
   // Handle draft config completion
-  const handleConfigComplete = (format: DraftFormat, order: string[]) => {
+  const handleConfigComplete = (format: DraftFormat, order: string[], resolvedPlayers: Player[]) => {
     console.log('📋 handleConfigComplete called');
     console.log('📋 format:', format);
     console.log('📋 order:', order);
+    console.log('📋 resolvedPlayers coach kids:', resolvedPlayers.filter(p => p.isCoachKid).map(p => ({
+      name: `${p.firstName} ${p.lastName}`,
+      projected: p.projectedRound,
+      locked: p.lockedToRound
+    })));
+
+    // Update players with resolved lockedToRound values before starting draft
+    setPlayers(resolvedPlayers);
 
     // Pass format and order directly to startDraft to avoid race conditions
-    startDraft(format, order);
+    startDraft(format, order, resolvedPlayers);
   };
 
   // Handle going back to division selector
@@ -320,6 +352,7 @@ function App() {
             onScoringModeChange={handleScoringModeChange}
             onUpdatePlayer={handlePlayerUpdate}
             onUpdatePlayerField={updatePlayerField}
+            onSetAllPlayers={setAllPlayers}
             onTeamsUpdate={setTeamsState}
             onLinkSiblings={linkSiblings}
             onUnlinkSibling={unlinkSibling}

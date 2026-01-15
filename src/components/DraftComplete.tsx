@@ -1,6 +1,9 @@
 import { Download, RotateCcw } from 'lucide-react';
-import { DraftState } from '../types';
+import { DraftState, Team } from '../types';
 import { exportToCSV, downloadCSV } from '../utils/csvParser';
+
+// Helper to get display name for a team (fallback when empty)
+const getTeamDisplayName = (team: Team) => team.name || `Team ${team.draftPosition}`;
 
 interface DraftCompleteProps {
   draftState: DraftState;
@@ -63,7 +66,7 @@ export const DraftComplete = ({ draftState, onReset }: DraftCompleteProps) => {
                 </div>
                 <div className="flex-1">
                   <div className="font-semibold text-lg text-gray-900 dark:text-white">
-                    {team.name}
+                    {getTeamDisplayName(team)}
                   </div>
                   <div className="text-sm text-gray-600 dark:text-gray-400">
                     {team.roster.length} players
@@ -92,7 +95,7 @@ export const DraftComplete = ({ draftState, onReset }: DraftCompleteProps) => {
             >
               <div className="mb-4">
                 <h3 className="text-xl font-semibold text-gray-900 dark:text-white">
-                  {team.name}
+                  {getTeamDisplayName(team)}
                 </h3>
                 <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
                   Total Score: <span className="font-bold">{team.totalScore.toFixed(1)}</span>

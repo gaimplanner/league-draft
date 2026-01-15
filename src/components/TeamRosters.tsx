@@ -1,5 +1,8 @@
 import { Team } from '../types';
 
+// Helper to get display name for a team (fallback when empty)
+const getTeamDisplayName = (team: Team) => team.name || `Team ${team.draftPosition}`;
+
 interface TeamRostersProps {
   teams: Team[];
   currentTeamId: string | null;
@@ -22,7 +25,7 @@ export const TeamRosters = ({ teams, currentTeamId }: TeamRostersProps) => {
         >
           <div className="flex justify-between items-start mb-3">
             <h3 className="font-semibold text-lg text-gray-900 dark:text-white">
-              {team.name}
+              {getTeamDisplayName(team)}
             </h3>
             {team.id === currentTeamId && (
               <span className="text-xs bg-blue-500 text-white px-2 py-1 rounded">

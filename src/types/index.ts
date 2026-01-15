@@ -266,7 +266,7 @@ export function createInitialDivision(
 ): Division {
   const teams: Team[] = Array.from({ length: teamCount }, (_, i) => ({
     id: `${id}-team-${i + 1}`,
-    name: `Team ${i + 1}`,
+    name: '', // Empty to show placeholder text
     roster: [],
     totalScore: 0,
     draftPosition: i + 1,

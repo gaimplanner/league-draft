@@ -43,8 +43,8 @@ export function autoDetectCoachKids(
       // Skip empty last names
       if (!lastName) continue;
 
-      // Check if matches head coach (team name)
-      if (teamName.includes(lastName) || lastName.includes(teamName)) {
+      // Check if matches head coach (team name) - EXACT match only
+      if (teamName === lastName) {
         matches.push({
           playerId: player.id,
           teamId: team.id,
@@ -61,7 +61,8 @@ export function autoDetectCoachKids(
           const assistantLastName = assistantCoach.trim().toLowerCase();
           if (!assistantLastName) continue;
 
-          if (lastName === assistantLastName || lastName.includes(assistantLastName) || assistantLastName.includes(lastName)) {
+          // EXACT match only (case-insensitive)
+          if (lastName === assistantLastName) {
             matches.push({
               playerId: player.id,
               teamId: team.id,
@@ -80,7 +81,7 @@ export function autoDetectCoachKids(
 }
 
 /**
- * Check if a player's last name matches a team name
+ * Check if a player's last name matches a team name (EXACT match, case-insensitive)
  */
 export function isLastNameMatch(playerLastName: string, teamName: string): boolean {
   const lastName = playerLastName.trim().toLowerCase();
@@ -89,7 +90,8 @@ export function isLastNameMatch(playerLastName: string, teamName: string): boole
   if (!lastName || !team) return false;
   if (team.startsWith('team ')) return false;
 
-  return team.includes(lastName) || lastName.includes(team);
+  // EXACT match only
+  return team === lastName;
 }
 
 /**

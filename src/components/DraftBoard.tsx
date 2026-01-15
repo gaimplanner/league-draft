@@ -1,8 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Undo, RotateCcw, AlertCircle, Search, ChevronRight } from 'lucide-react';
-import { DraftState } from '../types';
+import { DraftState, Team } from '../types';
 import { TeamRosters } from './TeamRosters';
 import { getNextPick, calculateDraftOrder } from '../utils/draftOrder';
+
+// Helper to get display name for a team (fallback when empty)
+const getTeamDisplayName = (team: Team) => team.name || `Team ${team.draftPosition}`;
 
 interface DraftBoardProps {
   draftState: DraftState;
@@ -14,6 +17,36 @@ interface DraftBoardProps {
 export const DraftBoard = ({ draftState, onDraftPlayer, onUndo, onReset }: DraftBoardProps) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
+  const [showRoundInterstitial, setShowRoundInterstitial] = useState(false);
+  const [interstitialData, setInterstitialData] = useState<{
+    completedRound: number;
+    nextRound: number;
+    newOrder: Array<{ team: Team; position: number; score: number }>;
+  } | null>(null);
+  const previousRoundRef = useRef(draftState.currentRound);
+
+  // Detect when we advance to a new round
+  useEffect(() => {
+    if (draftState.currentRound > previousRoundRef.current && draftState.currentRound > 1) {
+      // Round has advanced - show interstitial
+      const newOrder = draftState.currentRoundOrder.map((teamId, index) => {
+        const team = draftState.teams.find(t => t.id === teamId)!;
+        return {
+          team,
+          position: index + 1,
+          score: team.totalScore,
+        };
+      });
+
+      setInterstitialData({
+        completedRound: previousRoundRef.current,
+        nextRound: draftState.currentRound,
+        newOrder,
+      });
+      setShowRoundInterstitial(true);
+    }
+    previousRoundRef.current = draftState.currentRound;
+  }, [draftState.currentRound, draftState.currentRoundOrder, draftState.teams]);
 
   const availablePlayers = draftState.players
     .filter((p) => !p.isDrafted)
@@ -87,6 +120,66 @@ export const DraftBoard = ({ draftState, onDraftPlayer, onUndo, onReset }: Draft
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
+      {/* Round Completion Interstitial Modal */}
+      {showRoundInterstitial && interstitialData && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-lg w-full max-h-[90vh] flex flex-col overflow-hidden">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-green-500 to-blue-500 p-4 text-white text-center flex-shrink-0">
+              <div className="text-base opacity-90 mb-1">🎉 Round {interstitialData.completedRound} Complete!</div>
+              <h2 className="text-xl font-bold">Draft Order for Round {interstitialData.nextRound}</h2>
+            </div>
+
+            {/* Team Order - no scroll, compact rows */}
+            <div className="p-4 flex-1">
+              <div className="space-y-1">
+                {interstitialData.newOrder.map(({ team, position, score }) => (
+                  <div
+                    key={team.id}
+                    className="flex items-center gap-3 py-2 px-3 bg-gray-50 dark:bg-gray-700 rounded-lg"
+                  >
+                    <div className="w-7 h-7 bg-blue-500 text-white rounded-full flex items-center justify-center font-bold text-sm">
+                      {position}
+                    </div>
+                    <div className="flex-1">
+                      <div className="font-medium text-gray-900 dark:text-white">
+                        {getTeamDisplayName(team)}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <span className="font-bold text-gray-900 dark:text-white">{score.toFixed(1)}</span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">pts</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {draftState.draftFormat === 'recalculated' && (
+                <div className="mt-3 p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-sm text-blue-800 dark:text-blue-200">
+                  📊 Order recalculated based on team scores (lowest picks first)
+                </div>
+              )}
+              {draftState.draftFormat === 'snake' && (
+                <div className="mt-3 p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-sm text-blue-800 dark:text-blue-200">
+                  🐍 Snake draft: Order reversed from previous round
+                </div>
+              )}
+            </div>
+
+            {/* Continue Button */}
+            <div className="p-4 pt-0 flex-shrink-0">
+              <button
+                onClick={() => setShowRoundInterstitial(false)}
+                className="w-full px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-bold text-lg rounded-lg shadow-lg flex items-center justify-center gap-2"
+              >
+                Continue to Round {interstitialData.nextRound}
+                <ChevronRight className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-7xl mx-auto">
         {/* Prominent Draft Header - ESPN Style */}
         <div className="bg-gradient-to-r from-blue-600 to-blue-500 rounded-lg p-6 sm:p-8 mb-4 text-white shadow-lg">
@@ -98,11 +191,11 @@ export const DraftBoard = ({ draftState, onDraftPlayer, onUndo, onReset }: Draft
                     Round {draftState.currentRound}, Pick {currentPickNumber} of {totalPicks}
                   </div>
                   <h1 className="text-3xl sm:text-4xl font-bold mb-2">
-                    Now Drafting: {currentTeam.name}
+                    Now Drafting: {getTeamDisplayName(currentTeam)}
                   </h1>
                   {nextTeam && (
                     <div className="text-lg opacity-80">
-                      Up Next: {nextTeam.name}
+                      Up Next: {getTeamDisplayName(nextTeam)}
                     </div>
                   )}
                 </>
@@ -155,16 +248,14 @@ export const DraftBoard = ({ draftState, onDraftPlayer, onUndo, onReset }: Draft
                     <button
                       onClick={() => {
                         if (mandatoryPlayer) {
-                          setSelectedPlayerId(mandatoryPlayer.id);
-                          // Scroll to the player in the list
-                          const playerElement = document.getElementById(`player-${mandatoryPlayer.id}`);
-                          playerElement?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                          // Directly draft the mandatory player
+                          onDraftPlayer(mandatoryPlayer.id);
                         }
                       }}
-                      className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg flex items-center gap-2 shadow-md"
+                      className="w-full sm:w-auto px-4 py-3 bg-green-600 hover:bg-green-700 text-white font-bold text-lg rounded-lg flex items-center justify-center gap-2 shadow-lg"
                     >
                       Draft {mandatoryPlayer?.name}
-                      <ChevronRight className="w-4 h-4" />
+                      <ChevronRight className="w-5 h-5" />
                     </button>
                   </div>
                 </div>
@@ -222,7 +313,7 @@ export const DraftBoard = ({ draftState, onDraftPlayer, onUndo, onReset }: Draft
                       : 'text-gray-700 dark:text-gray-300'
                     }
                   `}>
-                    {team?.name || 'Unknown'}
+                    {team ? getTeamDisplayName(team) : 'Unknown'}
                   </span>
                   {isCurrentPick && (
                     <span className="text-xs bg-blue-500 text-white px-2 py-0.5 rounded-full">
@@ -324,18 +415,22 @@ export const DraftBoard = ({ draftState, onDraftPlayer, onUndo, onReset }: Draft
                             {player.name}
                           </div>
                           <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                            Rank #{player.rank} • Round {player.projectedRound} • Age {player.littleLeagueAge}
+                            Rank #{player.rank} • Round {player.lockedToRound ?? player.projectedRound}
+                            {player.lockedToRound && player.lockedToRound !== player.projectedRound && (
+                              <span className="text-blue-600 dark:text-blue-400 font-bold">*</span>
+                            )}
+                            {' '}• Age {player.littleLeagueAge}
                           </div>
 
                           {/* Restricted player warning */}
                           {isCoachKidForOtherTeam && (
                             <div className="text-xs text-red-600 dark:text-red-400 mt-2 font-semibold">
-                              ⚠ Coach's kid - Can only be drafted by {coachTeam?.name}
+                              ⚠ Coach's kid - Can only be drafted by {coachTeam ? getTeamDisplayName(coachTeam) : 'Unknown'}
                             </div>
                           )}
                           {isSiblingLockedToOtherTeam && !isCoachKidForOtherTeam && (
                             <div className="text-xs text-red-600 dark:text-red-400 mt-2 font-semibold">
-                              ⚠ Sibling locked - Must be drafted by {siblingLockedTeam?.name}
+                              ⚠ Sibling locked - Must be drafted by {siblingLockedTeam ? getTeamDisplayName(siblingLockedTeam) : 'Unknown'}
                             </div>
                           )}
 
@@ -346,7 +441,7 @@ export const DraftBoard = ({ draftState, onDraftPlayer, onUndo, onReset }: Draft
                                   ? 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200'
                                   : 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200'
                               }`}>
-                                Coach's Kid{coachTeam ? ` (${coachTeam.name})` : ''}
+                                Coach's Kid{coachTeam ? ` (${getTeamDisplayName(coachTeam)})` : ''}
                               </span>
                             )}
                             {player.isDNE && (
@@ -367,7 +462,7 @@ export const DraftBoard = ({ draftState, onDraftPlayer, onUndo, onReset }: Draft
                                   ? 'bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200'
                                   : 'bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200'
                               }`}>
-                                Sibling{player.lockedToTeamId ? ` → ${draftState.teams.find(t => t.id === player.lockedToTeamId)?.name}` : ''}
+                                Sibling{player.lockedToTeamId ? ` → ${(() => { const t = draftState.teams.find(t => t.id === player.lockedToTeamId); return t ? getTeamDisplayName(t) : 'Unknown'; })()}` : ''}
                               </span>
                             )}
                           </div>

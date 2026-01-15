@@ -5,7 +5,7 @@ import { Team, Player, DraftFormat } from '../types';
 interface DraftConfigProps {
   teams: Team[];
   players: Player[];
-  onConfigComplete: (draftFormat: DraftFormat, draftOrder: string[]) => void;
+  onConfigComplete: (draftFormat: DraftFormat, draftOrder: string[], resolvedPlayers: Player[]) => void;
 }
 
 // Validation result for draft order
@@ -44,21 +44,91 @@ function validateDraftOrder(positions: (number | null)[], teamCount: number): Or
   return { valid: true, duplicates: [], missing: [] };
 }
 
+// Helper to get display name for a team (fallback when empty)
+const getTeamDisplayName = (team: Team) => team.name || `Team ${team.draftPosition}`;
+
 export const DraftConfig = ({ teams, players, onConfigComplete }: DraftConfigProps) => {
-  const [draftFormat, setDraftFormat] = useState<DraftFormat>('snake');
+  const [draftFormat, setDraftFormat] = useState<DraftFormat | null>(null);
   // Store position by team ID
   const [teamPositions, setTeamPositions] = useState<Record<string, number | null>>({});
 
-  // Initialize team positions from teams
+  // Compute resolved players with lockedToRound set for coach's kids with conflicts
+  // This is a defensive fix to handle cases where lockedToRound wasn't set in PlayerReview
+  const resolvedPlayers = useMemo(() => {
+    // Group coach's kids by team
+    const coachKidsByTeam: Record<string, Player[]> = {};
+    players.filter(p => p.isCoachKid && p.coachTeamId).forEach(p => {
+      const teamId = p.coachTeamId!;
+      if (!coachKidsByTeam[teamId]) {
+        coachKidsByTeam[teamId] = [];
+      }
+      coachKidsByTeam[teamId].push(p);
+    });
+
+    // Build round assignments for each team's coach kids
+    const roundAssignments: Record<string, number> = {};
+
+    for (const [, teamKids] of Object.entries(coachKidsByTeam)) {
+      const assignedRounds = new Set<number>();
+
+      // Sort by projected round, then by score (descending) within each round
+      const sortedKids = [...teamKids].sort((a, b) => {
+        if (a.projectedRound !== b.projectedRound) {
+          return a.projectedRound - b.projectedRound;
+        }
+        return b.totalScore - a.totalScore;
+      });
+
+      for (const kid of sortedKids) {
+        let targetRound = kid.projectedRound;
+        // Find next available round
+        while (assignedRounds.has(targetRound)) {
+          targetRound++;
+        }
+        assignedRounds.add(targetRound);
+        roundAssignments[kid.id] = targetRound;
+      }
+    }
+
+    // Apply round assignments to players
+    return players.map(player => {
+      if (roundAssignments[player.id] !== undefined) {
+        const newLockedRound = roundAssignments[player.id];
+        // Only update if different from current or if not set
+        if (player.lockedToRound !== newLockedRound) {
+          console.log(`=== DraftConfig: Setting lockedToRound for ${player.firstName} ${player.lastName} to ${newLockedRound} (was ${player.lockedToRound}) ===`);
+          return { ...player, lockedToRound: newLockedRound };
+        }
+      }
+      return player;
+    });
+  }, [players]);
+
+  // TRACE 8: Log players on mount
+  useEffect(() => {
+    console.log('=== TRACE 8: DraftConfig mounted ===');
+    console.log('Coach kids from props:', players.filter(p => p.isCoachKid).map(p => ({
+      name: `${p.firstName} ${p.lastName}`,
+      projected: p.projectedRound,
+      locked: p.lockedToRound
+    })));
+    console.log('Coach kids after resolution:', resolvedPlayers.filter(p => p.isCoachKid).map(p => ({
+      name: `${p.firstName} ${p.lastName}`,
+      projected: p.projectedRound,
+      locked: p.lockedToRound
+    })));
+  }, [players, resolvedPlayers]);
+
+  // Initialize team positions from teams (all empty by default)
   useEffect(() => {
     const initial: Record<string, number | null> = {};
-    teams.forEach((team, index) => {
-      initial[team.id] = index + 1;
+    teams.forEach((team) => {
+      initial[team.id] = null;
     });
     setTeamPositions(initial);
   }, [teams]);
 
-  const coachKids = players.filter((p) => p.isCoachKid);
+  const coachKids = resolvedPlayers.filter((p) => p.isCoachKid);
 
   // Convert positions to array for validation
   const positionsArray = useMemo(() => {
@@ -99,6 +169,12 @@ export const DraftConfig = ({ teams, players, onConfigComplete }: DraftConfigPro
   };
 
   const handleStart = () => {
+    // Validate draft format is selected
+    if (!draftFormat) {
+      alert('Please select a draft format before starting.');
+      return;
+    }
+
     // Validate all coach kids are assigned
     const unassignedCoachKids = coachKids.filter(p => !p.coachTeamId);
 
@@ -113,12 +189,17 @@ export const DraftConfig = ({ teams, players, onConfigComplete }: DraftConfigPro
       return;
     }
 
-    // Debug: Log the draft order being passed
+    // Debug: Log the draft order and resolved players being passed
     console.log('🎯 DraftConfig.handleStart - draftOrder:', draftOrder);
     console.log('🎯 DraftConfig.handleStart - teams:', teams.map(t => ({ id: t.id, name: t.name })));
     console.log('🎯 DraftConfig.handleStart - teamPositions:', teamPositions);
+    console.log('🎯 DraftConfig.handleStart - resolvedPlayers coach kids:', resolvedPlayers.filter(p => p.isCoachKid).map(p => ({
+      name: `${p.firstName} ${p.lastName}`,
+      projected: p.projectedRound,
+      locked: p.lockedToRound
+    })));
 
-    onConfigComplete(draftFormat, draftOrder);
+    onConfigComplete(draftFormat, draftOrder, resolvedPlayers);
   };
 
   // Sort teams by their current position for display
@@ -143,9 +224,9 @@ export const DraftConfig = ({ teams, players, onConfigComplete }: DraftConfigPro
 
           <button
             onClick={handleStart}
-            disabled={!validation.valid}
+            disabled={!validation.valid || !draftFormat}
             className={`px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors ${
-              validation.valid
+              validation.valid && draftFormat
                 ? 'bg-blue-500 hover:bg-blue-600 text-white'
                 : 'bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed'
             }`}
@@ -171,9 +252,11 @@ export const DraftConfig = ({ teams, players, onConfigComplete }: DraftConfigPro
                   <div className="space-y-1">
                     {coachKids.map(player => {
                       const team = teams.find(t => t.id === player.coachTeamId);
+                      const effectiveRound = player.lockedToRound ?? player.projectedRound;
+                      const isBumped = player.lockedToRound && player.lockedToRound !== player.projectedRound;
                       return (
                         <div key={player.id} className="text-sm text-green-700 dark:text-green-300">
-                          • {player.name} → {team?.name} (Round {player.projectedRound})
+                          • {player.name} → {team ? getTeamDisplayName(team) : 'Unknown'} (Round {effectiveRound}{isBumped && '*'})
                         </div>
                       );
                     })}
@@ -193,7 +276,7 @@ export const DraftConfig = ({ teams, players, onConfigComplete }: DraftConfigPro
                   <div className="space-y-1">
                     {coachKids.filter(p => !p.coachTeamId).map(player => (
                       <div key={player.id} className="text-sm text-orange-700 dark:text-orange-300">
-                        • {player.name} (Rank #{player.rank}, Round {player.projectedRound})
+                        • {player.name} (Rank #{player.rank}, Round {player.lockedToRound ?? player.projectedRound})
                       </div>
                     ))}
                   </div>
@@ -225,7 +308,7 @@ export const DraftConfig = ({ teams, players, onConfigComplete }: DraftConfigPro
                     value={format.value}
                     checked={draftFormat === format.value}
                     onChange={(e) => setDraftFormat(e.target.value as DraftFormat)}
-                    className="mt-1"
+                    className="mt-1 accent-blue-600"
                   />
                   <div>
                     <div className="font-medium text-gray-900 dark:text-white">{format.label}</div>
@@ -256,7 +339,7 @@ export const DraftConfig = ({ teams, players, onConfigComplete }: DraftConfigPro
             <div className="space-y-2">
               {sortedTeams.map((team) => {
                 const position = teamPositions[team.id];
-                const teamCoachKids = players.filter(p => p.coachTeamId === team.id);
+                const teamCoachKids = resolvedPlayers.filter(p => p.coachTeamId === team.id);
                 const hasError = isDuplicate(position) || (position !== null && (position < 1 || position > teams.length));
 
                 return (
@@ -281,7 +364,7 @@ export const DraftConfig = ({ teams, players, onConfigComplete }: DraftConfigPro
                       } focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
                     />
                     <div className="flex-1">
-                      <span className="text-gray-900 dark:text-white font-medium">{team.name}</span>
+                      <span className="text-gray-900 dark:text-white font-medium">{getTeamDisplayName(team)}</span>
                       {teamCoachKids.length > 0 && (
                         <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
                           (Coach: {teamCoachKids.map(p => p.name).join(', ')})
@@ -305,7 +388,10 @@ export const DraftConfig = ({ teams, players, onConfigComplete }: DraftConfigPro
                   Draft order preview:
                 </p>
                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                  {draftOrder.map(id => teams.find(t => t.id === id)?.name).join(' → ')}
+                  {draftOrder.map(id => {
+                    const team = teams.find(t => t.id === id);
+                    return team ? getTeamDisplayName(team) : 'Unknown';
+                  }).join(' → ')}
                 </p>
               </div>
             )}

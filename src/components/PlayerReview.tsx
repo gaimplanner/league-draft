@@ -13,13 +13,14 @@ interface PlayerReviewProps {
   onScoringModeChange: (mode: ScoringMode) => void;
   onUpdatePlayer: (playerId: string, field: keyof Pick<Player, 'fieldingSubtotal' | 'hittingSubtotal' | 'pitchingSubtotal' | 'catchScore' | 'runningScore' | 'officialAdjust'>, value: number) => void;
   onUpdatePlayerField: (playerId: string, updates: Partial<Player>) => void;
+  onSetAllPlayers: (players: Player[]) => void;
   onTeamsUpdate: (teams: Team[]) => void;
   onLinkSiblings: (playerId1: string, playerId2: string) => void;
   onUnlinkSibling: (playerId: string) => void;
-  onNext: () => void;
+  onNext: (updatedPlayers?: Player[]) => void;
 }
 
-export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange, onUpdatePlayer, onUpdatePlayerField, onTeamsUpdate, onLinkSiblings, onUnlinkSibling, onNext }: PlayerReviewProps) => {
+export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange, onUpdatePlayer, onUpdatePlayerField, onSetAllPlayers, onTeamsUpdate, onLinkSiblings, onUnlinkSibling, onNext }: PlayerReviewProps) => {
   const [editingPlayer, setEditingPlayer] = useState<string | null>(null);
   const [expandedPlayerId, setExpandedPlayerId] = useState<string | null>(null);
   const [linkingSiblingFor, setLinkingSiblingFor] = useState<string | null>(null);
@@ -64,11 +65,15 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
   };
 
   const handleTeamNameUpdate = (teamId: string, newName: string) => {
+    // Keep the actual name (can be empty to show placeholder)
     const updatedTeams = teams.map(t =>
-      t.id === teamId ? { ...t, name: newName || `Team ${t.draftPosition}` } : t
+      t.id === teamId ? { ...t, name: newName } : t
     );
     onTeamsUpdate(updatedTeams);
   };
+
+  // Helper to get display name for a team (fallback when empty)
+  const getTeamDisplayName = (team: Team) => team.name || `Team ${team.draftPosition}`;
 
   const handleAssistantCoachesUpdate = (teamId: string, assistantCoachesText: string) => {
     // Parse comma-separated list of assistant coach last names
@@ -132,11 +137,7 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
     onUnlinkSibling(playerId);
   };
 
-  // Run auto-detection on component mount
-  useEffect(() => {
-    handleAutoDetect();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
+  // Auto-detection is now manual - user clicks button after entering coach names
   const handleAutoDetect = () => {
     const coachMatches = autoDetectCoachKids(players, teams);
     const siblingPairs = autoDetectSiblings(players);
@@ -252,7 +253,7 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
                     ? 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200'
                     : 'bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200'
                 }`}>
-                  Coach{player.coachTeamId ? `: ${assignedTeam?.name}` : ' (unassigned)'}
+                  Coach{player.coachTeamId ? `: ${assignedTeam ? getTeamDisplayName(assignedTeam) : 'Unknown'}` : ' (unassigned)'}
                 </span>
               )}
               {player.siblingId && (
@@ -280,7 +281,10 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
 
           {/* Round */}
           <div className="w-12 flex-shrink-0 text-center">
-            <span className="text-sm text-gray-600 dark:text-gray-400">R{player.projectedRound}</span>
+            <span className={`text-sm ${player.lockedToRound && player.lockedToRound !== player.projectedRound ? 'text-blue-600 dark:text-blue-400 font-medium' : 'text-gray-600 dark:text-gray-400'}`}>
+              R{player.lockedToRound ?? player.projectedRound}
+              {player.lockedToRound && player.lockedToRound !== player.projectedRound && '*'}
+            </span>
           </div>
 
           {/* Score */}
@@ -338,7 +342,7 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
                     >
                       <option value="">Select team...</option>
                       {teams.map(team => (
-                        <option key={team.id} value={team.id}>{team.name}</option>
+                        <option key={team.id} value={team.id}>{getTeamDisplayName(team)}</option>
                       ))}
                     </select>
                   </div>
@@ -445,6 +449,18 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
   });
 
   const handleNext = () => {
+    // TRACE 0: Log ALL coach's kids at the start of handleNext
+    const allCoachKids = players.filter(p => p.isCoachKid);
+    console.log('=== TRACE 0: handleNext() called ===');
+    console.log('All coach kids:', allCoachKids.map(p => ({
+      name: `${p.firstName} ${p.lastName}`,
+      coachTeamId: p.coachTeamId,
+      projectedRound: p.projectedRound,
+      totalScore: p.totalScore,
+      rank: p.rank
+    })));
+    console.log('Teams:', teams.map(t => ({ id: t.id, name: t.name })));
+
     if (unassignedCoachKids > 0) {
       if (!window.confirm(`${unassignedCoachKids} coach's kid(s) are not assigned to teams. Continue anyway?`)) {
         return;
@@ -456,9 +472,10 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
       return;
     }
 
-    // Handle same-round coach's kid conflicts
-    // A conflict only occurs when the SAME TEAM has multiple coach's kids in the SAME ROUND
-    // (Different teams having kids in the same round is NOT a conflict)
+    // ============================================================
+    // RESOLVE ALL COACH'S KID ROUND CONFLICTS
+    // A conflict occurs when the SAME TEAM has multiple coach's kids in the SAME ROUND
+    // ============================================================
 
     // Group coach's kids by their assigned team
     const coachKidsByTeam: Record<string, Player[]> = {};
@@ -470,57 +487,122 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
       coachKidsByTeam[teamId].push(p);
     });
 
-    // Check each team for same-round conflicts
+    // TRACE 0.5: Log grouped coach kids by team
+    console.log('=== TRACE 0.5: Coach kids grouped by team ===');
+    for (const [teamId, kids] of Object.entries(coachKidsByTeam)) {
+      const team = teams.find(t => t.id === teamId);
+      console.log(`Team ${team?.name || teamId}:`, kids.map(k => ({
+        name: `${k.firstName} ${k.lastName}`,
+        projectedRound: k.projectedRound,
+        score: k.totalScore
+      })));
+    }
+
+    // Build a map of all lockedToRound assignments
+    // This will be applied in a single batch update
+    const roundAssignments: Record<string, number> = {};
+    const conflictMessages: string[] = [];
+
+    // Process each team's coach's kids
     for (const [teamId, teamKids] of Object.entries(coachKidsByTeam)) {
-      // Group this team's kids by round
-      const kidsByRound: Record<number, Player[]> = {};
-      teamKids.forEach(kid => {
-        const round = kid.projectedRound;
-        if (!kidsByRound[round]) {
-          kidsByRound[round] = [];
+      const team = teams.find(t => t.id === teamId);
+      const teamDisplayName = team ? (team.name || `Team ${team.draftPosition}`) : 'Unknown Team';
+
+      // Track which rounds are already assigned for this team
+      const assignedRounds = new Set<number>();
+
+      // Sort all team's coach kids by projected round, then by score (descending) within each round
+      const sortedKids = [...teamKids].sort((a, b) => {
+        if (a.projectedRound !== b.projectedRound) {
+          return a.projectedRound - b.projectedRound;
         }
-        kidsByRound[round].push(kid);
+        return b.totalScore - a.totalScore; // Higher score first within same round
       });
 
-      // Check for conflicts (same team has multiple kids in same round)
-      for (const [roundStr, kidsInRound] of Object.entries(kidsByRound)) {
+      // Group by projected round to detect conflicts
+      const kidsByProjectedRound: Record<number, Player[]> = {};
+      sortedKids.forEach(kid => {
+        const round = kid.projectedRound;
+        if (!kidsByProjectedRound[round]) {
+          kidsByProjectedRound[round] = [];
+        }
+        kidsByProjectedRound[round].push(kid);
+      });
+
+      // Check for conflicts and build resolution info
+      for (const [roundStr, kidsInRound] of Object.entries(kidsByProjectedRound)) {
         if (kidsInRound.length > 1) {
           const round = parseInt(roundStr);
-          const team = teams.find(t => t.id === teamId);
+          // Sort by score descending within this round
+          const sortedInRound = [...kidsInRound].sort((a, b) => b.totalScore - a.totalScore);
 
-          // Sort by score descending - highest score stays in original round
-          const sortedKids = [...kidsInRound].sort((a, b) => b.totalScore - a.totalScore);
+          const conflictInfo = sortedInRound.map((p, idx) => {
+            const targetRound = idx === 0 ? round : round + idx;
+            const action = idx === 0 ? `stays in Round ${round}` : `moves to Round ${targetRound}`;
+            return `  • ${p.name} (Score: ${p.totalScore.toFixed(1)}) → ${action}`;
+          }).join('\n');
 
-          const conflictInfo = sortedKids.map((p, idx) => {
-            const action = idx === 0 ? '(stays in Round ' + round + ')' : '(moves to Round ' + (round + idx) + ')';
-            return `${p.name} - Score: ${p.totalScore.toFixed(1)} ${action}`;
-          }).join('\n• ');
-
-          const message = `${team?.name} has ${kidsInRound.length} coach's kids in Round ${round}:\n\n• ${conflictInfo}\n\nA team can only draft one coach's kid per round. The highest-scored kid stays, others are moved to subsequent rounds.\n\nContinue?`;
-
-          if (!window.confirm(message)) {
-            return;
-          }
-
-          // Auto-resolve: highest score stays, others get bumped
-          sortedKids.forEach((kid, index) => {
-            if (index === 0) {
-              // Highest score stays in their projected round
-              // Set lockedToRound explicitly so mandatory pick works
-              onUpdatePlayerField(kid.id, { lockedToRound: round });
-            } else {
-              // Lower scores get bumped to subsequent rounds
-              onUpdatePlayerField(kid.id, { lockedToRound: round + index });
-            }
-          });
-
-          // State updates are async - delay calling onNext to allow state to settle
-          setTimeout(() => onNext(), 0);
-          return;
+          conflictMessages.push(`${teamDisplayName} has ${kidsInRound.length} coach's kids in Round ${round}:\n${conflictInfo}`);
         }
+      }
+
+      // Now assign rounds for all of this team's kids, handling conflicts
+      for (const kid of sortedKids) {
+        let targetRound = kid.projectedRound;
+
+        // Find next available round (not already assigned to another coach's kid on this team)
+        while (assignedRounds.has(targetRound)) {
+          targetRound++;
+        }
+
+        assignedRounds.add(targetRound);
+        roundAssignments[kid.id] = targetRound;
       }
     }
 
+    // If there were any conflicts, show summary and ask for confirmation
+    if (conflictMessages.length > 0) {
+      const message = `Coach's Kid Round Conflicts Detected:\n\n${conflictMessages.join('\n\n')}\n\nA team can only draft one coach's kid per round. Lower-scored kids will be moved to subsequent rounds.\n\nContinue?`;
+
+      if (!window.confirm(message)) {
+        return;
+      }
+    }
+
+    // TRACE 1: Log round assignments
+    console.log('=== TRACE 1: Conflict Resolution ===');
+    console.log('roundAssignments:', roundAssignments);
+
+    // Apply all round assignments in a single batch update
+    if (Object.keys(roundAssignments).length > 0) {
+      const updatedPlayers = players.map(player => {
+        if (roundAssignments[player.id] !== undefined) {
+          // TRACE 2: Log each player update
+          console.log(`=== TRACE 2: Setting lockedToRound for ${player.firstName} ${player.lastName} to ${roundAssignments[player.id]} ===`);
+          return { ...player, lockedToRound: roundAssignments[player.id] };
+        }
+        return player;
+      });
+
+      // TRACE 3: Log updatedPlayers being passed
+      console.log('=== TRACE 3: updatedPlayers being passed to onNext ===');
+      console.log(updatedPlayers.filter(p => p.isCoachKid).map(p => ({
+        name: `${p.firstName} ${p.lastName}`,
+        projected: p.projectedRound,
+        locked: p.lockedToRound
+      })));
+
+      // Use batch update to ensure all changes are applied atomically
+      onSetAllPlayers(updatedPlayers);
+
+      // TRACE 4: About to call onNext WITH updatedPlayers
+      console.log('=== TRACE 4: About to call onNext WITH updatedPlayers ===');
+      onNext(updatedPlayers);
+      return;
+    }
+
+    // TRACE 4b: No round assignments, calling onNext without players
+    console.log('=== TRACE 4b: No round assignments, calling onNext without updatedPlayers ===');
     onNext();
   };
 
@@ -579,8 +661,8 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
                       type="text"
                       value={team.name}
                       onChange={(e) => handleTeamNameUpdate(team.id, e.target.value)}
-                      placeholder={`Team ${team.draftPosition}`}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                      placeholder={`Coach Name (e.g., Smith)`}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400"
                     />
                   </div>
                   <div>
@@ -682,6 +764,14 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
           />
         )}
 
+        {/* Legend for bumped rounds */}
+        {players.some(p => p.lockedToRound && p.lockedToRound !== p.projectedRound) && (
+          <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg flex items-center gap-2 text-sm text-blue-700 dark:text-blue-300">
+            <span className="text-blue-600 dark:text-blue-400 font-bold">*</span>
+            <span>Round adjusted due to coach's kid same-round conflict (multiple coach's kids from same team in same round)</span>
+          </div>
+        )}
+
         {/* Players List */}
         <div className="space-y-1">
           {/* Header row for list view */}
@@ -761,7 +851,7 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
                           </div>
                           {player && (
                             <div className="text-xs text-gray-500 dark:text-gray-500 mt-1">
-                              Rank #{player.rank} • Round {player.projectedRound} • Age {player.littleLeagueAge}
+                              Rank #{player.rank} • Round {player.lockedToRound ?? player.projectedRound} • Age {player.littleLeagueAge}
                             </div>
                           )}
                           <div className="text-xs text-purple-600 dark:text-purple-400 mt-1">

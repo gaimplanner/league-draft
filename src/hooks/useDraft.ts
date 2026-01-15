@@ -116,19 +116,33 @@ export const useDraft = (divisionId?: string) => {
     setDraftState((prev) => ({ ...prev, draftOrder: order }));
   }, []);
 
-  const startDraft = useCallback((format?: DraftFormat, order?: string[]) => {
+  const startDraft = useCallback((format?: DraftFormat, order?: string[], resolvedPlayers?: Player[]) => {
     console.log('🚀 startDraft called');
     console.log('🚀 Passed format:', format);
     console.log('🚀 Passed order:', order);
+    if (resolvedPlayers) {
+      console.log('🚀 Passed resolvedPlayers coach kids:', resolvedPlayers.filter(p => p.isCoachKid).map(p => ({
+        name: `${p.firstName} ${p.lastName}`,
+        projected: p.projectedRound,
+        locked: p.lockedToRound
+      })));
+    }
 
     setDraftState((prev) => {
       // Use passed values if provided, otherwise fall back to state
       const draftFormat = format ?? prev.draftFormat;
       const draftOrder = order ?? prev.draftOrder;
+      // Use resolved players if provided (with lockedToRound set)
+      const playersToUse = resolvedPlayers ?? prev.players;
 
       console.log('🚀 prev.teams:', prev.teams);
       console.log('🚀 Using draftFormat:', draftFormat);
       console.log('🚀 Using draftOrder:', draftOrder);
+      console.log('🚀 Using players with lockedToRound:', playersToUse.filter(p => p.isCoachKid).map(p => ({
+        name: `${p.firstName} ${p.lastName}`,
+        projected: p.projectedRound,
+        locked: p.lockedToRound
+      })));
 
       // Calculate the draft order for round 1
       const firstRoundOrder = calculateDraftOrder(
@@ -146,6 +160,7 @@ export const useDraft = (divisionId?: string) => {
 
       return {
         ...prev,
+        players: playersToUse,  // Use resolved players with lockedToRound
         draftFormat,
         draftOrder,
         currentRound: 1,
@@ -169,6 +184,18 @@ export const useDraft = (divisionId?: string) => {
       const team = teams.find((t) => t.id === teamId);
       if (!team) return;
 
+      // TRACE 9: Log mandatory pick check
+      console.log(`=== TRACE 9: checkMandatoryPicks for team ${team.name || teamId} round ${round} ===`);
+      const coachKidsForTeam = players.filter(p =>
+        p.isCoachKid && p.coachTeamId === teamId && !p.isDrafted
+      );
+      console.log('Undrafted coach kids for this team:', coachKidsForTeam.map(p => ({
+        name: `${p.firstName} ${p.lastName}`,
+        projected: p.projectedRound,
+        locked: p.lockedToRound,
+        effectiveRound: p.lockedToRound ?? p.projectedRound
+      })));
+
       // Check for coach's kids that must be drafted this round
       // Use lockedToRound if set (for same-round conflicts), otherwise use projectedRound
       const coachKidToDraft = players.find(
@@ -178,6 +205,8 @@ export const useDraft = (divisionId?: string) => {
           p.coachTeamId === teamId &&
           (p.lockedToRound ?? p.projectedRound) === round
       );
+
+      console.log('Coach kid match found:', coachKidToDraft ? `${coachKidToDraft.firstName} ${coachKidToDraft.lastName}` : 'NONE');
 
       if (coachKidToDraft) {
         setDraftState((prev) => ({
@@ -203,8 +232,8 @@ export const useDraft = (divisionId?: string) => {
           return requiredRound === round;
         }
 
-        // Legacy check: sibling by name match in projected round
-        if (p.sibling && p.projectedRound === round) {
+        // Legacy check: sibling by name match in effective round
+        if (p.sibling && (p.lockedToRound ?? p.projectedRound) === round) {
           const sibling = players.find(
             (other) =>
               other.name.toLowerCase() === p.sibling!.toLowerCase() &&
