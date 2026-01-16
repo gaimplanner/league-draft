@@ -305,9 +305,14 @@ export const DraftBoard = ({
 
           {/* Best Available by Age - show when no mandatory pick */}
           {!draftState.mandatoryPick && !isPublicView && (() => {
-            // Get best available player for each age
+            // Get best available player for each age (only eligible players for current team)
             const bestByAge: Record<number, typeof availablePlayers[0]> = {};
             availablePlayers.forEach(player => {
+              // Skip players that current team cannot draft
+              const isCoachKidForOtherTeam = player.isCoachKid && player.coachTeamId && player.coachTeamId !== draftState.currentTeamId;
+              const isSiblingLocked = player.lockedToTeamId && player.lockedToTeamId !== draftState.currentTeamId;
+              if (isCoachKidForOtherTeam || isSiblingLocked) return;
+
               const age = player.littleLeagueAge;
               if (!bestByAge[age] || player.totalScore > bestByAge[age].totalScore) {
                 bestByAge[age] = player;
@@ -326,17 +331,10 @@ export const DraftBoard = ({
                   <div className="inline-flex gap-3 flex-wrap justify-center">
                   {ages.map(age => {
                     const player = bestByAge[age];
-                    // Check if this player is restricted for the current team
-                    const isCoachKidForOtherTeam = player.isCoachKid && player.coachTeamId && player.coachTeamId !== draftState.currentTeamId;
-                    const isSiblingLocked = player.lockedToTeamId && player.lockedToTeamId !== draftState.currentTeamId;
-                    const isRestricted = isCoachKidForOtherTeam || isSiblingLocked;
-
                     return (
                       <div
                         key={age}
-                        className={`bg-white/10 rounded-lg p-3 flex flex-col items-center min-w-[120px] ${
-                          isRestricted ? 'opacity-50' : ''
-                        }`}
+                        className="bg-white/10 rounded-lg p-3 flex flex-col items-center min-w-[120px]"
                       >
                         <span className="text-xs text-white/60 mb-1">Age {age}</span>
                         <span className="font-medium text-white text-sm text-center">
@@ -345,16 +343,12 @@ export const DraftBoard = ({
                         <span className="text-sm text-white/80 mb-2">
                           {player.totalScore.toFixed(1)} pts
                         </span>
-                        {!isRestricted ? (
-                          <button
-                            onClick={() => onDraftPlayer(player.id)}
-                            className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded text-sm font-medium w-full"
-                          >
-                            Draft
-                          </button>
-                        ) : (
-                          <span className="text-xs text-red-300">Restricted</span>
-                        )}
+                        <button
+                          onClick={() => onDraftPlayer(player.id)}
+                          className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded text-sm font-medium w-full"
+                        >
+                          Draft
+                        </button>
                       </div>
                     );
                   })}
