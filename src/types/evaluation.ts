@@ -299,7 +299,7 @@ export interface ImportError {
 }
 
 export interface ImportWarning {
-  type: 'missing_player' | 'invalid_score' | 'duplicate_bib' | 'partial_data';
+  type: 'missing_player' | 'invalid_score' | 'duplicate_bib' | 'partial_data' | 'no_evaluation';
   message: string;
   bib?: string;
   tab?: string;
