@@ -269,9 +269,6 @@ function App() {
   ) => {
     if (!activeDivision) return;
 
-    setAllPlayers(importedPlayers);
-    setPlayers(importedPlayers);
-
     // Update teams with names and assistant coaches from evaluation
     const updatedTeams = activeDivision.teams.map((team, i) => ({
       ...team,
@@ -279,13 +276,30 @@ function App() {
       assistantCoaches: assistantCoaches[i] || [],
     }));
 
+    // Build mapping from temporary team IDs (team-0, team-1) to actual division team IDs
+    // The evaluation import generates team IDs as "team-{index}" but division teams have IDs like "majors-team-1"
+    const teamIdMapping: Record<string, string> = {};
+    activeDivision.teams.forEach((team, i) => {
+      teamIdMapping[`team-${i}`] = team.id;
+    });
+
+    // Fix coachTeamId references to use actual division team IDs
+    const fixedPlayers = importedPlayers.map(player => {
+      if (player.coachTeamId && teamIdMapping[player.coachTeamId]) {
+        return { ...player, coachTeamId: teamIdMapping[player.coachTeamId] };
+      }
+      return player;
+    });
+
+    setAllPlayers(fixedPlayers);
+    setPlayers(fixedPlayers);
     setTeamsState(updatedTeams);
 
-    // Update division with imported players and updated teams
+    // Update division with fixed players and updated teams
     updateActiveDivision({
-      players: importedPlayers,
+      players: fixedPlayers,
       teams: updatedTeams,
-      rosterSize: Math.ceil(importedPlayers.length / activeDivision.teamCount),
+      rosterSize: Math.ceil(fixedPlayers.length / activeDivision.teamCount),
     });
 
     setImportMode(null);
