@@ -127,7 +127,8 @@ export const useDraft = (divisionId?: string) => {
       console.log('🚀 Passed resolvedPlayers coach kids:', resolvedPlayers.filter(p => p.isCoachKid).map(p => ({
         name: `${p.firstName} ${p.lastName}`,
         projected: p.projectedRound,
-        locked: p.lockedToRound
+        locked: p.lockedToRound,
+        coachTeamId: p.coachTeamId
       })));
     }
 
@@ -144,7 +145,8 @@ export const useDraft = (divisionId?: string) => {
       console.log('🚀 Using players with lockedToRound:', playersToUse.filter(p => p.isCoachKid).map(p => ({
         name: `${p.firstName} ${p.lastName}`,
         projected: p.projectedRound,
-        locked: p.lockedToRound
+        locked: p.lockedToRound,
+        coachTeamId: p.coachTeamId
       })));
 
       // Calculate the draft order for round 1
@@ -161,6 +163,10 @@ export const useDraft = (divisionId?: string) => {
       console.log('🚀 firstTeamId:', firstTeamId);
       console.log('🚀 Setting draft state with currentTeamId:', firstTeamId);
 
+      // Check for initial mandatory pick
+      const initialMandatory = getMandatoryPick(playersToUse, firstTeamId, 1);
+      console.log('🚀 Initial mandatory pick check:', initialMandatory);
+
       return {
         ...prev,
         players: playersToUse,  // Use resolved players with lockedToRound
@@ -170,6 +176,12 @@ export const useDraft = (divisionId?: string) => {
         currentPickInRound: 1,
         currentRoundOrder: firstRoundOrder,
         currentTeamId: firstTeamId,
+        // Set initial mandatory pick if found
+        mandatoryPick: initialMandatory ? {
+          playerId: initialMandatory.player.id,
+          reason: initialMandatory.reason,
+          siblingName: initialMandatory.siblingName,
+        } : undefined,
       };
     });
 

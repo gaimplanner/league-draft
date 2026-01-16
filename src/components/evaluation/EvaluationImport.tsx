@@ -9,7 +9,7 @@ import { DetectionModal } from './DetectionModal';
 
 interface EvaluationImportProps {
   teamCount: number;
-  onComplete: (players: Player[]) => void;
+  onComplete: (players: Player[], teamNames: string[], assistantCoaches: string[][]) => void;
   onCancel: () => void;
 }
 
@@ -46,13 +46,14 @@ export function EvaluationImport({ teamCount, onComplete, onCancel }: Evaluation
     deselectAllDetections,
     clearCoachKids,
     clearSiblings,
+    toggleAllStar,
     getPlayers,
     exportCSV,
   } = useEvaluationImport(teamCount);
 
   const handleContinueToDraft = () => {
     const players = getPlayers();
-    onComplete(players);
+    onComplete(players, teamNames, assistantCoaches);
   };
 
   const handleBack = () => {
@@ -155,6 +156,7 @@ export function EvaluationImport({ teamCount, onComplete, onCancel }: Evaluation
               onRunAutoDetection={runAutoDetection}
               onClearCoachKids={clearCoachKids}
               onClearSiblings={clearSiblings}
+              onToggleAllStar={toggleAllStar}
             />
 
             <ExportControls

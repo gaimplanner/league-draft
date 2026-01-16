@@ -20,24 +20,25 @@ export function normalizeScore(
     return null;
   }
 
-  // Clamp value to expected range
-  const clampedValue = Math.max(inputMin, Math.min(inputMax, value));
+  // For scales/counts (not lowerIsBetter): 0 = 0%, positive values get positive scores
+  // This ensures a raw score of 1 doesn't become 0% - only missing/zero scores are 0%
+  if (!lowerIsBetter) {
+    if (value <= 0) return 0;           // Zero or below = 0%
+    if (value >= inputMax) return 100;  // At or above max = 100%
 
-  // Calculate normalized value
+    // Linear scale from 0 to inputMax
+    // E.g., for 0-4 scale: 1=25, 2=50, 3=75, 4=100
+    return (value / inputMax) * 100;
+  }
+
+  // For times (lowerIsBetter): keep existing logic
+  // Lower value = higher score
+  const clampedValue = Math.max(inputMin, Math.min(inputMax, value));
   const range = inputMax - inputMin;
   if (range === 0) {
     return 50; // If min === max, return middle value
   }
-
-  if (lowerIsBetter) {
-    // For times: lower value = higher score
-    // E.g., fastest time (3.5s) gets 100, slowest (7.0s) gets 0
-    return ((inputMax - clampedValue) / range) * 100;
-  } else {
-    // For scales/counts: higher value = higher score
-    // E.g., rating of 5 gets 100, rating of 1 gets 0
-    return ((clampedValue - inputMin) / range) * 100;
-  }
+  return ((inputMax - clampedValue) / range) * 100;
 }
 
 /**

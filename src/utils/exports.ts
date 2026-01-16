@@ -175,6 +175,89 @@ ${sectionLine}
 }
 
 /**
+ * Generate simulation draft board with two sections:
+ * 1. Grid view (Rounds x Teams) - quick visual of who each team got, with team totals
+ * 2. Pick-by-pick - sequential draft order showing Round, Pick #, Team, Player, Score
+ */
+export function generateSimulationDraftBoard(
+  teams: Team[],
+  draftOrder: string[]
+): string {
+  // Get teams in draft order
+  const orderedTeams = draftOrder.map(id => teams.find(t => t.id === id)).filter((t): t is Team => t !== undefined);
+
+  // Find max rounds (all teams should have same roster size)
+  const maxRounds = Math.max(...teams.map(t => t.roster.length));
+
+  // === SECTION 1: GRID VIEW ===
+  const gridHeader = ['Round', 'Picks', ...orderedTeams.map(t => getTeamDisplayName(t))];
+  const gridRows: string[][] = [];
+
+  for (let round = 1; round <= maxRounds; round++) {
+    const pickStart = (round - 1) * teams.length + 1;
+    const pickEnd = round * teams.length;
+
+    const row = [
+      round.toString(),
+      `${pickStart}-${pickEnd}`,
+      ...orderedTeams.map(team => {
+        const player = team.roster.find(p => p.draftedInRound === round);
+        return player ? `${player.firstName} ${player.lastName}` : '';
+      })
+    ];
+    gridRows.push(row);
+  }
+
+  // Add team total scores row
+  const totalRow = [
+    'TOTAL',
+    '',
+    ...orderedTeams.map(team => team.totalScore.toFixed(1))
+  ];
+  gridRows.push(totalRow);
+
+  // === SECTION 2: PICK BY PICK ===
+  // Collect all drafted players and sort by pick number
+  const allPicks: { round: number; pick: number; team: string; player: string; score: number }[] = [];
+
+  teams.forEach(team => {
+    team.roster.forEach(player => {
+      if (player.draftedAtPick && player.draftedInRound) {
+        allPicks.push({
+          round: player.draftedInRound,
+          pick: player.draftedAtPick,
+          team: getTeamDisplayName(team),
+          player: `${player.firstName} ${player.lastName}`,
+          score: player.totalScore
+        });
+      }
+    });
+  });
+
+  allPicks.sort((a, b) => a.pick - b.pick);
+
+  const pickHeader = ['Round', 'Pick', 'Team', 'Player', 'Score'];
+  const pickRows = allPicks.map(p => [
+    p.round.toString(),
+    p.pick.toString(),
+    p.team,
+    p.player,
+    p.score.toFixed(1)
+  ]);
+
+  // Combine sections
+  const output = [
+    '=== DRAFT BOARD ===',
+    [gridHeader, ...gridRows].map(row => row.join(',')).join('\n'),
+    '',
+    '=== PICK BY PICK ===',
+    [pickHeader, ...pickRows].map(row => row.join(',')).join('\n')
+  ].join('\n');
+
+  return output;
+}
+
+/**
  * Download text content as a file
  */
 export function downloadTextFile(content: string, filename: string): void {

@@ -261,20 +261,49 @@ function App() {
   };
 
   // Handle Excel evaluation import completion
-  const handleEvaluationComplete = (importedPlayers: Player[]) => {
+  // Skips review phase since all adjustments are done in the evaluation summary
+  const handleEvaluationComplete = (
+    importedPlayers: Player[],
+    teamNames: string[],
+    assistantCoaches: string[][]
+  ) => {
     if (!activeDivision) return;
 
-    setAllPlayers(importedPlayers);
-    setPlayers(importedPlayers);
+    // Update teams with names and assistant coaches from evaluation
+    const updatedTeams = activeDivision.teams.map((team, i) => ({
+      ...team,
+      name: teamNames[i] || team.name,
+      assistantCoaches: assistantCoaches[i] || [],
+    }));
 
-    // Update division with imported players
+    // Build mapping from temporary team IDs (team-0, team-1) to actual division team IDs
+    // The evaluation import generates team IDs as "team-{index}" but division teams have IDs like "majors-team-1"
+    const teamIdMapping: Record<string, string> = {};
+    activeDivision.teams.forEach((team, i) => {
+      teamIdMapping[`team-${i}`] = team.id;
+    });
+
+    // Fix coachTeamId references to use actual division team IDs
+    const fixedPlayers = importedPlayers.map(player => {
+      if (player.coachTeamId && teamIdMapping[player.coachTeamId]) {
+        return { ...player, coachTeamId: teamIdMapping[player.coachTeamId] };
+      }
+      return player;
+    });
+
+    setAllPlayers(fixedPlayers);
+    setPlayers(fixedPlayers);
+    setTeamsState(updatedTeams);
+
+    // Update division with fixed players and updated teams
     updateActiveDivision({
-      players: importedPlayers,
-      rosterSize: Math.ceil(importedPlayers.length / activeDivision.teamCount),
+      players: fixedPlayers,
+      teams: updatedTeams,
+      rosterSize: Math.ceil(fixedPlayers.length / activeDivision.teamCount),
     });
 
     setImportMode(null);
-    setPhase('review');
+    setPhase('config');  // Skip review, go straight to draft config
   };
 
   // Handle scoring mode change
