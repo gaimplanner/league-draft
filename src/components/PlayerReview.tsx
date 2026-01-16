@@ -1,11 +1,10 @@
 import { useState, useEffect } from 'react';
-import { ChevronRight, Users, Link, Search, Wand2, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { ChevronRight, Users, Link, Wand2, CheckCircle2 } from 'lucide-react';
 import { Player, Team, ScoringMode } from '../types';
 import { autoDetectCoachKids, autoDetectSiblings, CoachKidMatch, SiblingMatch } from '../utils/coachKidDetection';
 import { useScoringWeights } from '../hooks/useScoringWeights';
-import { ScoringWeightsConfig } from './ScoringWeightsConfig';
 import { recalculateAllScores } from '../utils/scoreCalculation';
-import { PlayerCard } from './PlayerCard';
+import { PlayerReviewTable } from './PlayerReviewTable';
 
 interface PlayerReviewProps {
   players: Player[];
@@ -22,9 +21,6 @@ interface PlayerReviewProps {
 }
 
 export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange, onUpdatePlayer, onUpdatePlayerField, onSetAllPlayers, onTeamsUpdate, onLinkSiblings, onUnlinkSibling, onNext }: PlayerReviewProps) => {
-  const [editingPlayer, setEditingPlayer] = useState<string | null>(null);
-  const [expandedPlayerId, setExpandedPlayerId] = useState<string | null>(null);
-  const [linkingSiblingFor, setLinkingSiblingFor] = useState<string | null>(null);
   const [autoDetectedMatches, setAutoDetectedMatches] = useState<CoachKidMatch[]>([]);
   const [siblingMatches, setSiblingMatches] = useState<SiblingMatch[]>([]);
   const [showAutoDetectModal, setShowAutoDetectModal] = useState(false);
@@ -60,13 +56,7 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
     }
   }, [weights, scoringMode]);
 
-  const handleEdit = (playerId: string, field: keyof Pick<Player, 'fieldingSubtotal' | 'hittingSubtotal' | 'pitchingSubtotal' | 'catchScore' | 'runningScore' | 'officialAdjust'>, value: string) => {
-    const numValue = parseFloat(value) || 0;
-    onUpdatePlayer(playerId, field, numValue);
-  };
-
   const handleTeamNameUpdate = (teamId: string, newName: string) => {
-    // Keep the actual name (can be empty to show placeholder)
     const updatedTeams = teams.map(t =>
       t.id === teamId ? { ...t, name: newName } : t
     );
@@ -74,7 +64,6 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
   };
 
   const handleAssistantCoachesUpdate = (teamId: string, assistantCoachesText: string) => {
-    // Parse comma-separated list of assistant coach last names
     const assistantCoaches = assistantCoachesText
       .split(',')
       .map(name => name.trim())
@@ -88,13 +77,9 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
 
   const handleCoachKidToggle = (playerId: string, isCoachKid: boolean) => {
     if (isCoachKid) {
-      // Turning ON coach's kid - set flag
       onUpdatePlayerField(playerId, { isCoachKid: true });
     } else {
-      // Turning OFF - remove coach assignment
       onUpdatePlayerField(playerId, { isCoachKid: false, coachTeamId: undefined });
-
-      // Remove from team's coachKids array
       const updatedTeams = teams.map(t => ({
         ...t,
         coachKids: t.coachKids.filter(id => id !== playerId)
@@ -104,19 +89,14 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
   };
 
   const handleCoachTeamAssignment = (playerId: string, teamId: string) => {
-    // Update player's coachTeamId
     onUpdatePlayerField(playerId, { coachTeamId: teamId });
-
-    // Update team's coachKids array
     const updatedTeams = teams.map(t => {
       if (t.id === teamId) {
-        // Add to this team if not already there
         return {
           ...t,
           coachKids: t.coachKids.includes(playerId) ? t.coachKids : [...t.coachKids, playerId]
         };
       } else {
-        // Remove from other teams
         return {
           ...t,
           coachKids: t.coachKids.filter(id => id !== playerId)
@@ -128,14 +108,12 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
 
   const handleSiblingLink = (playerId: string, siblingId: string) => {
     onLinkSiblings(playerId, siblingId);
-    setLinkingSiblingFor(null);
   };
 
   const handleSiblingUnlink = (playerId: string) => {
     onUnlinkSibling(playerId);
   };
 
-  // Auto-detection is now manual - user clicks button after entering coach names
   const handleAutoDetect = () => {
     const coachMatches = autoDetectCoachKids(players, teams);
     const siblingPairs = autoDetectSiblings(players);
@@ -144,7 +122,6 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
     setSiblingMatches(siblingPairs);
 
     if (coachMatches.length > 0 || siblingPairs.length > 0) {
-      // Pre-select only NEW matches (not already marked/linked)
       setSelectedMatches(new Set(coachMatches.filter(m => !m.alreadyMarked).map(m => m.playerId)));
       setSelectedSiblingPairs(new Set(siblingPairs.filter(s => !s.alreadyLinked).map(s => `${s.player1Id}-${s.player2Id}`)));
       setShowAutoDetectModal(true);
@@ -176,20 +153,16 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
   };
 
   const handleApplyMatches = () => {
-    // Apply selected coach's kid matches
     autoDetectedMatches.forEach(match => {
       if (selectedMatches.has(match.playerId)) {
-        // Mark as coach's kid and assign to team
         handleCoachKidToggle(match.playerId, true);
         handleCoachTeamAssignment(match.playerId, match.teamId);
       }
     });
 
-    // Apply selected sibling matches
     siblingMatches.forEach(match => {
       const pairKey = `${match.player1Id}-${match.player2Id}`;
       if (selectedSiblingPairs.has(pairKey)) {
-        // Link siblings
         handleSiblingLink(match.player1Id, match.player2Id);
       }
     });
@@ -214,7 +187,6 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
   const coachKidsCount = players.filter(p => p.isCoachKid).length;
   const unassignedCoachKids = players.filter(p => p.isCoachKid && !p.coachTeamId).length;
 
-  // Validate sibling links are bidirectional
   const brokenSiblingLinks = players.filter(p => {
     if (!p.siblingId) return false;
     const sibling = players.find(s => s.id === p.siblingId);
@@ -233,12 +205,7 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
       return;
     }
 
-    // ============================================================
-    // RESOLVE ALL COACH'S KID ROUND CONFLICTS
-    // A conflict occurs when the SAME TEAM has multiple coach's kids in the SAME ROUND
-    // ============================================================
-
-    // Group coach's kids by their assigned team
+    // Resolve coach's kid round conflicts
     const coachKidsByTeam: Record<string, Player[]> = {};
     players.filter(p => p.isCoachKid && p.coachTeamId).forEach(p => {
       const teamId = p.coachTeamId!;
@@ -248,28 +215,22 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
       coachKidsByTeam[teamId].push(p);
     });
 
-    // Build a map of all lockedToRound assignments
-    // This will be applied in a single batch update
     const roundAssignments: Record<string, number> = {};
     const conflictMessages: string[] = [];
 
-    // Process each team's coach's kids
     for (const [teamId, teamKids] of Object.entries(coachKidsByTeam)) {
       const team = teams.find(t => t.id === teamId);
       const teamDisplayName = team ? (team.name || `Team ${team.draftPosition}`) : 'Unknown Team';
 
-      // Track which rounds are already assigned for this team
       const assignedRounds = new Set<number>();
 
-      // Sort all team's coach kids by projected round, then by score (descending) within each round
       const sortedKids = [...teamKids].sort((a, b) => {
         if (a.projectedRound !== b.projectedRound) {
           return a.projectedRound - b.projectedRound;
         }
-        return b.totalScore - a.totalScore; // Higher score first within same round
+        return b.totalScore - a.totalScore;
       });
 
-      // Group by projected round to detect conflicts
       const kidsByProjectedRound: Record<number, Player[]> = {};
       sortedKids.forEach(kid => {
         const round = kid.projectedRound;
@@ -279,11 +240,9 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
         kidsByProjectedRound[round].push(kid);
       });
 
-      // Check for conflicts and build resolution info
       for (const [roundStr, kidsInRound] of Object.entries(kidsByProjectedRound)) {
         if (kidsInRound.length > 1) {
           const round = parseInt(roundStr);
-          // Sort by score descending within this round
           const sortedInRound = [...kidsInRound].sort((a, b) => b.totalScore - a.totalScore);
 
           const conflictInfo = sortedInRound.map((p, idx) => {
@@ -296,11 +255,9 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
         }
       }
 
-      // Now assign rounds for all of this team's kids, handling conflicts
       for (const kid of sortedKids) {
         let targetRound = kid.projectedRound;
 
-        // Find next available round (not already assigned to another coach's kid on this team)
         while (assignedRounds.has(targetRound)) {
           targetRound++;
         }
@@ -310,7 +267,6 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
       }
     }
 
-    // If there were any conflicts, show summary and ask for confirmation
     if (conflictMessages.length > 0) {
       const message = `Coach's Kid Round Conflicts Detected:\n\n${conflictMessages.join('\n\n')}\n\nA team can only draft one coach's kid per round. Lower-scored kids will be moved to subsequent rounds.\n\nContinue?`;
 
@@ -319,7 +275,6 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
       }
     }
 
-    // Apply all round assignments in a single batch update
     if (Object.keys(roundAssignments).length > 0) {
       const updatedPlayers = players.map(player => {
         if (roundAssignments[player.id] !== undefined) {
@@ -328,9 +283,7 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
         return player;
       });
 
-      // Use batch update to ensure all changes are applied atomically
       onSetAllPlayers(updatedPlayers);
-
       onNext(updatedPlayers);
       return;
     }
@@ -341,160 +294,28 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
       <div className="max-w-7xl mx-auto">
+        {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Review Players & Setup Teams</h1>
             <p className="text-gray-600 dark:text-gray-400 mt-1">
-              {players.length} players loaded • {coachKidsCount} coach's kids • Edit scores, assign coaches, link siblings
+              {players.length} players loaded • {coachKidsCount} coach's kids • Click cells to edit scores
             </p>
             {unassignedCoachKids > 0 && (
               <p className="text-sm text-orange-600 dark:text-orange-400 mt-1">
-                ⚠ {unassignedCoachKids} coach's kid{unassignedCoachKids > 1 ? 's' : ''} not assigned to a team
+                {unassignedCoachKids} coach's kid{unassignedCoachKids > 1 ? 's' : ''} not assigned to a team
               </p>
             )}
           </div>
 
-          <div className="flex gap-3">
-            <button
-              onClick={handleAutoDetect}
-              className="px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg font-medium flex items-center gap-2"
-              title="Auto-detect coach's kids and siblings by matching last names"
-            >
-              <Search className="w-5 h-5" />
-              <span className="hidden sm:inline">Find Coaches' Kids and Siblings</span>
-            </button>
-
-            <button
-              onClick={handleNext}
-              className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium flex items-center gap-2"
-            >
-              Continue to Draft Setup
-              <ChevronRight className="w-5 h-5" />
-            </button>
-          </div>
+          <button
+            onClick={handleNext}
+            className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium flex items-center gap-2"
+          >
+            Continue to Draft Setup
+            <ChevronRight className="w-5 h-5" />
+          </button>
         </div>
-
-        {/* Team Names Section */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700 mb-6">
-          <div className="flex items-center gap-2 mb-4">
-            <Users className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Team Names & Coaches</h2>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {teams.map(team => {
-              const teamCoachKids = players.filter(p => p.coachTeamId === team.id);
-              return (
-                <div key={team.id} className="space-y-2">
-                  <div>
-                    <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
-                      Head Coach (Team Name)
-                    </label>
-                    <input
-                      type="text"
-                      value={team.name}
-                      onChange={(e) => handleTeamNameUpdate(team.id, e.target.value)}
-                      placeholder={`Coach Name (e.g., Smith)`}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
-                      Assistant Coaches (comma-separated)
-                    </label>
-                    <input
-                      type="text"
-                      value={team.assistantCoaches.join(', ')}
-                      onChange={(e) => handleAssistantCoachesUpdate(team.id, e.target.value)}
-                      placeholder="Smith, Jones"
-                      className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                    />
-                  </div>
-                  {teamCoachKids.length > 0 && (
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      Coach's Kids: {teamCoachKids.map(p => p.name).join(', ')}
-                    </p>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Scoring Mode Toggle */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700 mb-6">
-          <div className="flex items-start gap-4">
-            <div className="flex-1">
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">Scoring Mode</h2>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                Choose how to interpret the imported CSV scores.
-              </p>
-
-              <div className="flex gap-4">
-                <label className={`flex-1 p-4 rounded-lg border-2 cursor-pointer transition-all ${
-                  scoringMode === 'pre-weighted'
-                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                    : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
-                }`}>
-                  <input
-                    type="radio"
-                    name="scoringMode"
-                    value="pre-weighted"
-                    checked={scoringMode === 'pre-weighted'}
-                    onChange={() => onScoringModeChange('pre-weighted')}
-                    className="sr-only"
-                  />
-                  <div className="font-medium text-gray-900 dark:text-white mb-1">
-                    Pre-weighted Scores
-                  </div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">
-                    CSV values are already weighted (spreadsheet applied weights). Scores will be summed directly.
-                  </div>
-                </label>
-
-                <label className={`flex-1 p-4 rounded-lg border-2 cursor-pointer transition-all ${
-                  scoringMode === 'raw'
-                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                    : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
-                }`}>
-                  <input
-                    type="radio"
-                    name="scoringMode"
-                    value="raw"
-                    checked={scoringMode === 'raw'}
-                    onChange={() => onScoringModeChange('raw')}
-                    className="sr-only"
-                  />
-                  <div className="font-medium text-gray-900 dark:text-white mb-1">
-                    Raw Scores
-                  </div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">
-                    CSV values are raw evaluation scores. App will apply weight percentages below.
-                  </div>
-                </label>
-              </div>
-
-              {scoringMode === 'pre-weighted' && (
-                <div className="mt-4 flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
-                  <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
-                  <div className="text-sm text-amber-800 dark:text-amber-200">
-                    <strong>Pre-weighted mode:</strong> Weight configuration is disabled. Scores from the CSV will be used as-is.
-                    If player totals look incorrect (too low), your CSV may contain raw scores - switch to "Raw Scores" mode.
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Scoring Weights Configuration (only shown in raw mode) */}
-        {scoringMode === 'raw' && (
-          <ScoringWeightsConfig
-            weights={weights}
-            onUpdateWeight={updateWeight}
-            onReset={resetToDefaults}
-            validation={validation}
-          />
-        )}
 
         {/* Legend for bumped rounds */}
         {players.some(p => p.lockedToRound && p.lockedToRound !== p.projectedRound) && (
@@ -504,37 +325,25 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
           </div>
         )}
 
-        {/* Players List */}
-        <div className="space-y-1">
-          {/* Header row for list view */}
-          <div className="hidden md:flex items-center gap-3 px-3 py-2 bg-gray-100 dark:bg-gray-800 rounded-lg text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-            <div className="w-5 flex-shrink-0"></div>
-            <div className="w-12 flex-shrink-0">Rank</div>
-            <div className="flex-1">Player</div>
-            <div className="w-12 flex-shrink-0 text-center">Age</div>
-            <div className="w-12 flex-shrink-0 text-center">Round</div>
-            <div className="w-16 flex-shrink-0 text-right">Score</div>
-          </div>
-          {players.map((player) => (
-            <PlayerCard
-              key={player.id}
-              player={player}
-              teams={teams}
-              players={players}
-              isExpanded={expandedPlayerId === player.id}
-              editingPlayer={editingPlayer}
-              linkingSiblingFor={linkingSiblingFor}
-              onToggleExpand={setExpandedPlayerId}
-              onToggleEditing={setEditingPlayer}
-              onToggleLinkingSibling={setLinkingSiblingFor}
-              onCoachKidToggle={handleCoachKidToggle}
-              onCoachTeamAssignment={handleCoachTeamAssignment}
-              onSiblingLink={handleSiblingLink}
-              onSiblingUnlink={handleSiblingUnlink}
-              onEdit={handleEdit}
-            />
-          ))}
-        </div>
+        {/* Player Review Table */}
+        <PlayerReviewTable
+          players={players}
+          teams={teams}
+          scoringMode={scoringMode}
+          weights={weights}
+          weightsValidation={validation}
+          onScoringModeChange={onScoringModeChange}
+          onUpdateWeight={updateWeight}
+          onResetWeights={resetToDefaults}
+          onUpdatePlayer={onUpdatePlayer}
+          onCoachKidToggle={handleCoachKidToggle}
+          onCoachTeamAssignment={handleCoachTeamAssignment}
+          onSiblingLink={handleSiblingLink}
+          onSiblingUnlink={handleSiblingUnlink}
+          onTeamNameUpdate={handleTeamNameUpdate}
+          onAssistantCoachesUpdate={handleAssistantCoachesUpdate}
+          onRunAutoDetection={handleAutoDetect}
+        />
       </div>
 
       {/* Auto-Detect Modal */}
@@ -568,54 +377,54 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
                         Coach's Kids ({autoDetectedMatches.length})
                       </h3>
                       <div className="space-y-3">
-                  {autoDetectedMatches.map((match) => {
-                    const player = players.find(p => p.id === match.playerId);
-                    const isSelected = selectedMatches.has(match.playerId);
+                        {autoDetectedMatches.map((match) => {
+                          const player = players.find(p => p.id === match.playerId);
+                          const isSelected = selectedMatches.has(match.playerId);
 
-                    return (
-                      <label
-                        key={match.playerId}
-                        className={`flex items-start gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all ${
-                          match.alreadyMarked
-                            ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
-                            : isSelected
-                            ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20'
-                            : 'border-gray-200 dark:border-gray-700 hover:border-purple-300 dark:hover:border-purple-700'
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={isSelected || match.alreadyMarked}
-                          onChange={() => handleToggleMatch(match.playerId)}
-                          className="mt-1 w-5 h-5 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-                        />
-                        <div className="flex-1">
-                          <div className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                            {match.playerName}
-                            {match.alreadyMarked && (
-                              <span className="text-xs bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 px-2 py-0.5 rounded">
-                                Already assigned
-                              </span>
-                            )}
-                            {isSelected && !match.alreadyMarked && (
-                              <CheckCircle2 className="w-5 h-5 text-purple-600" />
-                            )}
-                          </div>
-                          <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                            → {match.teamName}
-                          </div>
-                          {player && (
-                            <div className="text-xs text-gray-500 dark:text-gray-500 mt-1">
-                              Rank #{player.rank} • Round {player.lockedToRound ?? player.projectedRound} • Age {player.littleLeagueAge}
-                            </div>
-                          )}
-                          <div className="text-xs text-purple-600 dark:text-purple-400 mt-1">
-                            {match.reason}
-                          </div>
-                        </div>
-                      </label>
-                    );
-                  })}
+                          return (
+                            <label
+                              key={match.playerId}
+                              className={`flex items-start gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                                match.alreadyMarked
+                                  ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
+                                  : isSelected
+                                  ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20'
+                                  : 'border-gray-200 dark:border-gray-700 hover:border-purple-300 dark:hover:border-purple-700'
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isSelected || match.alreadyMarked}
+                                onChange={() => handleToggleMatch(match.playerId)}
+                                className="mt-1 w-5 h-5 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                              />
+                              <div className="flex-1">
+                                <div className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                                  {match.playerName}
+                                  {match.alreadyMarked && (
+                                    <span className="text-xs bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 px-2 py-0.5 rounded">
+                                      Already assigned
+                                    </span>
+                                  )}
+                                  {isSelected && !match.alreadyMarked && (
+                                    <CheckCircle2 className="w-5 h-5 text-purple-600" />
+                                  )}
+                                </div>
+                                <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                                  → {match.teamName}
+                                </div>
+                                {player && (
+                                  <div className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                                    Rank #{player.rank} • Round {player.lockedToRound ?? player.projectedRound} • Age {player.littleLeagueAge}
+                                  </div>
+                                )}
+                                <div className="text-xs text-purple-600 dark:text-purple-400 mt-1">
+                                  {match.reason}
+                                </div>
+                              </div>
+                            </label>
+                          );
+                        })}
                       </div>
                     </div>
                   )}
