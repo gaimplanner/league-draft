@@ -292,6 +292,7 @@ function App() {
     setAllPlayers(fixedPlayers);
     setPlayers(fixedPlayers);
     setTeamsState(updatedTeams);
+    setTeams(updatedTeams);  // Sync teams to draft state so names display on draft board
 
     // Update division with fixed players and updated teams
     updateActiveDivision({
