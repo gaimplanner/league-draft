@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { ChevronRight, CheckCircle, AlertCircle, Users } from 'lucide-react';
 import { Team, Player, DraftFormat } from '../types';
 import { SimulationModal } from './SimulationModal';
+import { getTeamDisplayName } from '../utils/teamUtils';
 
 interface DraftConfigProps {
   teams: Team[];
@@ -44,9 +45,6 @@ function validateDraftOrder(positions: (number | null)[], teamCount: number): Or
 
   return { valid: true, duplicates: [], missing: [] };
 }
-
-// Helper to get display name for a team (fallback when empty)
-const getTeamDisplayName = (team: Team) => team.name || `Team ${team.draftPosition}`;
 
 export const DraftConfig = ({ teams, players, onConfigComplete }: DraftConfigProps) => {
   const [draftFormat, setDraftFormat] = useState<DraftFormat | null>(null);
@@ -101,28 +99,12 @@ export const DraftConfig = ({ teams, players, onConfigComplete }: DraftConfigPro
         const newLockedRound = roundAssignments[player.id];
         // Only update if different from current or if not set
         if (player.lockedToRound !== newLockedRound) {
-          console.log(`=== DraftConfig: Setting lockedToRound for ${player.firstName} ${player.lastName} to ${newLockedRound} (was ${player.lockedToRound}) ===`);
           return { ...player, lockedToRound: newLockedRound };
         }
       }
       return player;
     });
   }, [players]);
-
-  // TRACE 8: Log players on mount
-  useEffect(() => {
-    console.log('=== TRACE 8: DraftConfig mounted ===');
-    console.log('Coach kids from props:', players.filter(p => p.isCoachKid).map(p => ({
-      name: `${p.firstName} ${p.lastName}`,
-      projected: p.projectedRound,
-      locked: p.lockedToRound
-    })));
-    console.log('Coach kids after resolution:', resolvedPlayers.filter(p => p.isCoachKid).map(p => ({
-      name: `${p.firstName} ${p.lastName}`,
-      projected: p.projectedRound,
-      locked: p.lockedToRound
-    })));
-  }, [players, resolvedPlayers]);
 
   // Initialize team positions from teams (all empty by default)
   useEffect(() => {
@@ -231,16 +213,6 @@ export const DraftConfig = ({ teams, players, onConfigComplete }: DraftConfigPro
       alert(`Please fix the draft order: ${validation.error}`);
       return;
     }
-
-    // Debug: Log the draft order and resolved players being passed
-    console.log('🎯 DraftConfig.handleStart - draftOrder:', draftOrder);
-    console.log('🎯 DraftConfig.handleStart - teams:', teams.map(t => ({ id: t.id, name: t.name })));
-    console.log('🎯 DraftConfig.handleStart - teamPositions:', teamPositions);
-    console.log('🎯 DraftConfig.handleStart - resolvedPlayers coach kids:', resolvedPlayers.filter(p => p.isCoachKid).map(p => ({
-      name: `${p.firstName} ${p.lastName}`,
-      projected: p.projectedRound,
-      locked: p.lockedToRound
-    })));
 
     onConfigComplete(draftFormat, draftOrder, resolvedPlayers);
   };

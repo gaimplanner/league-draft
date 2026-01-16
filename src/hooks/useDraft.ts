@@ -33,6 +33,9 @@ export const useDraft = (divisionId?: string) => {
   // Track if we've loaded initial state
   const hasLoaded = useRef(false);
 
+  // Debounce ref for localStorage saves
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+
   // Load from localStorage on mount or when divisionId changes
   useEffect(() => {
     if (!divisionId) {
@@ -66,11 +69,24 @@ export const useDraft = (divisionId?: string) => {
   }, [divisionId]);
 
   // Save to localStorage whenever state changes (if we have a divisionId)
+  // Debounced to prevent UI jank during rapid updates
   useEffect(() => {
     if (!divisionId || !hasLoaded.current) return;
 
-    const storageKey = getStorageKey(divisionId);
-    localStorage.setItem(storageKey, JSON.stringify({ phase, draftState }));
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+
+    saveTimeoutRef.current = setTimeout(() => {
+      const storageKey = getStorageKey(divisionId);
+      localStorage.setItem(storageKey, JSON.stringify({ phase, draftState }));
+    }, 300);
+
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
   }, [phase, draftState, divisionId]);
 
   // Load state from a division object (called when selecting a division)
@@ -120,34 +136,12 @@ export const useDraft = (divisionId?: string) => {
   }, []);
 
   const startDraft = useCallback((format?: DraftFormat, order?: string[], resolvedPlayers?: Player[]) => {
-    console.log('🚀 startDraft called');
-    console.log('🚀 Passed format:', format);
-    console.log('🚀 Passed order:', order);
-    if (resolvedPlayers) {
-      console.log('🚀 Passed resolvedPlayers coach kids:', resolvedPlayers.filter(p => p.isCoachKid).map(p => ({
-        name: `${p.firstName} ${p.lastName}`,
-        projected: p.projectedRound,
-        locked: p.lockedToRound,
-        coachTeamId: p.coachTeamId
-      })));
-    }
-
     setDraftState((prev) => {
       // Use passed values if provided, otherwise fall back to state
       const draftFormat = format ?? prev.draftFormat;
       const draftOrder = order ?? prev.draftOrder;
       // Use resolved players if provided (with lockedToRound set)
       const playersToUse = resolvedPlayers ?? prev.players;
-
-      console.log('🚀 prev.teams:', prev.teams);
-      console.log('🚀 Using draftFormat:', draftFormat);
-      console.log('🚀 Using draftOrder:', draftOrder);
-      console.log('🚀 Using players with lockedToRound:', playersToUse.filter(p => p.isCoachKid).map(p => ({
-        name: `${p.firstName} ${p.lastName}`,
-        projected: p.projectedRound,
-        locked: p.lockedToRound,
-        coachTeamId: p.coachTeamId
-      })));
 
       // Calculate the draft order for round 1
       const firstRoundOrder = calculateDraftOrder(
@@ -157,15 +151,10 @@ export const useDraft = (divisionId?: string) => {
         draftOrder
       );
 
-      console.log('🚀 firstRoundOrder:', firstRoundOrder);
-
       const firstTeamId = firstRoundOrder[0];
-      console.log('🚀 firstTeamId:', firstTeamId);
-      console.log('🚀 Setting draft state with currentTeamId:', firstTeamId);
 
       // Check for initial mandatory pick
       const initialMandatory = getMandatoryPick(playersToUse, firstTeamId, 1);
-      console.log('🚀 Initial mandatory pick check:', initialMandatory);
 
       return {
         ...prev,
@@ -187,7 +176,6 @@ export const useDraft = (divisionId?: string) => {
 
     // Use setTimeout to ensure state update has completed
     setTimeout(() => {
-      console.log('🚀 Setting phase to draft');
       setPhase('draft');
     }, 0);
   }, []);
@@ -200,12 +188,9 @@ export const useDraft = (divisionId?: string) => {
       if (!team) return;
 
       // Use shared getMandatoryPick function (single source of truth)
-      console.log(`=== checkMandatoryPicks for team ${team.name || teamId} round ${round} ===`);
-
       const result = getMandatoryPick(players, teamId, round);
 
       if (result) {
-        console.log(`Mandatory ${result.reason}: ${result.player.firstName} ${result.player.lastName}`);
         setDraftState((prev) => ({
           ...prev,
           mandatoryPick: {
@@ -215,7 +200,6 @@ export const useDraft = (divisionId?: string) => {
           },
         }));
       } else {
-        console.log('No mandatory pick');
         setDraftState((prev) => ({
           ...prev,
           mandatoryPick: undefined,
@@ -227,33 +211,22 @@ export const useDraft = (divisionId?: string) => {
 
   const draftPlayer = useCallback(
     (playerId: string) => {
-      console.log('🎯 useDraft.draftPlayer called with playerId:', playerId);
-
       setDraftState((prev) => {
-        console.log('🎯 Inside setDraftState callback');
         const { currentRound, currentPickInRound, currentTeamId, players, teams, mandatoryPick } = prev;
 
-        console.log('🎯 currentTeamId:', currentTeamId);
-        console.log('🎯 currentRound:', currentRound);
-        console.log('🎯 currentPickInRound:', currentPickInRound);
-
         if (!currentTeamId) {
-          console.log('🔴 No currentTeamId - returning prev');
           return prev;
         }
 
         // Validate mandatory pick
         if (mandatoryPick && mandatoryPick.playerId !== playerId) {
-          console.log('🔴 Mandatory pick validation failed');
           alert(`You must draft ${players.find(p => p.id === mandatoryPick.playerId)?.name} (${mandatoryPick.reason === 'coach-kid' ? "coach's kid" : 'sibling requirement'})`);
           return prev;
         }
 
         const player = players.find((p) => p.id === playerId);
-        console.log('🎯 Found player:', player);
 
         if (!player || player.isDrafted) {
-          console.log('🔴 Player not found or already drafted - returning prev');
           return prev;
         }
 
@@ -273,7 +246,6 @@ export const useDraft = (divisionId?: string) => {
           }
           // If this player is a sibling of the drafted player, lock them to this team
           if (p.siblingId === playerId && !p.isDrafted) {
-            console.log('🔗 Locking sibling', p.name, 'to team', currentTeamId);
             return {
               ...p,
               lockedToTeamId: currentTeamId,
@@ -341,15 +313,12 @@ export const useDraft = (divisionId?: string) => {
 
         if (nextRound !== currentRound) {
           // New round - recalculate order based on current team scores
-          console.log('🔄 New round! Recalculating draft order...');
-          console.log('🔄 Teams before recalc:', updatedTeams.map(t => ({ id: t.id, name: t.name, score: t.totalScore })));
           nextRoundOrder = calculateDraftOrder(
             updatedTeams,
             nextRound,
             prev.draftFormat,
             prev.draftOrder
           );
-          console.log('🔄 New draft order for round', nextRound, ':', nextRoundOrder);
         }
 
         // Use the cached (or newly calculated) round order
@@ -359,11 +328,6 @@ export const useDraft = (divisionId?: string) => {
         setTimeout(() => {
           checkMandatoryPicks(updatedPlayers, updatedTeams, nextTeamId, nextRound);
         }, 0);
-
-        console.log('✅ Draft successful! Returning new state');
-        console.log('✅ Updated teams:', updatedTeams);
-        console.log('✅ Next team:', nextTeamId);
-        console.log('✅ Using round order:', nextRoundOrder);
 
         return {
           ...prev,
@@ -402,7 +366,6 @@ export const useDraft = (divisionId?: string) => {
         // If this player was locked to a team because their sibling was drafted,
         // unlock them when the sibling is undrafted
         if (p.siblingId === lastPick.playerId && p.lockedToTeamId === lastPick.teamId) {
-          console.log('🔓 Unlocking sibling', p.name, 'from team', lastPick.teamId);
           return {
             ...p,
             lockedToTeamId: undefined,
@@ -542,8 +505,6 @@ export const useDraft = (divisionId?: string) => {
         checkMandatoryPicks(prev.players, teams, nextTeamId, nextRound);
       }, 0);
 
-      console.log('⏭️ Pick skipped for team', currentTeamId);
-
       return {
         ...prev,
         picks: updatedPicks,
@@ -660,14 +621,6 @@ export const useDraft = (divisionId?: string) => {
           };
         }
         return t;
-      });
-
-      console.log('✅ Trade executed:', {
-        trade,
-        player1: `${player1.firstName} ${player1.lastName}`,
-        player2: `${player2.firstName} ${player2.lastName}`,
-        team1: team1.name,
-        team2: team2.name,
       });
 
       return {

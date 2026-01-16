@@ -1,19 +1,18 @@
 import { useState } from 'react';
 import { Download, RotateCcw, FileText, Printer, Copy, Check, ArrowLeftRight } from 'lucide-react';
-import { DraftState, Team, Division } from '../types';
-import { exportToCSV, downloadCSV } from '../utils/csvParser';
+import { DraftState, Division } from '../types';
+import { exportToCSV } from '../utils/csvParser';
 import {
   generatePublicRosters,
   generateOfficialRecord,
   downloadTextFile,
+  downloadCSV,
   openPrintWindow,
   copyToClipboard,
 } from '../utils/exports';
 import { TradeModal } from './TradeModal';
 import { CompleteRosters } from './CompleteRosters';
-
-// Helper to get display name for a team (fallback when empty)
-const getTeamDisplayName = (team: Team) => team.name || `Team ${team.draftPosition}`;
+import { getTeamDisplayName } from '../utils/teamUtils';
 
 interface DraftCompleteProps {
   draftState: DraftState;

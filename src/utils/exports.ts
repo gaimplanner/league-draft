@@ -1,18 +1,5 @@
-import { Team, Player, DraftPick, Division } from '../types';
-
-// Trade interface for official record
-export interface Trade {
-  id: string;
-  timestamp: number;
-  team1Id: string;
-  team2Id: string;
-  player1Id: string; // moving FROM team1 TO team2
-  player2Id: string; // moving FROM team2 TO team1
-  reason: string;
-}
-
-// Helper to get display name for a team
-const getTeamDisplayName = (team: Team) => team.name || `Team ${team.draftPosition}`;
+import { Team, Player, DraftPick, Division, Trade } from '../types';
+import { getTeamDisplayName } from './teamUtils';
 
 /**
  * Generate public rosters for distribution to families.
@@ -262,6 +249,21 @@ export function generateSimulationDraftBoard(
  */
 export function downloadTextFile(content: string, filename: string): void {
   const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+/**
+ * Download CSV content as a file
+ */
+export function downloadCSV(content: string, filename: string): void {
+  const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;

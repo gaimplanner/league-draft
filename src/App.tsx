@@ -93,7 +93,6 @@ function App() {
     const handleStorageChange = (e: StorageEvent) => {
       // Only refresh if the change is to a division key
       if (e.key?.startsWith('little-league-division-')) {
-        console.log('🔄 Public view: Storage change detected, refreshing...');
         refreshDivisions();
       }
     };
@@ -237,12 +236,6 @@ function App() {
       // NOTE: We do NOT auto-mark coach's kids here during import.
       // The user should use "Find Coaches' Kids and Siblings" button to review
       // and confirm matches before they are applied.
-
-      console.log('Teams created from CSV:', coachAssignments.length);
-      console.log('Teams with names:', updatedTeams.filter(t => t.name).map(t => ({
-        name: t.name,
-        assistants: t.assistantCoaches
-      })));
     }
 
     setAllPlayers(updatedPlayers);
@@ -323,27 +316,8 @@ function App() {
 
   // Handle review phase completion
   const handleReviewComplete = (updatedPlayers?: Player[]) => {
-    // TRACE 5: Log what we received
-    console.log('=== TRACE 5: handleReviewComplete received ===');
-    console.log('updatedPlayers param exists:', !!updatedPlayers);
-    if (updatedPlayers) {
-      console.log('Coach kids in updatedPlayers:', updatedPlayers.filter(p => p.isCoachKid).map(p => ({
-        name: `${p.firstName} ${p.lastName}`,
-        projected: p.projectedRound,
-        locked: p.lockedToRound
-      })));
-    }
-
     // Use passed players if available, otherwise use current state
     const playersToSave = updatedPlayers ?? players;
-
-    // TRACE 6: Log playersToSave
-    console.log('=== TRACE 6: playersToSave ===');
-    console.log('Coach kids:', playersToSave.filter(p => p.isCoachKid).map(p => ({
-      name: `${p.firstName} ${p.lastName}`,
-      projected: p.projectedRound,
-      locked: p.lockedToRound
-    })));
 
     // Update draft state with modified players and teams
     setPlayers(playersToSave);
@@ -355,8 +329,6 @@ function App() {
         players: playersToSave,
         teams,
       });
-      // TRACE 7: After updateActiveDivision
-      console.log('=== TRACE 7: After updateActiveDivision ===');
     }
 
     setPhase('config');
@@ -364,15 +336,6 @@ function App() {
 
   // Handle draft config completion
   const handleConfigComplete = (format: DraftFormat, order: string[], resolvedPlayers: Player[]) => {
-    console.log('📋 handleConfigComplete called');
-    console.log('📋 format:', format);
-    console.log('📋 order:', order);
-    console.log('📋 resolvedPlayers coach kids:', resolvedPlayers.filter(p => p.isCoachKid).map(p => ({
-      name: `${p.firstName} ${p.lastName}`,
-      projected: p.projectedRound,
-      locked: p.lockedToRound
-    })));
-
     // Update players with resolved lockedToRound values before starting draft
     setPlayers(resolvedPlayers);
 

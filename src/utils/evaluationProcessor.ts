@@ -392,16 +392,17 @@ export function convertToPlayers(
       lastName: ep.lastName || '',
       name: ep.fullName || ep.bib,
 
-      // Raw scores - set to 0 since we have normalized scores
-      fieldScore: 0,
-      throwScore: 0,
-      hitPower: 0,
-      hitForm: 0,
-      hitContact: 0,
-      pitchingStrength: 0,
-      pitchingForm: 0,
-      catchScore: 0,
-      runningScore: 0,
+      // Map normalized evaluation scores to raw component fields
+      // These are the weighted contributions that sum to totalScore
+      fieldScore: ep.normalizedScores.fielding?.field ?? 0,
+      throwScore: ep.normalizedScores.fielding?.throw ?? 0,
+      hitPower: ep.normalizedScores.hitting?.contactPower ?? 0,
+      hitForm: ep.normalizedScores.hitting?.form ?? 0,
+      hitContact: ep.normalizedScores.hitting?.hits ?? 0,
+      pitchingStrength: ep.normalizedScores.pitching?.armStrength ?? 0,
+      pitchingForm: ep.normalizedScores.pitching?.form ?? 0,
+      catchScore: ep.normalizedScores.flyBalls?.catches ?? 0,
+      runningScore: ep.normalizedScores.baserunning?.bestTime ?? 0,
 
       // Map category scores to subtotals
       fieldingSubtotal: ep.categoryScores.fielding ?? 0,
@@ -533,17 +534,5 @@ export function generateEvaluationCSV(
   return [headers.join(','), ...rows.map((row) => row.join(','))].join('\n');
 }
 
-/**
- * Download CSV content as a file
- */
-export function downloadEvaluationCSV(content: string, filename: string): void {
-  const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
-  const link = document.createElement('a');
-  const url = URL.createObjectURL(blob);
-  link.setAttribute('href', url);
-  link.setAttribute('download', filename);
-  link.style.visibility = 'hidden';
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-}
+// Re-export downloadCSV as downloadEvaluationCSV for backwards compatibility
+export { downloadCSV as downloadEvaluationCSV } from './exports';

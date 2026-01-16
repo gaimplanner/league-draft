@@ -162,7 +162,7 @@ export interface ColumnMapping {
 
 export interface ParsedCSVData {
   headers: string[];
-  rows: any[];
+  rows: Record<string, string>[];
 }
 
 export interface ScoringWeights {

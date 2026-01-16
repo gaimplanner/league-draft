@@ -1,12 +1,10 @@
 import { Team } from '../types';
+import { getTeamDisplayName } from '../utils/teamUtils';
 
 interface CompleteRostersProps {
   teams: Team[];
   isSimulation?: boolean;
 }
-
-// Helper to get display name for a team (fallback when empty)
-const getTeamDisplayName = (team: Team) => team.name || `Team ${team.draftPosition}`;
 
 export const CompleteRosters = ({ teams, isSimulation = false }: CompleteRostersProps) => {
   // Sort teams by total score (descending)

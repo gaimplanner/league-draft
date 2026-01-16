@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { X, ArrowLeftRight, AlertTriangle } from 'lucide-react';
 import { Team, Player } from '../types';
+import { getTeamDisplayName } from '../utils/teamUtils';
 
 interface TradeModalProps {
   teams: Team[];
@@ -14,9 +15,6 @@ interface TradeModalProps {
   ) => void;
   onClose: () => void;
 }
-
-// Helper to get display name for a team
-const getTeamDisplayName = (team: Team) => team.name || `Team ${team.draftPosition}`;
 
 export const TradeModal = ({ teams, players, onExecuteTrade, onClose }: TradeModalProps) => {
   const [team1Id, setTeam1Id] = useState<string>('');

@@ -1,8 +1,6 @@
 import { Team } from '../types';
 import { useViewMode } from '../contexts/ViewContext';
-
-// Helper to get display name for a team (fallback when empty)
-const getTeamDisplayName = (team: Team) => team.name || `Team ${team.draftPosition}`;
+import { getTeamDisplayName } from '../utils/teamUtils';
 
 interface TeamRostersProps {
   teams: Team[];

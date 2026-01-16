@@ -1,5 +1,5 @@
 import Papa from 'papaparse';
-import { CSVRow, Player, ParsedCSVData, ColumnMapping, DEFAULT_SCORING_WEIGHTS, ScoringMode, ScoringWeights } from '../types';
+import { CSVRow, Player, Team, ParsedCSVData, ColumnMapping, DEFAULT_SCORING_WEIGHTS, ScoringMode, ScoringWeights } from '../types';
 import { calculatePlayerScore, calculatePreWeightedScores } from './scoreCalculation';
 
 // Coach assignment extracted from CSV
@@ -26,7 +26,7 @@ export const parseCSVFile = (file: File): Promise<ParsedCSVData> => {
       complete: (results) => {
         resolve({
           headers: results.meta.fields || [],
-          rows: results.data,
+          rows: results.data as Record<string, string>[],
         });
       },
       error: (error) => {
@@ -355,11 +355,11 @@ export const parseCSV = (file: File): Promise<Player[]> => {
   });
 };
 
-export const exportToCSV = (teams: any[]): string => {
+export const exportToCSV = (teams: Team[]): string => {
   const rows: string[][] = [['Team', 'Player', 'Total Score', 'Draft Round', 'Draft Pick']];
 
   teams.forEach((team) => {
-    team.roster.forEach((player: any) => {
+    team.roster.forEach((player: Player) => {
       rows.push([
         team.name,
         player.name,
@@ -374,16 +374,4 @@ export const exportToCSV = (teams: any[]): string => {
   });
 
   return Papa.unparse(rows);
-};
-
-export const downloadCSV = (content: string, filename: string) => {
-  const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
-  const link = document.createElement('a');
-  const url = URL.createObjectURL(blob);
-  link.setAttribute('href', url);
-  link.setAttribute('download', filename);
-  link.style.visibility = 'hidden';
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
 };
