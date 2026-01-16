@@ -276,6 +276,7 @@ export interface EvaluationPlayer {
   missingCategories: EvaluationCategory[];
   tabsFound: string[];
   isPartial: boolean;
+  isDNE: boolean; // Did Not Evaluate - no scores recorded at all
 }
 
 // Import state
