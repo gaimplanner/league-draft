@@ -212,6 +212,7 @@ function createEmptyPlayer(bib: string): EvaluationPlayer {
     isCoachKid: false,
     coachTeamIndex: null,
     siblingGroupId: null,
+    isAllStar: false,
     missingCategories: [],
     tabsFound: [],
     isPartial: false,
@@ -346,11 +347,46 @@ export function recalculateWithWeights(
  */
 export function convertToPlayers(
   evalPlayers: EvaluationPlayer[],
-  teamCount: number
+  teamCount: number,
+  teamIds: string[] = []
 ): Player[] {
+  // Build sibling mapping: siblingGroupId → array of bibs
+  const siblingGroups = new Map<string, string[]>();
+  evalPlayers.forEach(ep => {
+    if (ep.siblingGroupId) {
+      const group = siblingGroups.get(ep.siblingGroupId) || [];
+      group.push(ep.bib);
+      siblingGroups.set(ep.siblingGroupId, group);
+    }
+  });
+
+  // Generate stable IDs based on bib (no timestamp to allow sibling linking)
+  const bibToId = new Map<string, string>();
+  evalPlayers.forEach(ep => {
+    bibToId.set(ep.bib, `player-${ep.bib}`);
+  });
+
   return evalPlayers.map((ep) => {
+    // Find sibling info
+    let siblingId: string | undefined;
+    let siblingName: string | undefined;
+    if (ep.siblingGroupId) {
+      const group = siblingGroups.get(ep.siblingGroupId);
+      const siblingBib = group?.find(bib => bib !== ep.bib);
+      if (siblingBib) {
+        siblingId = bibToId.get(siblingBib);
+        const siblingPlayer = evalPlayers.find(p => p.bib === siblingBib);
+        siblingName = siblingPlayer?.fullName || siblingBib;
+      }
+    }
+
+    // Get coach team ID if assigned
+    const coachTeamId = ep.isCoachKid && ep.coachTeamIndex !== null && teamIds[ep.coachTeamIndex]
+      ? teamIds[ep.coachTeamIndex]
+      : undefined;
+
     const player: Player = {
-      id: `player-${ep.bib}-${Date.now()}`,
+      id: bibToId.get(ep.bib) || `player-${ep.bib}`,
       bib: ep.bib,
       firstName: ep.firstName || '',
       lastName: ep.lastName || '',
@@ -388,11 +424,14 @@ export function convertToPlayers(
       // Player info
       littleLeagueAge: ep.age || 0,
       birthday: '',
-      isAllStar: false,
+      isAllStar: ep.isAllStar,
       isDNE: ep.isPartial,
 
-      // Draft rules - to be set later
-      isCoachKid: false,
+      // Coach kid and sibling data - transferred from evaluation
+      isCoachKid: ep.isCoachKid,
+      coachTeamId,
+      sibling: siblingName,
+      siblingId,
 
       // Draft status
       isDrafted: false,
@@ -403,9 +442,30 @@ export function convertToPlayers(
 }
 
 /**
- * Generate summary CSV from processed players with all field scores
+ * Generate summary CSV from processed players with weighted contribution values
+ * Values match what's displayed in the UI table (weighted contributions that sum to Total)
  */
-export function generateEvaluationCSV(players: EvaluationPlayer[], teamNames: string[] = []): string {
+export function generateEvaluationCSV(
+  players: EvaluationPlayer[],
+  teamNames: string[] = [],
+  fieldWeights: FieldWeight[] = DEFAULT_FIELD_WEIGHTS
+): string {
+  // Helper to get weight for a field
+  const getWeight = (fieldId: string): number => {
+    const fw = fieldWeights.find(w => w.fieldId === fieldId);
+    return fw?.enabled ? fw.weight : 0;
+  };
+
+  // Helper to get weighted contribution (normalized * weight / 100)
+  const getWeightedValue = (player: EvaluationPlayer, fieldId: string): string => {
+    const score = getFieldScore(player, fieldId);
+    if (score === null) return '';
+    const weight = getWeight(fieldId);
+    if (weight === 0) return '';
+    const value = (score * weight) / 100;
+    return value > 0 ? value.toFixed(1) : '';
+  };
+
   const headers = [
     'Rank',
     'Proj Round',
@@ -413,25 +473,26 @@ export function generateEvaluationCSV(players: EvaluationPlayer[], teamNames: st
     'First Name',
     'Last Name',
     'Age',
+    'All-Star',
     'Coach Kid',
     'Team',
     'Sibling Group',
-    // Pitching fields
-    'P.Form',
-    'P.Arm',
-    // Hitting fields
-    'H.Form',
-    'H.Power',
-    'H.Hits',
-    // Fielding fields
-    'Field',
-    'Throw',
-    // Fly Balls fields
-    'F.Catches',
-    'F.Form',
-    // Baserunning fields
-    'R.Time',
-    'R.Form',
+    // Pitching fields with weights
+    `P.Form (${getWeight('pitchingForm')}%)`,
+    `P.Arm (${getWeight('armStrength')}%)`,
+    // Hitting fields with weights
+    `H.Form (${getWeight('hittingForm')}%)`,
+    `H.Power (${getWeight('contactPower')}%)`,
+    `H.Hits (${getWeight('hits')}%)`,
+    // Fielding fields with weights
+    `Field (${getWeight('field')}%)`,
+    `Throw (${getWeight('throw')}%)`,
+    // Fly Balls fields with weights
+    `F.Catches (${getWeight('catches')}%)`,
+    `F.Form (${getWeight('flyBallForm')}%)`,
+    // Baserunning fields with weights
+    `R.Time (${getWeight('bestTime')}%)`,
+    `R.Form (${getWeight('baserunningForm')}%)`,
     // Totals
     'Adjust',
     'Total',
@@ -444,25 +505,26 @@ export function generateEvaluationCSV(players: EvaluationPlayer[], teamNames: st
     p.firstName,
     p.lastName,
     p.age?.toString() || '',
+    p.isAllStar ? 'Yes' : '',
     p.isCoachKid ? 'Yes' : '',
     p.coachTeamIndex !== null && teamNames[p.coachTeamIndex] ? teamNames[p.coachTeamIndex] : '',
     p.siblingGroupId || '',
-    // Pitching
-    getFieldScore(p, 'pitchingForm')?.toFixed(0) || '',
-    getFieldScore(p, 'armStrength')?.toFixed(0) || '',
-    // Hitting
-    getFieldScore(p, 'hittingForm')?.toFixed(0) || '',
-    getFieldScore(p, 'contactPower')?.toFixed(0) || '',
-    getFieldScore(p, 'hits')?.toFixed(0) || '',
-    // Fielding
-    getFieldScore(p, 'field')?.toFixed(0) || '',
-    getFieldScore(p, 'throw')?.toFixed(0) || '',
-    // Fly Balls
-    getFieldScore(p, 'catches')?.toFixed(0) || '',
-    getFieldScore(p, 'flyBallForm')?.toFixed(0) || '',
-    // Baserunning
-    getFieldScore(p, 'bestTime')?.toFixed(0) || '',
-    getFieldScore(p, 'baserunningForm')?.toFixed(0) || '',
+    // Pitching - weighted contributions
+    getWeightedValue(p, 'pitchingForm'),
+    getWeightedValue(p, 'armStrength'),
+    // Hitting - weighted contributions
+    getWeightedValue(p, 'hittingForm'),
+    getWeightedValue(p, 'contactPower'),
+    getWeightedValue(p, 'hits'),
+    // Fielding - weighted contributions
+    getWeightedValue(p, 'field'),
+    getWeightedValue(p, 'throw'),
+    // Fly Balls - weighted contributions
+    getWeightedValue(p, 'catches'),
+    getWeightedValue(p, 'flyBallForm'),
+    // Baserunning - weighted contributions
+    getWeightedValue(p, 'bestTime'),
+    getWeightedValue(p, 'baserunningForm'),
     // Totals
     p.manualAdjust.toString(),
     p.weightedTotal.toFixed(1),

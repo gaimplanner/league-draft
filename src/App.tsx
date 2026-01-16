@@ -261,20 +261,35 @@ function App() {
   };
 
   // Handle Excel evaluation import completion
-  const handleEvaluationComplete = (importedPlayers: Player[]) => {
+  // Skips review phase since all adjustments are done in the evaluation summary
+  const handleEvaluationComplete = (
+    importedPlayers: Player[],
+    teamNames: string[],
+    assistantCoaches: string[][]
+  ) => {
     if (!activeDivision) return;
 
     setAllPlayers(importedPlayers);
     setPlayers(importedPlayers);
 
-    // Update division with imported players
+    // Update teams with names and assistant coaches from evaluation
+    const updatedTeams = activeDivision.teams.map((team, i) => ({
+      ...team,
+      name: teamNames[i] || team.name,
+      assistantCoaches: assistantCoaches[i] || [],
+    }));
+
+    setTeamsState(updatedTeams);
+
+    // Update division with imported players and updated teams
     updateActiveDivision({
       players: importedPlayers,
+      teams: updatedTeams,
       rosterSize: Math.ceil(importedPlayers.length / activeDivision.teamCount),
     });
 
     setImportMode(null);
-    setPhase('review');
+    setPhase('config');  // Skip review, go straight to draft config
   };
 
   // Handle scoring mode change

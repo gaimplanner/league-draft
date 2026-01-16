@@ -625,22 +625,36 @@ export function useEvaluationImport(initialTeamCount: number = 8) {
   }, []);
 
   /**
+   * Toggle all-star status for a player
+   */
+  const toggleAllStar = useCallback((bib: string) => {
+    setState((prev) => ({
+      ...prev,
+      players: prev.players.map((p) =>
+        p.bib === bib ? { ...p, isAllStar: !p.isAllStar } : p
+      ),
+    }));
+  }, []);
+
+  /**
    * Get players converted to draft-ready format
    */
   const getPlayers = useCallback((): Player[] => {
-    return convertToPlayers(state.players, teamCount);
-  }, [state.players, teamCount]);
+    // Generate team IDs based on team names
+    const teamIds = teamNames.map((_, i) => `team-${i}`);
+    return convertToPlayers(state.players, teamCount, teamIds);
+  }, [state.players, teamCount, teamNames]);
 
   /**
-   * Export current players to CSV
+   * Export current players to CSV with weighted contribution values
    */
   const exportCSV = useCallback(() => {
-    const csv = generateEvaluationCSV(state.players, teamNames);
+    const csv = generateEvaluationCSV(state.players, teamNames, state.fieldWeights);
     const filename = state.workbook
       ? `${state.workbook.filename.replace(/\.xlsx?$/i, '')}_processed.csv`
       : 'evaluation_processed.csv';
     downloadEvaluationCSV(csv, filename);
-  }, [state.players, state.workbook, teamNames]);
+  }, [state.players, state.workbook, teamNames, state.fieldWeights]);
 
   /**
    * Check if weights sum to 100%
@@ -695,6 +709,7 @@ export function useEvaluationImport(initialTeamCount: number = 8) {
     toggleSiblingGroup,
     clearCoachKids,
     clearSiblings,
+    toggleAllStar,
     getPlayers,
     exportCSV,
   };

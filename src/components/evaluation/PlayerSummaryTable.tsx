@@ -22,6 +22,7 @@ interface PlayerSummaryTableProps {
   onRunAutoDetection: () => void;
   onClearCoachKids: () => void;
   onClearSiblings: () => void;
+  onToggleAllStar: (bib: string) => void;
 }
 
 // Field definitions for table columns
@@ -48,7 +49,7 @@ const CATEGORY_GROUPS: { category: EvaluationCategory; shortName: string; colSpa
   { category: 'baserunning', shortName: 'RUN', colSpan: 2 },
 ];
 
-type SortField = 'rank' | 'proj' | 'bib' | 'name' | 'age' | 'coach' | 'sibling' | 'adjust' | 'total' | string;
+type SortField = 'rank' | 'proj' | 'bib' | 'name' | 'age' | 'allstar' | 'coach' | 'sibling' | 'adjust' | 'total' | string;
 type SortDirection = 'asc' | 'desc';
 
 // Helper function to get sibling bib numbers for a player
@@ -83,6 +84,7 @@ export function PlayerSummaryTable({
   onRunAutoDetection,
   onClearCoachKids,
   onClearSiblings,
+  onToggleAllStar,
 }: PlayerSummaryTableProps) {
   const [search, setSearch] = useState('');
   const [sortField, setSortField] = useState<SortField>('rank');
@@ -95,6 +97,16 @@ export function PlayerSummaryTable({
     const fw = fieldWeights.find(w => w.fieldId === fieldId);
     return fw?.enabled ? fw.weight : 0;
   }, [fieldWeights]);
+
+  // Get weighted contribution for a field (normalized score * weight / 100)
+  // This makes field values add up to the total
+  const getWeightedContribution = useCallback((player: EvaluationPlayer, fieldId: string) => {
+    const score = getFieldScore(player, fieldId);
+    if (score === null) return null;
+    const weight = getWeight(fieldId);
+    if (weight === 0) return null;
+    return (score * weight) / 100;
+  }, [getWeight]);
 
   // Get category total weight
   const getCategoryWeight = useCallback((category: EvaluationCategory) => {
@@ -141,6 +153,10 @@ export function PlayerSummaryTable({
         aVal = a.age;
         bVal = b.age;
         break;
+      case 'allstar':
+        aVal = a.isAllStar ? 1 : 0;
+        bVal = b.isAllStar ? 1 : 0;
+        break;
       case 'coach':
         aVal = a.isCoachKid ? 1 : 0;
         bVal = b.isCoachKid ? 1 : 0;
@@ -158,9 +174,9 @@ export function PlayerSummaryTable({
         bVal = b.weightedTotal;
         break;
       default:
-        // Field scores
-        aVal = getFieldScore(a, sortField) ?? 0;
-        bVal = getFieldScore(b, sortField) ?? 0;
+        // Field scores - sort by weighted contribution
+        aVal = getWeightedContribution(a, sortField) ?? 0;
+        bVal = getWeightedContribution(b, sortField) ?? 0;
     }
 
     if (typeof aVal === 'string' && typeof bVal === 'string') {
@@ -440,6 +456,9 @@ export function PlayerSummaryTable({
                 <th rowSpan={2} className="px-2 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-300 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 w-10" onClick={() => handleSort('age')}>
                   Age<SortIndicator field="age" />
                 </th>
+                <th rowSpan={2} className="px-1 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-300 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 w-10" onClick={() => handleSort('allstar')}>
+                  ⭐<SortIndicator field="allstar" />
+                </th>
                 <th rowSpan={2} className="px-1 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-300 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 w-16" onClick={() => handleSort('coach')}>
                   Coach<SortIndicator field="coach" />
                 </th>
@@ -516,6 +535,15 @@ export function PlayerSummaryTable({
                   <td className="px-2 py-1.5 text-gray-600 dark:text-gray-400 text-center">
                     {player.age || '-'}
                   </td>
+                  {/* All-Star */}
+                  <td className="px-1 py-1 text-center">
+                    <input
+                      type="checkbox"
+                      checked={player.isAllStar}
+                      onChange={() => onToggleAllStar(player.bib)}
+                      className="w-4 h-4 rounded border-gray-300 text-yellow-500 focus:ring-yellow-500"
+                    />
+                  </td>
                   {/* Coach's Kid */}
                   <td className="px-1 py-1 text-center">
                     {player.isCoachKid ? (
@@ -533,18 +561,18 @@ export function PlayerSummaryTable({
                     ) : null}
                   </td>
                   {FIELD_COLUMNS.map((col, idx) => {
-                    const score = getFieldScore(player, col.fieldId);
+                    const contribution = getWeightedContribution(player, col.fieldId);
                     const isFirstInGroup = idx === 0 || FIELD_COLUMNS[idx - 1].category !== col.category;
                     return (
                       <td
                         key={col.fieldId}
                         className={`px-1 py-1.5 text-center tabular-nums ${isFirstInGroup ? 'border-l border-gray-200 dark:border-gray-700' : ''} ${
-                          score === null
+                          contribution === null
                             ? 'text-gray-300 dark:text-gray-600'
                             : 'text-gray-700 dark:text-gray-300'
                         }`}
                       >
-                        {score !== null ? Math.round(score) : '-'}
+                        {contribution !== null && contribution > 0 ? contribution.toFixed(1) : '-'}
                       </td>
                     );
                   })}
