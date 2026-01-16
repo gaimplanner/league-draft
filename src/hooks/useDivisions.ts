@@ -102,7 +102,14 @@ export function useDivisions() {
     setSummaries(loadedSummaries);
   }, []);
 
+  // Check if a division name already exists (case-insensitive)
+  const divisionNameExists = useCallback((name: string): boolean => {
+    const normalizedName = name.trim().toLowerCase();
+    return summaries.some(s => s.name.trim().toLowerCase() === normalizedName);
+  }, [summaries]);
+
   // Create a new division (in-memory only until players are imported)
+  // Returns null if division name already exists
   const createDivision = useCallback((config: {
     name: string;
     preset: DivisionPreset;
@@ -110,7 +117,12 @@ export function useDivisions() {
     ageRange: DivisionAgeRange;
     enforceAgeLimit: boolean;
     maxPerAge: number;
-  }): Division => {
+  }): Division | null => {
+    // Check for duplicate name
+    if (divisionNameExists(config.name)) {
+      return null;
+    }
+
     const id = generateDivisionId();
     const division = createInitialDivision(
       id,
@@ -129,7 +141,7 @@ export function useDivisions() {
     setActiveDivision(division);
 
     return division;
-  }, []);
+  }, [divisionNameExists]);
 
   // Select an existing division
   const selectDivision = useCallback((divisionId: string): Division | null => {
@@ -236,5 +248,6 @@ export function useDivisions() {
     refreshSummaries,
     refreshActiveDivision,
     refreshDivisions,
+    divisionNameExists,
   };
 }

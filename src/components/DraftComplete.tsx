@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Download, RotateCcw, FileText, Printer, Copy, Check, ArrowLeftRight } from 'lucide-react';
+import { Download, ChevronLeft, FileText, Printer, Copy, Check, ArrowLeftRight } from 'lucide-react';
 import { DraftState, Division } from '../types';
 import { exportToCSV } from '../utils/csvParser';
 import {
@@ -135,8 +135,8 @@ export const DraftComplete = ({ draftState, division, onReset, onExecuteTrade }:
               onClick={onReset}
               className="px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg font-medium flex items-center gap-2"
             >
-              <RotateCcw className="w-5 h-5" />
-              Start New Draft
+              <ChevronLeft className="w-5 h-5" />
+              Back to Config
             </button>
           </div>
         </div>

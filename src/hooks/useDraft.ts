@@ -109,8 +109,23 @@ export const useDraft = (divisionId?: string) => {
     setPhase(division.phase);
   }, []);
 
-  const resetDraft = useCallback(() => {
-    // Don't show confirmation - App.tsx handles that
+  const resetDraft = useCallback((
+    targetPhase?: AppPhase,
+    preservedPlayers?: Player[],
+    preservedTeams?: Team[]
+  ) => {
+    // If targetPhase and preserved data provided, reset to that phase with data intact
+    if (targetPhase && preservedPlayers && preservedTeams) {
+      setDraftState({
+        ...initialDraftState,
+        players: preservedPlayers,
+        teams: preservedTeams,
+      });
+      setPhase(targetPhase);
+      return;
+    }
+
+    // Full reset - clear everything (legacy behavior)
     if (divisionId) {
       localStorage.removeItem(getStorageKey(divisionId));
     }

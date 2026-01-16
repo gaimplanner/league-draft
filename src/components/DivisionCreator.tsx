@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowLeft, Check } from 'lucide-react';
+import { ArrowLeft, Check, AlertCircle } from 'lucide-react';
 import { DivisionPreset, DIVISION_PRESETS, DivisionAgeRange } from '../types';
 
 interface DivisionCreatorProps {
@@ -12,6 +12,7 @@ interface DivisionCreatorProps {
     enforceAgeLimit: boolean;
     maxPerAge: number;
   }) => void;
+  existingNames?: string[];
 }
 
 const presetOptions: { id: DivisionPreset; label: string; description: string }[] = [
@@ -21,7 +22,7 @@ const presetOptions: { id: DivisionPreset; label: string; description: string }[
   { id: 'custom', label: 'Custom', description: 'Configure your own settings' },
 ];
 
-export const DivisionCreator = ({ onCancel, onCreate }: DivisionCreatorProps) => {
+export const DivisionCreator = ({ onCancel, onCreate, existingNames = [] }: DivisionCreatorProps) => {
   const [step, setStep] = useState<'preset' | 'configure'>('preset');
   const [selectedPreset, setSelectedPreset] = useState<DivisionPreset | null>(null);
   const [name, setName] = useState('');
@@ -30,6 +31,11 @@ export const DivisionCreator = ({ onCancel, onCreate }: DivisionCreatorProps) =>
   const [ageMax, setAgeMax] = useState(12);
   const [enforceAgeLimit, setEnforceAgeLimit] = useState(true);
   const [maxPerAge, setMaxPerAge] = useState(8);
+
+  // Check if name already exists (case-insensitive)
+  const nameAlreadyExists = existingNames.some(
+    n => n.trim().toLowerCase() === name.trim().toLowerCase()
+  );
 
   const handlePresetSelect = (preset: DivisionPreset) => {
     setSelectedPreset(preset);
@@ -61,7 +67,7 @@ export const DivisionCreator = ({ onCancel, onCreate }: DivisionCreatorProps) =>
     });
   };
 
-  const isValid = name.trim().length > 0 && teamCount >= 5 && teamCount <= 10;
+  const isValid = name.trim().length > 0 && teamCount >= 5 && teamCount <= 10 && !nameAlreadyExists;
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center p-4">
@@ -116,8 +122,18 @@ export const DivisionCreator = ({ onCancel, onCreate }: DivisionCreatorProps) =>
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g., Majors 2024"
-                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className={`w-full px-4 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                  nameAlreadyExists
+                    ? 'border-red-500 dark:border-red-500'
+                    : 'border-gray-300 dark:border-gray-600'
+                }`}
               />
+              {nameAlreadyExists && (
+                <div className="mt-2 flex items-center gap-2 text-red-600 dark:text-red-400 text-sm">
+                  <AlertCircle className="w-4 h-4" />
+                  <span>A division with this name already exists. Delete the existing division to create a new one.</span>
+                </div>
+              )}
             </div>
 
             {/* Team Count */}

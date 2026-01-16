@@ -1,17 +1,20 @@
 import { useState } from 'react';
-import { Upload, AlertCircle } from 'lucide-react';
+import { Upload, AlertCircle, CheckCircle, ChevronRight } from 'lucide-react';
 import { parseCSVFile } from '../utils/csvParser';
 import { ParsedCSVData } from '../types';
 
 interface FileUploadProps {
   onCSVParsed: (csvData: ParsedCSVData) => void;
   onNext: () => void;
+  existingPlayerCount?: number;
+  onContinueWithExisting?: () => void;
 }
 
-export const FileUpload = ({ onCSVParsed, onNext }: FileUploadProps) => {
+export const FileUpload = ({ onCSVParsed, onNext, existingPlayerCount = 0, onContinueWithExisting }: FileUploadProps) => {
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const hasExistingPlayers = existingPlayerCount > 0;
 
   const handleFile = async (file: File) => {
     if (!file.name.endsWith('.csv')) {
@@ -71,9 +74,37 @@ export const FileUpload = ({ onCSVParsed, onNext }: FileUploadProps) => {
             Little League Draft
           </h1>
           <p className="text-gray-600 dark:text-gray-400">
-            Upload your player evaluations CSV to get started
+            {hasExistingPlayers
+              ? 'Your players are loaded. Continue or upload a new file.'
+              : 'Upload your player evaluations CSV to get started'}
           </p>
         </div>
+
+        {/* Show "data loaded" state when players exist */}
+        {hasExistingPlayers && (
+          <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-6 mb-6">
+            <div className="flex items-center gap-3">
+              <CheckCircle className="w-8 h-8 text-green-600 dark:text-green-400" />
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-green-800 dark:text-green-200">
+                  {existingPlayerCount} Players Loaded
+                </h3>
+                <p className="text-sm text-green-700 dark:text-green-300">
+                  Your player data is ready. Continue to review or upload a new file.
+                </p>
+              </div>
+            </div>
+            {onContinueWithExisting && (
+              <button
+                onClick={onContinueWithExisting}
+                className="mt-4 w-full px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold flex items-center justify-center gap-2"
+              >
+                Continue to Review
+                <ChevronRight className="w-5 h-5" />
+              </button>
+            )}
+          </div>
+        )}
 
         <div
           className={`
@@ -95,11 +126,13 @@ export const FileUpload = ({ onCSVParsed, onNext }: FileUploadProps) => {
           <Upload className="w-16 h-16 mx-auto mb-4 text-gray-400" />
 
           <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-            {isLoading ? 'Processing...' : 'Upload Player CSV'}
+            {isLoading ? 'Processing...' : hasExistingPlayers ? 'Upload New CSV (Optional)' : 'Upload Player CSV'}
           </h3>
 
           <p className="text-gray-600 dark:text-gray-400 mb-4">
-            Drag and drop your file here, or click to browse
+            {hasExistingPlayers
+              ? 'Upload a new file to replace existing data'
+              : 'Drag and drop your file here, or click to browse'}
           </p>
 
           <input

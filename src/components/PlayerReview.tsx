@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ChevronRight, Users, Link, Wand2, CheckCircle2 } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Users, Link, Wand2, CheckCircle2 } from 'lucide-react';
 import { Player, Team, ScoringMode } from '../types';
 import { autoDetectCoachKids, autoDetectSiblings, CoachKidMatch, SiblingMatch } from '../utils/coachKidDetection';
 import { useScoringWeights } from '../hooks/useScoringWeights';
@@ -18,9 +18,10 @@ interface PlayerReviewProps {
   onLinkSiblings: (playerId1: string, playerId2: string) => void;
   onUnlinkSibling: (playerId: string) => void;
   onNext: (updatedPlayers?: Player[]) => void;
+  onBack?: () => void;
 }
 
-export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange, onUpdatePlayer, onUpdatePlayerField, onSetAllPlayers, onTeamsUpdate, onLinkSiblings, onUnlinkSibling, onNext }: PlayerReviewProps) => {
+export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange, onUpdatePlayer, onUpdatePlayerField, onSetAllPlayers, onTeamsUpdate, onLinkSiblings, onUnlinkSibling, onNext, onBack }: PlayerReviewProps) => {
   const [autoDetectedMatches, setAutoDetectedMatches] = useState<CoachKidMatch[]>([]);
   const [siblingMatches, setSiblingMatches] = useState<SiblingMatch[]>([]);
   const [showAutoDetectModal, setShowAutoDetectModal] = useState(false);
@@ -308,13 +309,24 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
             )}
           </div>
 
-          <button
-            onClick={handleNext}
-            className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium flex items-center gap-2"
-          >
-            Continue to Draft Setup
-            <ChevronRight className="w-5 h-5" />
-          </button>
+          <div className="flex gap-2">
+            {onBack && (
+              <button
+                onClick={onBack}
+                className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg font-medium flex items-center gap-2 transition-colors"
+              >
+                <ChevronLeft className="w-5 h-5" />
+                Back
+              </button>
+            )}
+            <button
+              onClick={handleNext}
+              className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium flex items-center gap-2"
+            >
+              Continue to Draft Setup
+              <ChevronRight className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Legend for bumped rounds */}

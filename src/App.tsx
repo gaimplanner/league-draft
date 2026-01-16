@@ -21,6 +21,7 @@ import {
   DivisionPreset,
   DivisionAgeRange,
   ScoringMode,
+  AppPhase,
 } from './types';
 import { parseCSVWithMapping, CoachAssignment } from './utils/csvParser';
 
@@ -366,30 +367,61 @@ function App() {
     setImportMode(null);
   };
 
-  // Handle reset - this resets within current division
-  const handleReset = () => {
+  // Handle going back one step at a time
+  const handleGoBack = (fromPhase: AppPhase) => {
     if (!activeDivision) return;
 
-    if (window.confirm('Are you sure you want to reset this division? This will clear all draft progress.')) {
-      // Reset to upload phase with fresh teams
-      updateActiveDivision({
-        players: [],
-        teams: activeDivision.teams.map(t => ({
+    switch (fromPhase) {
+      case 'complete':
+      case 'draft':
+        // Going back from draft/complete resets draft progress but preserves all data
+        if (draftState.picks.length > 0) {
+          if (!window.confirm('Going back will reset all draft picks. Continue?')) {
+            return;
+          }
+        }
+        // Reset players' draft status but keep all other data
+        const resetPlayers = activeDivision.players.map(p => ({
+          ...p,
+          isDrafted: false,
+          draftedByTeamId: undefined,
+          draftedInRound: undefined,
+          draftedAtPick: undefined,
+        }));
+        // Reset team rosters but keep names, coaches, etc.
+        const resetTeams = activeDivision.teams.map(t => ({
           ...t,
           roster: [],
           totalScore: 0,
-          coachKids: [],
-          assistantCoaches: [],
           ageBreakdown: {},
-        })),
-        draftState: null,
-        phase: 'upload',
-        completedAt: undefined,
-      });
-
-      setCSVData(null);
-      resetDraft();
+        }));
+        updateActiveDivision({
+          players: resetPlayers,
+          teams: resetTeams,
+          draftState: null,
+          phase: 'config',
+          completedAt: undefined,
+        });
+        resetDraft('config', resetPlayers, resetTeams);
+        break;
+      case 'config':
+        setPhase('review');
+        break;
+      case 'review':
+        setPhase('upload');
+        setImportMode(null);
+        break;
+      case 'upload':
+        handleBackToSelector();
+        break;
+      default:
+        break;
     }
+  };
+
+  // Handle reset - this now goes back to config, preserving all data
+  const handleReset = () => {
+    handleGoBack(phase);
   };
 
   // Render division selector or creator
@@ -409,6 +441,7 @@ function App() {
       <DivisionCreator
         onCancel={() => setMode('selector')}
         onCreate={handleCreateDivision}
+        existingNames={summaries.map(s => s.name)}
       />
     );
   }
@@ -484,6 +517,8 @@ function App() {
               <FileUpload
                 onCSVParsed={handleCSVParsed}
                 onNext={() => setPhase('mapping')}
+                existingPlayerCount={activeDivision?.players.length ?? 0}
+                onContinueWithExisting={() => setPhase('review')}
               />
             )}
 
@@ -515,6 +550,7 @@ function App() {
             onLinkSiblings={linkSiblings}
             onUnlinkSibling={unlinkSibling}
             onNext={handleReviewComplete}
+            onBack={() => handleGoBack('review')}
           />
         )}
 
@@ -523,6 +559,7 @@ function App() {
             teams={teams}
             players={players}
             onConfigComplete={handleConfigComplete}
+            onBack={() => handleGoBack('config')}
           />
         )}
 
