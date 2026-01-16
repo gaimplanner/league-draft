@@ -201,14 +201,41 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
       }
     }
 
+    // Start with current players, will be modified if repairs or assignments needed
+    let workingPlayers = [...players];
+
+    // Auto-repair broken sibling links by making them bidirectional
     if (brokenSiblingLinks.length > 0) {
-      alert(`Warning: Found broken sibling links. Please check: ${brokenSiblingLinks.map(p => p.name).join(', ')}`);
-      return;
+      brokenSiblingLinks.forEach(player => {
+        if (!player.siblingId) return;
+        const siblingIndex = workingPlayers.findIndex(p => p.id === player.siblingId);
+        if (siblingIndex !== -1) {
+          const sibling = workingPlayers[siblingIndex];
+          // If sibling exists but doesn't link back, create the reciprocal link
+          if (sibling.siblingId !== player.id) {
+            workingPlayers[siblingIndex] = {
+              ...sibling,
+              siblingId: player.id,
+              sibling: player.name,
+            };
+          }
+        } else {
+          // Sibling doesn't exist - clear the broken link
+          const playerIndex = workingPlayers.findIndex(p => p.id === player.id);
+          if (playerIndex !== -1) {
+            workingPlayers[playerIndex] = {
+              ...workingPlayers[playerIndex],
+              siblingId: undefined,
+              sibling: undefined,
+            };
+          }
+        }
+      });
     }
 
     // Resolve coach's kid round conflicts
     const coachKidsByTeam: Record<string, Player[]> = {};
-    players.filter(p => p.isCoachKid && p.coachTeamId).forEach(p => {
+    workingPlayers.filter(p => p.isCoachKid && p.coachTeamId).forEach(p => {
       const teamId = p.coachTeamId!;
       if (!coachKidsByTeam[teamId]) {
         coachKidsByTeam[teamId] = [];
@@ -276,20 +303,19 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
       }
     }
 
+    // Apply round assignments if any
     if (Object.keys(roundAssignments).length > 0) {
-      const updatedPlayers = players.map(player => {
+      workingPlayers = workingPlayers.map(player => {
         if (roundAssignments[player.id] !== undefined) {
           return { ...player, lockedToRound: roundAssignments[player.id] };
         }
         return player;
       });
-
-      onSetAllPlayers(updatedPlayers);
-      onNext(updatedPlayers);
-      return;
     }
 
-    onNext();
+    // Always pass workingPlayers (may have sibling repairs and/or round assignments)
+    onSetAllPlayers(workingPlayers);
+    onNext(workingPlayers);
   };
 
   return (

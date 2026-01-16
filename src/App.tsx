@@ -381,12 +381,14 @@ function App() {
           }
         }
         // Reset players' draft status but keep all other data
+        // Also clear lockedToTeamId which gets set when a sibling is drafted
         const resetPlayers = activeDivision.players.map(p => ({
           ...p,
           isDrafted: false,
           draftedByTeamId: undefined,
           draftedInRound: undefined,
           draftedAtPick: undefined,
+          lockedToTeamId: undefined,
         }));
         // Reset team rosters but keep names, coaches, etc.
         const resetTeams = activeDivision.teams.map(t => ({
