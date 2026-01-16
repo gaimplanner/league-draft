@@ -24,8 +24,12 @@ A comprehensive draft management system for Little League baseball divisions. St
 - Direct team name and assistant coach assignment
 
 ### Pre-Draft Player Review
-- Dual view modes: List (table) and Grid (cards)
-- Real-time score editing and ranking updates
+- Unified spreadsheet-style table view for both CSV and Excel imports
+- Sortable columns (rank, round, name, age, scores)
+- Inline cell editing for scores
+- Search/filter by name or BIB number
+- Row highlighting for coach's kids (blue) and siblings (green)
+- Collapsible Teams & Detection panel
 - Visual indicators for All-Stars, coach's kids, siblings, and DNE players
 - Manual score adjustments with official override field
 
@@ -184,7 +188,8 @@ src/
 │   ├── DivisionCreator.tsx    # New division setup
 │   ├── FileUpload.tsx         # CSV upload
 │   ├── ColumnMapper.tsx       # CSV column mapping
-│   ├── PlayerReview.tsx       # Player scoring review
+│   ├── PlayerReview.tsx       # Player review orchestration
+│   ├── PlayerReviewTable.tsx  # Spreadsheet-style player table
 │   ├── DraftConfig.tsx        # Draft configuration
 │   ├── DraftBoard.tsx         # Live draft interface
 │   ├── DraftComplete.tsx      # Results and exports
@@ -201,13 +206,16 @@ src/
 │   └── ViewContext.tsx        # Admin/Public mode
 ├── types/
 │   └── index.ts               # TypeScript interfaces
-└── utils/
-    ├── csvParser.ts           # CSV operations
-    ├── draftOrder.ts          # Order calculations
-    ├── draftLogic.ts          # Pick validation
-    ├── simulation.ts          # Simulation engine
-    ├── exports.ts             # Export formatting
-    └── evaluationProcessor.ts # Excel processing
+├── utils/
+│   ├── csvParser.ts           # CSV operations
+│   ├── draftOrder.ts          # Order calculations
+│   ├── draftLogic.ts          # Pick validation
+│   ├── simulation.ts          # Simulation engine
+│   ├── exports.ts             # Export formatting
+│   ├── teamUtils.ts           # Team display helpers
+│   └── evaluationProcessor.ts # Excel processing
+└── e2e/
+    └── draft-flow.spec.ts     # Playwright E2E tests
 ```
 
 ## Branching Strategy

@@ -48,7 +48,9 @@ Has name, roster (drafted players), totalScore, draftPosition, coachKids array, 
 | `src/utils/exports.ts` | generatePublicRosters, generateOfficialRecord, generateSimulationDraftBoard |
 | `src/utils/draftOrder.ts` | calculateDraftOrder for all three formats |
 | `src/utils/evaluationProcessor.ts` | Excel to Player conversion, score normalization |
+| `src/utils/teamUtils.ts` | Team display name helpers |
 | `src/types/index.ts` | All TypeScript interfaces (Player, Team, Division, DraftState, etc.) |
+| `src/components/PlayerReviewTable.tsx` | Spreadsheet-style table for CSV player review |
 
 ### Component Hierarchy
 ```
@@ -57,7 +59,8 @@ App
 ├── FileUpload → ColumnMapper (CSV flow)
 ├── EvaluationImport (Excel flow)
 │   └── PlayerSummaryTable, DetectionModal
-├── PlayerReview
+├── PlayerReview (CSV flow)
+│   └── PlayerReviewTable (spreadsheet-style table)
 ├── DraftConfig
 │   └── SimulationModal
 ├── DraftBoard
@@ -119,7 +122,18 @@ Draft state uses functional updates: `setDraftState(prev => ({ ...prev, ... }))`
 
 ## Testing Approach
 
-No automated tests currently. Manual verification:
+### E2E Tests (Playwright)
+Located in `e2e/draft-flow.spec.ts`. Run with:
+```bash
+npx playwright test
+```
+
+Tests cover:
+- Complete draft workflow from CSV import through completion
+- DNE player handling
+- Sibling rule enforcement
+
+### Manual Verification
 1. `npm run build` - Must pass without errors
 2. `npm run dev` - Test in browser
 3. Test all phases: import → review → config → draft → complete
