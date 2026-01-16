@@ -86,6 +86,11 @@ function App() {
     }
   }, [activeDivision?.id]); // Only trigger when division changes
 
+  // Scroll to top when phase changes
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [phase]);
+
   // Auto-refresh for public view - listen for localStorage changes from admin view
   useEffect(() => {
     if (!isPublicView) return;
