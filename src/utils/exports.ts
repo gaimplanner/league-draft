@@ -175,6 +175,45 @@ ${sectionLine}
 }
 
 /**
+ * Generate simulation draft board in grid format (Rounds x Teams).
+ * Rows = rounds, Columns = teams in draft order, Cells = player picked.
+ */
+export function generateSimulationDraftBoard(
+  teams: Team[],
+  draftOrder: string[]
+): string {
+  // Get teams in draft order
+  const orderedTeams = draftOrder.map(id => teams.find(t => t.id === id)).filter((t): t is Team => t !== undefined);
+
+  // Find max rounds (all teams should have same roster size)
+  const maxRounds = Math.max(...teams.map(t => t.roster.length));
+
+  // Build header row
+  const header = ['Round', 'Picks', ...orderedTeams.map(t => getTeamDisplayName(t))];
+
+  // Build data rows
+  const rows: string[][] = [];
+  for (let round = 1; round <= maxRounds; round++) {
+    const pickStart = (round - 1) * teams.length + 1;
+    const pickEnd = round * teams.length;
+
+    const row = [
+      round.toString(),
+      `${pickStart}-${pickEnd}`,
+      ...orderedTeams.map(team => {
+        // Find player drafted by this team in this round
+        const player = team.roster.find(p => p.draftedInRound === round);
+        return player ? `${player.firstName} ${player.lastName}` : '';
+      })
+    ];
+    rows.push(row);
+  }
+
+  // Convert to CSV
+  return [header, ...rows].map(row => row.join(',')).join('\n');
+}
+
+/**
  * Download text content as a file
  */
 export function downloadTextFile(content: string, filename: string): void {

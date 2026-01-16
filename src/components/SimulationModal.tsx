@@ -8,7 +8,7 @@ import {
   getSimulationStats,
 } from '../utils/simulation';
 import { CompleteRosters } from './CompleteRosters';
-import { generatePublicRosters, downloadTextFile } from '../utils/exports';
+import { generateSimulationDraftBoard, downloadTextFile } from '../utils/exports';
 
 interface SimulationModalProps {
   players: Player[];
@@ -80,10 +80,10 @@ export const SimulationModal = ({
     setSelectedComparisonIndex(0);
   };
 
-  // Export handlers
-  const handleExportRosters = (teamsToExport: Team[], formatLabel: string) => {
-    const content = generatePublicRosters(teamsToExport, []);
-    const filename = `simulation_${formatLabel.toLowerCase()}_rosters.txt`;
+  // Export handlers - exports draft board grid (Rounds x Teams)
+  const handleExportDraftBoard = (teamsToExport: Team[], formatLabel: string) => {
+    const content = generateSimulationDraftBoard(teamsToExport, draftOrder);
+    const filename = `simulation_${formatLabel.toLowerCase()}_draft_board.csv`;
     downloadTextFile(content, filename);
   };
 
@@ -318,7 +318,7 @@ export const SimulationModal = ({
               </button>
               <div className="flex gap-2">
                 <button
-                  onClick={() => handleExportRosters(result.teams, draftFormat)}
+                  onClick={() => handleExportDraftBoard(result.teams, draftFormat)}
                   className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 rounded-lg font-medium flex items-center gap-2"
                 >
                   <Download className="w-4 h-4" />
@@ -353,7 +353,7 @@ export const SimulationModal = ({
                 <button
                   onClick={() => {
                     const selected = comparisonResults[selectedComparisonIndex];
-                    handleExportRosters(selected.result.teams, selected.label);
+                    handleExportDraftBoard(selected.result.teams, selected.label);
                   }}
                   className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 rounded-lg font-medium flex items-center gap-2"
                 >
