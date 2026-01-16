@@ -152,16 +152,27 @@ export function processWorkbook(
       }
     }
 
-    // Mark as partial if missing data
-    player.isPartial = player.missingCategories.length > 0;
+    // Mark as partial if missing data OR if no evaluation data at all
+    player.isPartial = player.missingCategories.length > 0 || player.tabsFound.length === 0;
 
-    if (player.isPartial && player.tabsFound.length > 0) {
+    if (player.missingCategories.length > 0 && player.tabsFound.length > 0) {
       warnings.push({
         type: 'partial_data',
         message: `Player ${player.fullName} (BIB ${player.bib}) missing categories: ${player.missingCategories.join(', ')}`,
         bib: player.bib,
       });
     }
+  }
+
+  // Collect players with no evaluation data at all and generate grouped warning
+  const noEvalPlayers = players.filter(p => p.tabsFound.length === 0);
+  if (noEvalPlayers.length > 0) {
+    const playerList = noEvalPlayers.map(p => `${p.fullName} (BIB ${p.bib})`).join(', ');
+    warnings.push({
+      type: 'no_evaluation',
+      message: `The following players do not have any evaluation data and will be labeled as Did Not Evaluate: ${playerList}`,
+      bib: noEvalPlayers[0].bib,
+    });
   }
 
   // Sort by weighted total (descending) and assign ranks
