@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Undo, RotateCcw, AlertCircle, Search, ChevronRight } from 'lucide-react';
+import { Undo, ChevronLeft, AlertCircle, Search, ChevronRight } from 'lucide-react';
 import { DraftState, Team } from '../types';
 import { TeamRosters } from './TeamRosters';
 import { getNextPick, calculateDraftOrder } from '../utils/draftOrder';
@@ -248,10 +248,10 @@ export const DraftBoard = ({
                 <button
                   onClick={onReset}
                   className="px-3 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg font-medium flex items-center gap-2 backdrop-blur-sm"
-                  title="Reset entire draft"
+                  title="Go back to configuration"
                 >
-                  <RotateCcw className="w-4 h-4" />
-                  <span className="hidden sm:inline">Reset</span>
+                  <ChevronLeft className="w-4 h-4" />
+                  <span className="hidden sm:inline">Back to Config</span>
                 </button>
               </div>
             )}

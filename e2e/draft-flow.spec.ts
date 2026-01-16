@@ -320,4 +320,124 @@ test.describe('Draft Flow E2E', () => {
     await expect(page.getByText('Sibling Groups')).toBeVisible();
     await expect(page.getByText('Tyler Miller ↔ Sam Miller')).toBeVisible();
   });
+
+  test('back navigation from draft preserves player and team data', async ({ page }) => {
+    // Create division and set up draft
+    await page.getByRole('button', { name: 'Create New Division' }).click();
+    await page.getByRole('button', { name: 'Custom' }).click();
+    await page.getByPlaceholder('e.g., Majors 2024').fill('Back Nav Test');
+    await page.locator('input[type="range"]').fill('5');
+    await page.getByRole('button', { name: 'Create Division' }).click();
+
+    // Import CSV
+    await page.getByRole('button', { name: /Import Summary CSV/i }).click();
+    const csvPath = path.resolve(__dirname, 'fixtures/test-players.csv');
+    await page.locator('input#file-input').setInputFiles(csvPath);
+
+    await page.getByRole('button', { name: 'Continue to Review' }).click();
+
+    // Wait for review page and set up team names
+    await expect(page.getByText('Review Players & Setup Teams')).toBeVisible();
+    await page.getByRole('button', { name: /Teams & Detection/i }).click();
+    const teamInputs = page.locator('input[placeholder*="Coach Name"]');
+    await teamInputs.nth(0).fill('TestCoach');
+
+    // Continue to config
+    page.on('dialog', async (dialog) => {
+      await dialog.accept();
+    });
+    await page.getByRole('button', { name: 'Continue to Draft Setup' }).click();
+    await expect(page.getByText('Draft Configuration')).toBeVisible();
+
+    // Configure and start draft
+    await page.locator('label').filter({ hasText: 'Snake' }).click();
+    await page.getByRole('button', { name: /Randomize/i }).click();
+    await page.getByRole('button', { name: 'Start Draft' }).click();
+
+    // Verify on draft board
+    await expect(page.getByText('Now Drafting:')).toBeVisible();
+
+    // Make 1-2 picks
+    const draftButton = page.locator('button:has-text("Draft")').first();
+    if (await draftButton.isVisible({ timeout: 1000 }).catch(() => false)) {
+      await draftButton.click();
+      await page.waitForTimeout(300);
+    }
+
+    // Click Back to Config
+    await page.getByRole('button', { name: /Back to Config/i }).click();
+
+    // Verify confirmation dialog appears and accept it
+    // (dialog handler already set up above)
+    await page.waitForTimeout(500);
+
+    // Verify we're back on config screen
+    await expect(page.getByText('Draft Configuration')).toBeVisible();
+
+    // Verify team name is still set
+    await expect(page.getByText('TestCoach')).toBeVisible();
+
+    // Verify we can start draft again
+    await expect(page.getByRole('button', { name: 'Start Draft' })).toBeEnabled();
+  });
+
+  test('prevents creating division with duplicate name', async ({ page }) => {
+    // Create first division named "Duplicate Test"
+    await page.getByRole('button', { name: 'Create New Division' }).click();
+    await page.getByRole('button', { name: 'Custom' }).click();
+    await page.getByPlaceholder('e.g., Majors 2024').fill('Duplicate Test');
+    await page.locator('input[type="range"]').fill('5');
+    await page.getByRole('button', { name: 'Create Division' }).click();
+
+    // Import a CSV to make the division valid (saved to localStorage)
+    await page.getByRole('button', { name: /Import Summary CSV/i }).click();
+    const csvPath = path.resolve(__dirname, 'fixtures/test-players.csv');
+    await page.locator('input#file-input').setInputFiles(csvPath);
+    await page.getByRole('button', { name: 'Continue to Review' }).click();
+    await expect(page.getByText('Review Players & Setup Teams')).toBeVisible();
+
+    // Go back to division selector
+    await page.getByRole('button', { name: /Divisions/i }).first().click();
+
+    // Try to create another with same name
+    await page.getByRole('button', { name: 'Create New Division' }).click();
+    await page.getByRole('button', { name: 'Custom' }).click();
+    await page.getByPlaceholder('e.g., Majors 2024').fill('Duplicate Test');
+
+    // Verify error message appears
+    await expect(page.getByText(/already exists/i)).toBeVisible();
+
+    // Verify Create button is disabled
+    await expect(page.getByRole('button', { name: 'Create Division' })).toBeDisabled();
+  });
+
+  test('shows data loaded state when returning to upload', async ({ page }) => {
+    // Create division and import CSV
+    await page.getByRole('button', { name: 'Create New Division' }).click();
+    await page.getByRole('button', { name: 'Custom' }).click();
+    await page.getByPlaceholder('e.g., Majors 2024').fill('Data Loaded Test');
+    await page.locator('input[type="range"]').fill('5');
+    await page.getByRole('button', { name: 'Create Division' }).click();
+
+    await page.getByRole('button', { name: /Import Summary CSV/i }).click();
+    const csvPath = path.resolve(__dirname, 'fixtures/test-players.csv');
+    await page.locator('input#file-input').setInputFiles(csvPath);
+    await page.getByRole('button', { name: 'Continue to Review' }).click();
+
+    // Wait for review page
+    await expect(page.getByText('Review Players & Setup Teams')).toBeVisible();
+
+    // Click Back button from Review
+    await page.getByRole('button', { name: /Back/i }).first().click();
+
+    // Verify shows "Players Loaded" message
+    await expect(page.getByText(/Players Loaded/i)).toBeVisible();
+
+    // Verify "Continue to Review" button exists
+    await expect(page.getByRole('button', { name: /Continue to Review/i })).toBeVisible();
+
+    // Click continue and verify back on review
+    await page.getByRole('button', { name: /Continue to Review/i }).click();
+    await expect(page.getByText('Review Players & Setup Teams')).toBeVisible();
+  });
 });

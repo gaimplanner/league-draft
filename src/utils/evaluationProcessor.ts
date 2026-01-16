@@ -153,9 +153,14 @@ export function processWorkbook(
     }
 
     // Mark as partial if missing data OR if no evaluation data at all
+    // A player is DNE if they have no tabs found OR if they're missing ALL categories
+    const isMissingAllCategories = player.missingCategories.length === 5; // All 5 categories missing
     player.isPartial = player.missingCategories.length > 0 || player.tabsFound.length === 0;
+    player.isDNE = player.tabsFound.length === 0 || isMissingAllCategories;
 
-    if (player.missingCategories.length > 0 && player.tabsFound.length > 0) {
+    // Only warn about partial data if they have SOME data but not all categories
+    // Don't warn for players who are completely DNE (will be handled separately)
+    if (player.missingCategories.length > 0 && player.tabsFound.length > 0 && !isMissingAllCategories) {
       warnings.push({
         type: 'partial_data',
         message: `Player ${player.fullName} (BIB ${player.bib}) missing categories: ${player.missingCategories.join(', ')}`,
@@ -164,13 +169,13 @@ export function processWorkbook(
     }
   }
 
-  // Collect players with no evaluation data at all and generate grouped warning
-  const noEvalPlayers = players.filter(p => p.tabsFound.length === 0);
+  // Collect players with no evaluation data (either no tabs found OR missing all categories)
+  const noEvalPlayers = players.filter(p => p.isDNE);
   if (noEvalPlayers.length > 0) {
     const playerList = noEvalPlayers.map(p => `${p.fullName} (BIB ${p.bib})`).join(', ');
     warnings.push({
       type: 'no_evaluation',
-      message: `The following players do not have any evaluation data and will be labeled as Did Not Evaluate: ${playerList}`,
+      message: `${noEvalPlayers.length} player(s) marked as DNE (Did Not Evaluate) - no scores recorded: ${playerList}`,
       bib: noEvalPlayers[0].bib,
     });
   }
@@ -227,6 +232,7 @@ function createEmptyPlayer(bib: string): EvaluationPlayer {
     missingCategories: [],
     tabsFound: [],
     isPartial: false,
+    isDNE: false,
   };
 }
 

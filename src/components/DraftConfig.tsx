@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { ChevronRight, CheckCircle, AlertCircle, Users } from 'lucide-react';
+import { ChevronRight, ChevronLeft, CheckCircle, AlertCircle, Users } from 'lucide-react';
 import { Team, Player, DraftFormat } from '../types';
 import { SimulationModal } from './SimulationModal';
 import { getTeamDisplayName } from '../utils/teamUtils';
@@ -8,6 +8,7 @@ interface DraftConfigProps {
   teams: Team[];
   players: Player[];
   onConfigComplete: (draftFormat: DraftFormat, draftOrder: string[], resolvedPlayers: Player[]) => void;
+  onBack?: () => void;
 }
 
 // Validation result for draft order
@@ -46,7 +47,7 @@ function validateDraftOrder(positions: (number | null)[], teamCount: number): Or
   return { valid: true, duplicates: [], missing: [] };
 }
 
-export const DraftConfig = ({ teams, players, onConfigComplete }: DraftConfigProps) => {
+export const DraftConfig = ({ teams, players, onConfigComplete, onBack }: DraftConfigProps) => {
   const [draftFormat, setDraftFormat] = useState<DraftFormat | null>(null);
   // Store position by team ID
   const [teamPositions, setTeamPositions] = useState<Record<string, number | null>>({});
@@ -238,6 +239,15 @@ export const DraftConfig = ({ teams, players, onConfigComplete }: DraftConfigPro
           </div>
 
           <div className="flex gap-2">
+            {onBack && (
+              <button
+                onClick={onBack}
+                className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg font-medium flex items-center gap-2 transition-colors"
+              >
+                <ChevronLeft className="w-5 h-5" />
+                Back to Review
+              </button>
+            )}
             <button
               onClick={() => setShowSimulation(true)}
               disabled={!validation.valid || !draftFormat}

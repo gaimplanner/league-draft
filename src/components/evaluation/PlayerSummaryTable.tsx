@@ -525,7 +525,11 @@ export function PlayerSummaryTable({
                   <td className="sticky left-[136px] z-10 bg-inherit px-2 py-1.5 text-gray-900 dark:text-white">
                     <div className="flex items-center gap-1">
                       <span className="truncate">{player.lastName}, {player.firstName}</span>
-                      {player.isPartial && (
+                      {player.isDNE ? (
+                        <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 rounded flex-shrink-0" title="Did Not Evaluate - no scores recorded">
+                          DNE
+                        </span>
+                      ) : player.isPartial && (
                         <span title="Incomplete data">
                           <AlertTriangle className="w-3 h-3 text-yellow-500 flex-shrink-0" />
                         </span>
