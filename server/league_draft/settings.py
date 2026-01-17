@@ -139,7 +139,9 @@ CSRF_TRUSTED_ORIGINS = [
     "http://127.0.0.1:5174",
 ]
 
-# Email settings (console backend for development)
+# Email settings
+# TODO: PRODUCTION - Replace console backend with real SMTP (e.g., SendGrid, SES)
+# See gaimplan_b2b for email configuration pattern
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 DEFAULT_FROM_EMAIL = "noreply@littleleaguedraft.local"
 
