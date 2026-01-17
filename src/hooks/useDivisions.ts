@@ -199,23 +199,15 @@ export function useDivisions() {
 
   // Select an existing division
   const selectDivision = useCallback(async (divisionId: string): Promise<Division | null> => {
-    console.log('[selectDivision] Called with divisionId:', divisionId);
     if (USE_API) {
       try {
         setIsLoading(true);
-        console.log('[selectDivision] Fetching from API...');
         const division = await api.getDivision(divisionId);
-        console.log('[selectDivision] API returned division:', {
-          name: division.name,
-          phase: division.phase,
-          playerCount: division.players?.length,
-          teamCount: division.teams?.length,
-        });
         setActiveDivision(division);
         setError(null);
         return division;
       } catch (err) {
-        console.error('[selectDivision] Failed to load division:', err);
+        console.error('Failed to load division:', err);
         setError('Failed to load division');
         return null;
       } finally {
@@ -232,14 +224,9 @@ export function useDivisions() {
 
   // Update the active division
   const updateActiveDivision = useCallback(async (updates: Partial<Division>): Promise<void> => {
-    console.log('[updateActiveDivision] Called with updates:', updates);
-    if (!activeDivision) {
-      console.log('[updateActiveDivision] No active division, returning');
-      return;
-    }
+    if (!activeDivision) return;
 
     const updated: Division = { ...activeDivision, ...updates };
-    console.log('[updateActiveDivision] Current phase:', activeDivision.phase, '-> New phase:', updated.phase);
 
     if (USE_API) {
       try {
@@ -347,7 +334,6 @@ export function useDivisions() {
 
   // Clear active division (return to selector)
   const clearActiveDivision = useCallback((): void => {
-    console.log('[clearActiveDivision] Clearing active division');
     setActiveDivision(null);
   }, []);
 

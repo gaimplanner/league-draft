@@ -89,19 +89,11 @@ function App() {
 
   // Load division state when activeDivision changes
   useEffect(() => {
-    console.log('[useEffect:activeDivision] Triggered', {
-      hasActiveDivision: !!activeDivision,
-      divisionName: activeDivision?.name,
-      divisionPhase: activeDivision?.phase,
-      playerCount: activeDivision?.players?.length,
-      teamCount: activeDivision?.teams?.length,
-    });
     if (activeDivision) {
-      console.log('[useEffect:activeDivision] Setting mode to draft and loading division state');
       setMode('draft');
       loadDivisionState(activeDivision);
     }
-  }, [activeDivision, loadDivisionState]); // Trigger when division object changes
+  }, [activeDivision, loadDivisionState]);
 
   // Scroll to top when phase changes
   useEffect(() => {
@@ -142,16 +134,9 @@ function App() {
 
   // Save phase changes back to division (only after initial load)
   useEffect(() => {
-    console.log('[useEffect:phaseSync] Triggered', {
-      phase,
-      activeDivisionPhase: activeDivision?.phase,
-      phaseMismatch: activeDivision && phase !== activeDivision.phase,
-      divisionStateLoaded,
-    });
     // Only sync phase changes AFTER the division state has been loaded
     // This prevents the default 'upload' phase from overwriting the API-loaded phase
     if (divisionStateLoaded && activeDivision && phase !== activeDivision.phase) {
-      console.log('[useEffect:phaseSync] Phase mismatch, updating division phase to:', phase);
       // When draft completes, also save the completion timestamp and final state
       if (phase === 'complete') {
         updateActiveDivision({
@@ -422,12 +407,6 @@ function App() {
 
   // Handle going back to division selector
   const handleBackToSelector = async () => {
-    console.log('[handleBackToSelector] Called', {
-      activeDivision: activeDivision?.name,
-      isApiMode: isApiMode(),
-      currentMode: mode,
-      currentPhase: phase,
-    });
     // Save current state to division before leaving (fire and forget for API mode)
     if (activeDivision && !isApiMode()) {
       updateActiveDivision({
@@ -437,8 +416,6 @@ function App() {
         phase,
       });
     }
-    // Always navigate back regardless of save result
-    console.log('[handleBackToSelector] Clearing active division and setting mode to selector');
     clearActiveDivision();
     setMode('selector');
     setCSVData(null);
