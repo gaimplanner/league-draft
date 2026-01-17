@@ -255,7 +255,8 @@ class DraftViewSet(viewsets.ViewSet):
                 draft_order=serializer.validated_data["draft_order"],
             )
             return Response(
-                DraftStateSerializer(draft_state).data, status=status.HTTP_201_CREATED
+                self._get_full_draft_response(draft_state),
+                status=status.HTTP_201_CREATED,
             )
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
@@ -272,7 +273,7 @@ class DraftViewSet(viewsets.ViewSet):
                 player_id=serializer.validated_data["player_id"],
                 team_id=serializer.validated_data["team_id"],
             )
-            return Response(DraftStateSerializer(draft_state).data)
+            return Response(self._get_full_draft_response(draft_state))
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -286,7 +287,7 @@ class DraftViewSet(viewsets.ViewSet):
             draft_state = DraftService.undo_last_pick(
                 draft_state_id=serializer.validated_data["draft_state_id"]
             )
-            return Response(DraftStateSerializer(draft_state).data)
+            return Response(self._get_full_draft_response(draft_state))
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -305,6 +306,15 @@ class DraftViewSet(viewsets.ViewSet):
                 player2_id=serializer.validated_data["player2_id"],
                 reason=serializer.validated_data["reason"],
             )
-            return Response(DraftStateSerializer(draft_state).data)
+            return Response(self._get_full_draft_response(draft_state))
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    def _get_full_draft_response(self, draft_state: DraftState) -> dict:
+        """Get full draft response with players and teams."""
+        division = draft_state.division
+        return {
+            "draft_state": DraftStateSerializer(draft_state).data,
+            "players": PlayerSerializer(division.players.all(), many=True).data,
+            "teams": TeamSerializer(division.teams.all(), many=True).data,
+        }

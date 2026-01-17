@@ -240,7 +240,6 @@ class DivisionSummarySerializer(serializers.ModelSerializer):
     """Serializer for division list view."""
 
     player_count = serializers.SerializerMethodField()
-    age_range = serializers.SerializerMethodField()
 
     class Meta:
         model = Division
@@ -257,9 +256,6 @@ class DivisionSummarySerializer(serializers.ModelSerializer):
 
     def get_player_count(self, obj):
         return obj.players.count()
-
-    def get_age_range(self, obj):
-        return {"min": obj.age_range_min, "max": obj.age_range_max}
 
 
 class DivisionSerializer(serializers.ModelSerializer):

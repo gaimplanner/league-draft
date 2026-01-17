@@ -24,6 +24,7 @@ import {
   AppPhase,
 } from './types';
 import { parseCSVWithMapping, CoachAssignment } from './utils/csvParser';
+import { savePlayersToApi, saveTeamsToApi, isApiMode } from './api';
 
 type AppMode = 'selector' | 'creator' | 'draft';
 
@@ -149,7 +150,7 @@ function App() {
   };
 
   // Handle column mapping completion
-  const handleMappingComplete = (mapping: ColumnMapping) => {
+  const handleMappingComplete = async (mapping: ColumnMapping) => {
     if (!csvData || !activeDivision) return;
 
     const { players: loadedPlayers, coachAssignments } = parseCSVWithMapping(
@@ -244,6 +245,20 @@ function App() {
       // and confirm matches before they are applied.
     }
 
+    // In API mode, save players and teams to the database
+    if (isApiMode()) {
+      try {
+        // Save teams first (for coach assignments)
+        await saveTeamsToApi(activeDivision.id, updatedTeams);
+        // Save players
+        const savedPlayers = await savePlayersToApi(activeDivision.id, updatedPlayers);
+        updatedPlayers = savedPlayers;
+      } catch (err) {
+        console.error('Failed to save to API:', err);
+        // Continue with local state anyway
+      }
+    }
+
     setAllPlayers(updatedPlayers);
     setPlayers(updatedPlayers);
 
@@ -261,7 +276,7 @@ function App() {
 
   // Handle Excel evaluation import completion
   // Skips review phase since all adjustments are done in the evaluation summary
-  const handleEvaluationComplete = (
+  const handleEvaluationComplete = async (
     importedPlayers: Player[],
     teamNames: string[],
     assistantCoaches: string[][]
@@ -269,7 +284,7 @@ function App() {
     if (!activeDivision) return;
 
     // Update teams with names and assistant coaches from evaluation
-    const updatedTeams = activeDivision.teams.map((team, i) => ({
+    let updatedTeams = activeDivision.teams.map((team, i) => ({
       ...team,
       name: teamNames[i] || team.name,
       assistantCoaches: assistantCoaches[i] || [],
@@ -283,12 +298,26 @@ function App() {
     });
 
     // Fix coachTeamId references to use actual division team IDs
-    const fixedPlayers = importedPlayers.map(player => {
+    let fixedPlayers = importedPlayers.map(player => {
       if (player.coachTeamId && teamIdMapping[player.coachTeamId]) {
         return { ...player, coachTeamId: teamIdMapping[player.coachTeamId] };
       }
       return player;
     });
+
+    // In API mode, save players and teams to the database
+    if (isApiMode()) {
+      try {
+        // Save teams first (for coach assignments)
+        await saveTeamsToApi(activeDivision.id, updatedTeams);
+        // Save players
+        const savedPlayers = await savePlayersToApi(activeDivision.id, fixedPlayers);
+        fixedPlayers = savedPlayers;
+      } catch (err) {
+        console.error('Failed to save to API:', err);
+        // Continue with local state anyway
+      }
+    }
 
     setAllPlayers(fixedPlayers);
     setPlayers(fixedPlayers);

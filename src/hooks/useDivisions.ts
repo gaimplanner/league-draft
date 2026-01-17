@@ -6,6 +6,10 @@ import {
   DivisionAgeRange,
   createInitialDivision,
 } from '../types';
+import { api, ApiError } from '../api/client';
+
+// Feature flag to use API vs localStorage
+const USE_API = import.meta.env.VITE_USE_API === 'true';
 
 const DIVISIONS_INDEX_KEY = 'little-league-divisions-index';
 const DIVISION_PREFIX = 'little-league-division-';
@@ -85,21 +89,39 @@ export function useDivisions() {
   const [divisionIds, setDivisionIds] = useState<string[]>([]);
   const [summaries, setSummaries] = useState<DivisionSummary[]>([]);
   const [activeDivision, setActiveDivision] = useState<Division | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // Load divisions index on mount
+  // Load divisions on mount
   useEffect(() => {
-    const ids = loadDivisionsIndex();
-    setDivisionIds(ids);
+    if (USE_API) {
+      // Load from API
+      setIsLoading(true);
+      api.listDivisions()
+        .then((data) => {
+          setSummaries(data);
+          setDivisionIds(data.map(d => d.id));
+          setError(null);
+        })
+        .catch((err: ApiError) => {
+          console.error('Failed to load divisions from API:', err);
+          setError('Failed to load divisions');
+        })
+        .finally(() => setIsLoading(false));
+    } else {
+      // Load from localStorage
+      const ids = loadDivisionsIndex();
+      setDivisionIds(ids);
 
-    // Load summaries for all divisions
-    const loadedSummaries: DivisionSummary[] = [];
-    for (const id of ids) {
-      const division = loadDivision(id);
-      if (division) {
-        loadedSummaries.push(divisionToSummary(division));
+      const loadedSummaries: DivisionSummary[] = [];
+      for (const id of ids) {
+        const division = loadDivision(id);
+        if (division) {
+          loadedSummaries.push(divisionToSummary(division));
+        }
       }
+      setSummaries(loadedSummaries);
     }
-    setSummaries(loadedSummaries);
   }, []);
 
   // Check if a division name already exists (case-insensitive)
@@ -108,94 +130,205 @@ export function useDivisions() {
     return summaries.some(s => s.name.trim().toLowerCase() === normalizedName);
   }, [summaries]);
 
-  // Create a new division (in-memory only until players are imported)
-  // Returns null if division name already exists
-  const createDivision = useCallback((config: {
+  // Create a new division
+  const createDivision = useCallback(async (config: {
     name: string;
     preset: DivisionPreset;
     teamCount: number;
     ageRange: DivisionAgeRange;
     enforceAgeLimit: boolean;
     maxPerAge: number;
-  }): Division | null => {
+  }): Promise<Division | null> => {
     // Check for duplicate name
     if (divisionNameExists(config.name)) {
       return null;
     }
 
-    const id = generateDivisionId();
-    const division = createInitialDivision(
-      id,
-      config.name,
-      config.preset,
-      config.teamCount,
-      config.ageRange,
-      config.enforceAgeLimit,
-      config.maxPerAge
-    );
+    if (USE_API) {
+      try {
+        setIsLoading(true);
+        const division = await api.createDivision({
+          name: config.name,
+          preset: config.preset,
+          ageRange: config.ageRange,
+          teamCount: config.teamCount,
+          enforceAgeLimit: config.enforceAgeLimit,
+          maxPerAge: config.maxPerAge,
+        });
 
-    // DON'T save to localStorage yet - wait until players are imported
-    // This prevents incomplete divisions from being saved
+        // Add to summaries
+        setSummaries(prev => [...prev, {
+          id: division.id,
+          name: division.name,
+          preset: division.preset,
+          teamCount: division.teamCount,
+          playerCount: division.players.length,
+          phase: division.phase,
+          createdAt: division.createdAt,
+          completedAt: division.completedAt,
+        }]);
+        setDivisionIds(prev => [...prev, division.id]);
+        setActiveDivision(division);
+        setError(null);
+        return division;
+      } catch (err) {
+        console.error('Failed to create division:', err);
+        setError('Failed to create division');
+        return null;
+      } finally {
+        setIsLoading(false);
+      }
+    } else {
+      // localStorage path
+      const id = generateDivisionId();
+      const division = createInitialDivision(
+        id,
+        config.name,
+        config.preset,
+        config.teamCount,
+        config.ageRange,
+        config.enforceAgeLimit,
+        config.maxPerAge
+      );
 
-    // Set as active (in-memory only)
-    setActiveDivision(division);
-
-    return division;
+      // Set as active (in-memory only - don't save until players imported)
+      setActiveDivision(division);
+      return division;
+    }
   }, [divisionNameExists]);
 
   // Select an existing division
-  const selectDivision = useCallback((divisionId: string): Division | null => {
-    const division = loadDivision(divisionId);
-    if (division) {
-      setActiveDivision(division);
+  const selectDivision = useCallback(async (divisionId: string): Promise<Division | null> => {
+    if (USE_API) {
+      try {
+        setIsLoading(true);
+        const division = await api.getDivision(divisionId);
+        setActiveDivision(division);
+        setError(null);
+        return division;
+      } catch (err) {
+        console.error('Failed to load division:', err);
+        setError('Failed to load division');
+        return null;
+      } finally {
+        setIsLoading(false);
+      }
+    } else {
+      const division = loadDivision(divisionId);
+      if (division) {
+        setActiveDivision(division);
+      }
+      return division;
     }
-    return division;
   }, []);
 
   // Update the active division
-  const updateActiveDivision = useCallback((updates: Partial<Division>): void => {
+  const updateActiveDivision = useCallback(async (updates: Partial<Division>): Promise<void> => {
     if (!activeDivision) return;
 
     const updated: Division = { ...activeDivision, ...updates };
-    const wasValid = isDivisionValid(activeDivision);
-    const isNowValid = isDivisionValid(updated);
 
-    // Only persist to localStorage if division is valid (has players)
-    if (isNowValid) {
-      // First time becoming valid - add to index
-      if (!wasValid && !divisionIds.includes(updated.id)) {
-        const newIds = [...divisionIds, updated.id];
-        saveDivisionsIndex(newIds);
-        setDivisionIds(newIds);
-        setSummaries(prev => [...prev, divisionToSummary(updated)]);
-      } else {
-        // Already in index - just update summary
-        setSummaries(prev => prev.map(s =>
-          s.id === updated.id ? divisionToSummary(updated) : s
-        ));
+    if (USE_API) {
+      try {
+        // Only send API-supported fields
+        const apiUpdates: Parameters<typeof api.updateDivision>[1] = {};
+        if (updates.name !== undefined) apiUpdates.name = updates.name;
+        if (updates.preset !== undefined) apiUpdates.preset = updates.preset;
+        if (updates.ageRange !== undefined) apiUpdates.ageRange = updates.ageRange;
+        if (updates.enforceAgeLimit !== undefined) apiUpdates.enforceAgeLimit = updates.enforceAgeLimit;
+        if (updates.maxPerAge !== undefined) apiUpdates.maxPerAge = updates.maxPerAge;
+        if (updates.teamCount !== undefined) apiUpdates.teamCount = updates.teamCount;
+        if (updates.rosterSize !== undefined) apiUpdates.rosterSize = updates.rosterSize;
+        if (updates.scoringWeights !== undefined) apiUpdates.scoringWeights = updates.scoringWeights;
+        if (updates.scoringMode !== undefined) apiUpdates.scoringMode = updates.scoringMode;
+        if (updates.phase !== undefined) apiUpdates.phase = updates.phase;
+
+        // Only call API if there are API-supported updates
+        if (Object.keys(apiUpdates).length > 0) {
+          const division = await api.updateDivision(activeDivision.id, apiUpdates);
+          setActiveDivision(division);
+
+          // Update summary
+          setSummaries(prev => prev.map(s =>
+            s.id === division.id ? {
+              id: division.id,
+              name: division.name,
+              preset: division.preset,
+              teamCount: division.teamCount,
+              playerCount: division.players.length,
+              phase: division.phase,
+              createdAt: division.createdAt,
+              completedAt: division.completedAt,
+            } : s
+          ));
+        } else {
+          // For non-API updates (like teams, players), just update local state
+          setActiveDivision(updated);
+        }
+        setError(null);
+      } catch (err) {
+        console.error('Failed to update division:', err);
+        setError('Failed to update division');
       }
-      saveDivision(updated);
-    }
+    } else {
+      const wasValid = isDivisionValid(activeDivision);
+      const isNowValid = isDivisionValid(updated);
 
-    setActiveDivision(updated);
+      // Only persist to localStorage if division is valid (has players)
+      if (isNowValid) {
+        // First time becoming valid - add to index
+        if (!wasValid && !divisionIds.includes(updated.id)) {
+          const newIds = [...divisionIds, updated.id];
+          saveDivisionsIndex(newIds);
+          setDivisionIds(newIds);
+          setSummaries(prev => [...prev, divisionToSummary(updated)]);
+        } else {
+          // Already in index - just update summary
+          setSummaries(prev => prev.map(s =>
+            s.id === updated.id ? divisionToSummary(updated) : s
+          ));
+        }
+        saveDivision(updated);
+      }
+
+      setActiveDivision(updated);
+    }
   }, [activeDivision, divisionIds]);
 
   // Delete a division
-  const deleteDivision = useCallback((divisionId: string): void => {
-    // Remove from localStorage
-    deleteDivisionStorage(divisionId);
+  const deleteDivision = useCallback(async (divisionId: string): Promise<void> => {
+    if (USE_API) {
+      try {
+        setIsLoading(true);
+        await api.deleteDivision(divisionId);
+        setDivisionIds(prev => prev.filter(id => id !== divisionId));
+        setSummaries(prev => prev.filter(s => s.id !== divisionId));
+        if (activeDivision?.id === divisionId) {
+          setActiveDivision(null);
+        }
+        setError(null);
+      } catch (err) {
+        console.error('Failed to delete division:', err);
+        setError('Failed to delete division');
+      } finally {
+        setIsLoading(false);
+      }
+    } else {
+      // Remove from localStorage
+      deleteDivisionStorage(divisionId);
 
-    // Update index
-    const newIds = divisionIds.filter(id => id !== divisionId);
-    saveDivisionsIndex(newIds);
-    setDivisionIds(newIds);
+      // Update index
+      const newIds = divisionIds.filter(id => id !== divisionId);
+      saveDivisionsIndex(newIds);
+      setDivisionIds(newIds);
 
-    // Update summaries
-    setSummaries(prev => prev.filter(s => s.id !== divisionId));
+      // Update summaries
+      setSummaries(prev => prev.filter(s => s.id !== divisionId));
 
-    // Clear active if it was the deleted one
-    if (activeDivision?.id === divisionId) {
-      setActiveDivision(null);
+      // Clear active if it was the deleted one
+      if (activeDivision?.id === divisionId) {
+        setActiveDivision(null);
+      }
     }
   }, [divisionIds, activeDivision]);
 
@@ -204,35 +337,71 @@ export function useDivisions() {
     setActiveDivision(null);
   }, []);
 
-  // Refresh summaries from storage
-  const refreshSummaries = useCallback((): void => {
-    const ids = loadDivisionsIndex();
-    const loadedSummaries: DivisionSummary[] = [];
-    for (const id of ids) {
-      const division = loadDivision(id);
-      if (division) {
-        loadedSummaries.push(divisionToSummary(division));
+  // Refresh summaries from storage/API
+  const refreshSummaries = useCallback(async (): Promise<void> => {
+    if (USE_API) {
+      try {
+        setIsLoading(true);
+        const data = await api.listDivisions();
+        setSummaries(data);
+        setDivisionIds(data.map(d => d.id));
+        setError(null);
+      } catch (err) {
+        console.error('Failed to refresh divisions:', err);
+        setError('Failed to refresh divisions');
+      } finally {
+        setIsLoading(false);
       }
+    } else {
+      const ids = loadDivisionsIndex();
+      const loadedSummaries: DivisionSummary[] = [];
+      for (const id of ids) {
+        const division = loadDivision(id);
+        if (division) {
+          loadedSummaries.push(divisionToSummary(division));
+        }
+      }
+      setSummaries(loadedSummaries);
     }
-    setSummaries(loadedSummaries);
   }, []);
 
-  // Refresh active division from storage (for public view sync)
-  const refreshActiveDivision = useCallback((): void => {
+  // Refresh active division from storage/API
+  const refreshActiveDivision = useCallback(async (): Promise<void> => {
     if (!activeDivision) return;
-    const division = loadDivision(activeDivision.id);
-    if (division) {
-      setActiveDivision(division);
+
+    if (USE_API) {
+      try {
+        const division = await api.getDivision(activeDivision.id);
+        setActiveDivision(division);
+        setError(null);
+      } catch (err) {
+        console.error('Failed to refresh active division:', err);
+        setError('Failed to refresh division');
+      }
+    } else {
+      const division = loadDivision(activeDivision.id);
+      if (division) {
+        setActiveDivision(division);
+      }
     }
   }, [activeDivision]);
 
   // Full refresh - both summaries and active division
-  const refreshDivisions = useCallback((): void => {
-    refreshSummaries();
+  const refreshDivisions = useCallback(async (): Promise<void> => {
+    await refreshSummaries();
     if (activeDivision) {
-      const division = loadDivision(activeDivision.id);
-      if (division) {
-        setActiveDivision(division);
+      if (USE_API) {
+        try {
+          const division = await api.getDivision(activeDivision.id);
+          setActiveDivision(division);
+        } catch (err) {
+          console.error('Failed to refresh active division:', err);
+        }
+      } else {
+        const division = loadDivision(activeDivision.id);
+        if (division) {
+          setActiveDivision(division);
+        }
       }
     }
   }, [activeDivision, refreshSummaries]);
@@ -249,5 +418,7 @@ export function useDivisions() {
     refreshActiveDivision,
     refreshDivisions,
     divisionNameExists,
+    isLoading,
+    error,
   };
 }
