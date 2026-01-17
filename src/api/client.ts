@@ -413,7 +413,7 @@ export const api = {
   },
 
   async getDivision(id: string): Promise<Division> {
-    const response = await fetch(`${API_BASE_URL}/divisions/${id}/`, getDefaultOptions());
+    const response = await fetch(`${API_BASE_URL}/divisions/${id}/?include=all`, getDefaultOptions());
     const data = await handleResponse<Record<string, unknown>>(response);
     return transformDivisionFromApi(data);
   },

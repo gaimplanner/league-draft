@@ -93,7 +93,7 @@ function App() {
       setMode('draft');
       loadDivisionState(activeDivision);
     }
-  }, [activeDivision?.id]); // Only trigger when division changes
+  }, [activeDivision, loadDivisionState]); // Trigger when division object changes
 
   // Scroll to top when phase changes
   useEffect(() => {
@@ -387,9 +387,9 @@ function App() {
   };
 
   // Handle going back to division selector
-  const handleBackToSelector = () => {
-    // Save current state to division before leaving
-    if (activeDivision) {
+  const handleBackToSelector = async () => {
+    // Save current state to division before leaving (fire and forget for API mode)
+    if (activeDivision && !isApiMode()) {
       updateActiveDivision({
         players: draftState.players.length > 0 ? draftState.players : activeDivision.players,
         teams: draftState.teams.length > 0 ? draftState.teams : activeDivision.teams,
@@ -397,10 +397,15 @@ function App() {
         phase,
       });
     }
+    // Always navigate back regardless of save result
     clearActiveDivision();
     setMode('selector');
     setCSVData(null);
     setImportMode(null);
+    // Refresh summaries to get latest data
+    if (isApiMode()) {
+      refreshDivisions();
+    }
   };
 
   // Handle going back one step at a time

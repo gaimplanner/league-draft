@@ -176,7 +176,8 @@ class DivisionViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        division = serializer.save()
+        self.perform_create(serializer)
+        division = serializer.instance
         return Response(
             DivisionSerializer(division).data, status=status.HTTP_201_CREATED
         )

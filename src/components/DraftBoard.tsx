@@ -329,16 +329,11 @@ export const DraftBoard = ({
                 .slice(0, 2);
             });
 
-            // Use division age range if provided, otherwise use ages from available players
-            let ages: number[];
-            if (ageRange) {
-              ages = [];
-              for (let age = ageRange.min; age <= ageRange.max; age++) {
-                ages.push(age);
-              }
-            } else {
-              ages = Object.keys(topByAge).map(Number).sort((a, b) => a - b);
-            }
+            // Only show ages that have available players
+            const ages = Object.keys(topByAge)
+              .map(Number)
+              .filter(age => topByAge[age] && topByAge[age].length > 0)
+              .sort((a, b) => a - b);
 
             if (ages.length === 0) return null;
 
