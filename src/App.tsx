@@ -89,7 +89,15 @@ function App() {
 
   // Load division state when activeDivision changes
   useEffect(() => {
+    console.log('[useEffect:activeDivision] Triggered', {
+      hasActiveDivision: !!activeDivision,
+      divisionName: activeDivision?.name,
+      divisionPhase: activeDivision?.phase,
+      playerCount: activeDivision?.players?.length,
+      teamCount: activeDivision?.teams?.length,
+    });
     if (activeDivision) {
+      console.log('[useEffect:activeDivision] Setting mode to draft and loading division state');
       setMode('draft');
       loadDivisionState(activeDivision);
     }
@@ -115,9 +123,35 @@ function App() {
     return () => window.removeEventListener('storage', handleStorageChange);
   }, [isPublicView, refreshDivisions]);
 
-  // Save phase changes back to division
+  // Track if division state has been loaded (to avoid overwriting API phase with default 'upload')
+  const [divisionStateLoaded, setDivisionStateLoaded] = useState(false);
+
+  // Reset divisionStateLoaded when division changes
   useEffect(() => {
-    if (activeDivision && phase !== activeDivision.phase) {
+    setDivisionStateLoaded(false);
+  }, [activeDivision?.id]);
+
+  // Mark division state as loaded after loadDivisionState runs
+  useEffect(() => {
+    if (activeDivision && !divisionStateLoaded) {
+      // Small delay to ensure loadDivisionState has completed
+      const timer = setTimeout(() => setDivisionStateLoaded(true), 100);
+      return () => clearTimeout(timer);
+    }
+  }, [activeDivision, divisionStateLoaded]);
+
+  // Save phase changes back to division (only after initial load)
+  useEffect(() => {
+    console.log('[useEffect:phaseSync] Triggered', {
+      phase,
+      activeDivisionPhase: activeDivision?.phase,
+      phaseMismatch: activeDivision && phase !== activeDivision.phase,
+      divisionStateLoaded,
+    });
+    // Only sync phase changes AFTER the division state has been loaded
+    // This prevents the default 'upload' phase from overwriting the API-loaded phase
+    if (divisionStateLoaded && activeDivision && phase !== activeDivision.phase) {
+      console.log('[useEffect:phaseSync] Phase mismatch, updating division phase to:', phase);
       // When draft completes, also save the completion timestamp and final state
       if (phase === 'complete') {
         updateActiveDivision({
@@ -131,7 +165,7 @@ function App() {
         updateActiveDivision({ phase });
       }
     }
-  }, [phase, activeDivision?.id]);
+  }, [phase, activeDivision?.id, divisionStateLoaded]);
 
   // Handle selecting an existing division
   const handleSelectDivision = useCallback((divisionId: string) => {
@@ -388,6 +422,12 @@ function App() {
 
   // Handle going back to division selector
   const handleBackToSelector = async () => {
+    console.log('[handleBackToSelector] Called', {
+      activeDivision: activeDivision?.name,
+      isApiMode: isApiMode(),
+      currentMode: mode,
+      currentPhase: phase,
+    });
     // Save current state to division before leaving (fire and forget for API mode)
     if (activeDivision && !isApiMode()) {
       updateActiveDivision({
@@ -398,14 +438,11 @@ function App() {
       });
     }
     // Always navigate back regardless of save result
+    console.log('[handleBackToSelector] Clearing active division and setting mode to selector');
     clearActiveDivision();
     setMode('selector');
     setCSVData(null);
     setImportMode(null);
-    // Refresh summaries to get latest data
-    if (isApiMode()) {
-      refreshDivisions();
-    }
   };
 
   // Handle going back one step at a time

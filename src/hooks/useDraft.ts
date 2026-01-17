@@ -102,11 +102,20 @@ export const useDraft = (divisionId?: string) => {
 
   // Load state from a division object (called when selecting a division)
   const loadDivisionState = useCallback((division: Division) => {
+    console.log('[loadDivisionState] Called', {
+      divisionId: division.id,
+      divisionName: division.name,
+      divisionPhase: division.phase,
+      playerCount: division.players?.length,
+      teamCount: division.teams?.length,
+      hasDraftState: !!division.draftState,
+    });
     hasLoaded.current = true;
     currentDivisionId.current = division.id;
 
     // If division has a saved draft state, use it
     if (division.draftState) {
+      console.log('[loadDivisionState] Using saved draft state');
       setDraftState(division.draftState);
       // Store draft state ID for API mode
       if (USE_API && (division.draftState as DraftState & { id?: string }).id) {
@@ -114,6 +123,7 @@ export const useDraft = (divisionId?: string) => {
       }
     } else {
       // Otherwise, initialize from division's players and teams
+      console.log('[loadDivisionState] Initializing from division players/teams');
       setDraftState({
         ...initialDraftState,
         players: division.players,
@@ -122,6 +132,7 @@ export const useDraft = (divisionId?: string) => {
       draftStateId.current = null;
     }
 
+    console.log('[loadDivisionState] Setting phase to:', division.phase);
     setPhase(division.phase);
   }, []);
 
