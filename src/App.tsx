@@ -405,7 +405,7 @@ function App() {
       case 'draft':
         // Going back from draft/complete resets draft progress but preserves all data
         if (draftState.picks.length > 0) {
-          if (!window.confirm('Going back will reset all draft picks. Continue?')) {
+          if (!window.confirm('Warning: This will delete all draft rounds and picks. Are you sure you want to return to Draft Setup?')) {
             return;
           }
         }
@@ -525,15 +525,17 @@ function App() {
       <div className={phase !== 'upload' && phase !== 'complete' ? 'pt-12' : ''}>
         {phase === 'upload' && (
           <div>
-            {/* Back button - separate bar above content */}
-            <div className="bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-2">
-              <button
-                onClick={importMode ? () => setImportMode(null) : handleBackToSelector}
-                className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors text-sm flex items-center gap-1"
-              >
-                ← {importMode ? 'Back to Import Selection' : 'Back to Divisions'}
-              </button>
-            </div>
+            {/* Back button - separate bar above content (hidden for Excel import which has its own) */}
+            {importMode !== 'excel' && (
+              <div className="bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-2">
+                <button
+                  onClick={importMode ? () => setImportMode(null) : handleBackToSelector}
+                  className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors text-sm flex items-center gap-1"
+                >
+                  ← {importMode ? 'Back to Import Selection' : 'Back to Divisions'}
+                </button>
+              </div>
+            )}
 
             {/* Import Type Selection */}
             {!importMode && (
@@ -603,6 +605,7 @@ function App() {
             onReset={handleReset}
             enforceAgeLimit={activeDivision?.enforceAgeLimit ?? false}
             maxPerAge={activeDivision?.maxPerAge ?? 0}
+            ageRange={activeDivision?.ageRange}
             pendingComplete={pendingComplete}
             onFinalizeDraft={finalizeDraft}
             onCancelComplete={cancelPendingComplete}

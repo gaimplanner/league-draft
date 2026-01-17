@@ -141,12 +141,17 @@ export const useDraft = (divisionId?: string) => {
             players: division.players,
             teams: division.teams,
           });
-          setPhase(targetPhase);
           draftStateId.current = null;
           setError(null);
         } catch (err) {
           console.error('Failed to reset draft:', err);
-          setError('Failed to reset draft');
+          // Still reset local state even if API fails
+          setDraftState({
+            ...initialDraftState,
+            players: preservedPlayers,
+            teams: preservedTeams,
+          });
+          draftStateId.current = null;
         } finally {
           setIsLoading(false);
         }
@@ -156,8 +161,9 @@ export const useDraft = (divisionId?: string) => {
           players: preservedPlayers,
           teams: preservedTeams,
         });
-        setPhase(targetPhase);
       }
+      // Always set phase regardless of API success/failure
+      setPhase(targetPhase);
       return;
     }
 

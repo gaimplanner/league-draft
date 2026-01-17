@@ -192,9 +192,26 @@ class PlayerViewSet(viewsets.ModelViewSet):
         division = Division.objects.get(id=division_id)
         created_players = []
 
+        import uuid as uuid_module
+
         for player_data in players_data:
             coach_team_id = player_data.pop("coach_team_id", None)
-            coach_team = Team.objects.get(id=coach_team_id) if coach_team_id else None
+            coach_team = None
+            if coach_team_id:
+                try:
+                    coach_team = Team.objects.get(id=coach_team_id, division=division)
+                except (Team.DoesNotExist, ValueError):
+                    # Invalid UUID or team not found - skip coach assignment
+                    pass
+
+            # Sanitize UUID fields - clear invalid values
+            for uuid_field in ["sibling_id", "locked_to_team_id", "drafted_by_team_id"]:
+                if uuid_field in player_data and player_data[uuid_field]:
+                    try:
+                        uuid_module.UUID(str(player_data[uuid_field]))
+                    except (ValueError, AttributeError):
+                        # Invalid UUID - clear the field
+                        player_data[uuid_field] = None
 
             player = Player.objects.create(
                 division=division, coach_team=coach_team, **player_data
