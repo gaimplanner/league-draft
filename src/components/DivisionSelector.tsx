@@ -82,9 +82,9 @@ export const DivisionSelector = ({
             <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
               <User className="w-4 h-4" />
               <span>{user.email}</span>
-              {user.leagueName && (
+              {user.leagues.length > 0 && (
                 <span className="text-gray-400 dark:text-gray-500">
-                  ({user.leagueName})
+                  ({user.leagues.map(l => l.leagueName).join(', ')})
                 </span>
               )}
             </div>

@@ -49,7 +49,7 @@ class UserManager(BaseUserManager):
 
 
 class User(AbstractBaseUser, PermissionsMixin):
-    """Custom user model with email authentication and tenant membership."""
+    """Custom user model with email authentication."""
 
     ROLE_CHOICES = [
         ("master_admin", "Master Admin"),
@@ -61,13 +61,6 @@ class User(AbstractBaseUser, PermissionsMixin):
     first_name = models.CharField(max_length=150, blank=True)
     last_name = models.CharField(max_length=150, blank=True)
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default="user")
-    league = models.ForeignKey(
-        League,
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name="users",
-    )
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -82,6 +75,55 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     def __str__(self):
         return self.email
+
+    def get_leagues(self):
+        """Get all leagues the user is a member of."""
+        return League.objects.filter(memberships__user=self)
+
+    def get_membership(self, league):
+        """Get membership for a specific league."""
+        return self.memberships.filter(league=league).first()
+
+    def is_league_admin(self, league):
+        """Check if user is admin of a specific league."""
+        membership = self.get_membership(league)
+        return membership and membership.role == "admin"
+
+
+# -----------------------------------------------------------------------------
+# League Membership Model
+# -----------------------------------------------------------------------------
+
+
+class LeagueMembership(models.Model):
+    """Membership linking users to leagues with roles."""
+
+    ROLE_CHOICES = [
+        ("admin", "Admin"),
+        ("member", "Member"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="memberships",
+    )
+    league = models.ForeignKey(
+        League,
+        on_delete=models.CASCADE,
+        related_name="memberships",
+    )
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default="member")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "league_memberships"
+        unique_together = [("user", "league")]
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.user.email} - {self.league.name} ({self.role})"
 
 
 # -----------------------------------------------------------------------------

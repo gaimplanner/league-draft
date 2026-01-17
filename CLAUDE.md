@@ -31,18 +31,27 @@ Has name, roster (drafted players), totalScore, draftPosition, coachKids array, 
 ### App Phases
 `upload` → `mapping` → `review` → `config` → `draft` → `complete`
 
+### Backend (Django REST Framework)
+- **Multi-tenant architecture**: League is the tenant model
+- **LeagueMembership**: Users can belong to multiple leagues with roles (admin/member)
+- **TenantMiddleware**: Injects `request.league` based on user's membership or X-League-ID header
+- **Session-based auth**: Django sessions with CSRF protection
+
 ### State Management
-- `useDivisions` hook: Division CRUD, persistence to localStorage
-- `useDraft` hook: Draft state, pick logic, undo, mandatory pick checks
+- `useDivisions` hook: Division CRUD via API
+- `useDraft` hook: Draft state, pick logic, undo, mandatory pick checks via API
 - `useEvaluationImport` hook: Excel workbook processing
+- `AuthContext`: User authentication state
 
 ### Key Files
 
 | File | Purpose |
 |------|---------|
 | `src/App.tsx` | Main orchestration, phase routing, state coordination |
+| `src/api/client.ts` | API client with snake_case/camelCase transformations |
+| `src/contexts/AuthContext.tsx` | Authentication state, login/logout/register |
 | `src/hooks/useDraft.ts` | Draft state machine, pick validation, startDraft, draftPlayer, undoLastPick |
-| `src/hooks/useDivisions.ts` | Division persistence, CRUD operations |
+| `src/hooks/useDivisions.ts` | Division CRUD via API |
 | `src/utils/draftLogic.ts` | getMandatoryPick, lockSiblingToTeam, getBestAvailable |
 | `src/utils/simulation.ts` | runSimulation, getSimulationStats |
 | `src/utils/exports.ts` | generatePublicRosters, generateOfficialRecord, generateSimulationDraftBoard |
@@ -51,10 +60,15 @@ Has name, roster (drafted players), totalScore, draftPosition, coachKids array, 
 | `src/utils/teamUtils.ts` | Team display name helpers |
 | `src/types/index.ts` | All TypeScript interfaces (Player, Team, Division, DraftState, etc.) |
 | `src/components/PlayerReviewTable.tsx` | Spreadsheet-style table for CSV player review |
+| `server/draft/models.py` | Django models: League, User, LeagueMembership, Division, Team, Player, DraftState |
+| `server/draft/views.py` | DRF ViewSets and auth endpoints |
+| `server/draft/services.py` | Draft business logic (start, pick, undo, trade) |
+| `server/draft/middleware.py` | TenantMiddleware for multi-tenancy |
 
 ### Component Hierarchy
 ```
 App
+├── LoginPage / RegisterPage (if not authenticated)
 ├── DivisionSelector / DivisionCreator
 ├── FileUpload → ColumnMapper (CSV flow)
 ├── EvaluationImport (Excel flow)
@@ -120,6 +134,36 @@ Draft state uses functional updates: `setDraftState(prev => ({ ...prev, ... }))`
 3. Update Excel processing in `evaluationProcessor.ts`
 4. Display in PlayerReview and DraftBoard
 
+## Backend Development
+
+### Running the Backend
+```bash
+docker compose up -d          # Start API + PostgreSQL
+docker compose logs -f api    # View API logs
+docker compose exec api python manage.py shell  # Django shell
+docker compose down           # Stop services
+```
+
+### Database Migrations
+```bash
+docker compose exec api python manage.py makemigrations
+docker compose exec api python manage.py migrate
+```
+
+### Key Backend Concepts
+
+**Multi-tenancy:**
+- League is the tenant model
+- LeagueMembership links users to leagues with roles (admin/member)
+- TenantMiddleware sets `request.league` from user's membership
+- DivisionViewSet filters by `request.league`
+
+**Auth Flow:**
+- POST `/api/auth/register/` - Creates user + optional league + membership
+- POST `/api/auth/login/` - Session login
+- POST `/api/auth/logout/` - End session
+- GET `/api/auth/me/` - Current user with leagues array
+
 ## Testing Approach
 
 ### E2E Tests (Playwright)
@@ -135,10 +179,11 @@ Tests cover:
 
 ### Manual Verification
 1. `npm run build` - Must pass without errors
-2. `npm run dev` - Test in browser
-3. Test all phases: import → review → config → draft → complete
-4. Verify coach's kid and sibling rules work
-5. Test simulation and exports
+2. `docker compose up -d` - Start backend
+3. `npm run dev` - Test in browser
+4. Test all phases: import → review → config → draft → complete
+5. Verify coach's kid and sibling rules work
+6. Test simulation and exports
 
 ## Branching
 

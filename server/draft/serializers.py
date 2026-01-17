@@ -2,7 +2,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 
-from .models import Division, Team, Player, DraftState, DraftPick, Trade, League
+from .models import Division, Team, Player, DraftState, DraftPick, Trade, League, LeagueMembership
 
 User = get_user_model()
 
@@ -39,12 +39,23 @@ class LoginSerializer(serializers.Serializer):
     password = serializers.CharField(write_only=True)
 
 
+class LeagueMembershipSerializer(serializers.ModelSerializer):
+    """Serializer for league membership."""
+
+    league_id = serializers.UUIDField(source="league.id", read_only=True)
+    league_name = serializers.CharField(source="league.name", read_only=True)
+    league_slug = serializers.CharField(source="league.slug", read_only=True)
+
+    class Meta:
+        model = LeagueMembership
+        fields = ["id", "league_id", "league_name", "league_slug", "role", "created_at"]
+        read_only_fields = ["id", "created_at"]
+
+
 class UserSerializer(serializers.ModelSerializer):
     """Serializer for user info."""
 
-    league_id = serializers.UUIDField(source="league.id", read_only=True, allow_null=True)
-    league_name = serializers.CharField(source="league.name", read_only=True, allow_null=True)
-    league_slug = serializers.CharField(source="league.slug", read_only=True, allow_null=True)
+    leagues = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -54,19 +65,26 @@ class UserSerializer(serializers.ModelSerializer):
             "first_name",
             "last_name",
             "role",
-            "league_id",
-            "league_name",
-            "league_slug",
+            "leagues",
         ]
+
+    def get_leagues(self, obj):
+        memberships = obj.memberships.select_related("league").all()
+        return LeagueMembershipSerializer(memberships, many=True).data
 
 
 class LeagueSerializer(serializers.ModelSerializer):
     """Serializer for League model."""
 
+    member_count = serializers.SerializerMethodField()
+
     class Meta:
         model = League
-        fields = ["id", "name", "slug", "created_at"]
+        fields = ["id", "name", "slug", "created_at", "member_count"]
         read_only_fields = ["id", "created_at"]
+
+    def get_member_count(self, obj):
+        return obj.memberships.count()
 
 
 # -----------------------------------------------------------------------------

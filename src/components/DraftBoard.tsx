@@ -28,7 +28,7 @@ export const DraftBoard = ({
   onReset,
   enforceAgeLimit,
   maxPerAge,
-  ageRange,
+  ageRange: _ageRange,
   pendingComplete,
   onFinalizeDraft,
   onCancelComplete,

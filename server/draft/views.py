@@ -7,7 +7,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Division, Team, Player, DraftState, DraftPick, Trade, League
+from .models import Division, Team, Player, DraftState, DraftPick, Trade, League, LeagueMembership
 from .serializers import (
     DivisionSerializer,
     DivisionSummarySerializer,
@@ -73,8 +73,15 @@ class RegisterView(APIView):
             password=data["password"],
             first_name=data.get("first_name", ""),
             last_name=data.get("last_name", ""),
-            league=league,
         )
+
+        # Create league membership if league was created
+        if league:
+            LeagueMembership.objects.create(
+                user=user,
+                league=league,
+                role="admin",  # Creator is admin of the league
+            )
 
         # Auto-login after registration
         login(request, user)

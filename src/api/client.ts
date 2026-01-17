@@ -271,18 +271,31 @@ function transformDivisionFromApi(data: Record<string, unknown>): Division {
 }
 
 /**
+ * Transform league membership from API to frontend
+ */
+function transformLeagueMembershipFromApi(data: Record<string, unknown>): import('../types').LeagueMembership {
+  return {
+    id: data.id as string,
+    leagueId: data.league_id as string,
+    leagueName: data.league_name as string,
+    leagueSlug: data.league_slug as string,
+    role: data.role as import('../types').LeagueMembershipRole,
+    createdAt: data.created_at as string,
+  };
+}
+
+/**
  * Transform user data from API to frontend
  */
 function transformUserFromApi(data: Record<string, unknown>): User {
+  const leagues = (data.leagues as Record<string, unknown>[] || []).map(transformLeagueMembershipFromApi);
   return {
     id: data.id as string,
     email: data.email as string,
     firstName: data.first_name as string,
     lastName: data.last_name as string,
     role: data.role as User['role'],
-    leagueId: data.league_id as string | undefined,
-    leagueName: data.league_name as string | undefined,
-    leagueSlug: data.league_slug as string | undefined,
+    leagues,
   };
 }
 

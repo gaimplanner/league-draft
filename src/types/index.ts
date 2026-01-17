@@ -4,15 +4,24 @@
 
 export type UserRole = 'master_admin' | 'user';
 
+export type LeagueMembershipRole = 'admin' | 'member';
+
+export interface LeagueMembership {
+  id: string;
+  leagueId: string;
+  leagueName: string;
+  leagueSlug: string;
+  role: LeagueMembershipRole;
+  createdAt: string;
+}
+
 export interface User {
   id: string;
   email: string;
   firstName: string;
   lastName: string;
   role: UserRole;
-  leagueId?: string;
-  leagueName?: string;
-  leagueSlug?: string;
+  leagues: LeagueMembership[];
 }
 
 export interface League {

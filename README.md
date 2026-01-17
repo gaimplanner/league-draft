@@ -79,13 +79,35 @@ A comprehensive draft management system for Little League baseball divisions. St
 
 ## Getting Started
 
+### Prerequisites
+
+- Node.js 18+
+- Docker and Docker Compose (for backend)
+
 ### Installation
 
 ```bash
 npm install
 ```
 
-### Development
+### Backend Setup
+
+The application uses a Django REST Framework backend with PostgreSQL.
+
+```bash
+# Start backend services (API + PostgreSQL)
+docker compose up -d
+
+# Run database migrations
+docker compose exec api python manage.py migrate
+
+# Create a superuser (optional)
+docker compose exec api python manage.py createsuperuser
+```
+
+The API will be available at `http://localhost:3001`.
+
+### Frontend Development
 
 ```bash
 npm run dev
@@ -103,6 +125,12 @@ npm run build
 
 ```bash
 npm run preview
+```
+
+### Stop Backend Services
+
+```bash
+docker compose down
 ```
 
 ## Import Formats
@@ -176,13 +204,18 @@ Each tab should include:
 | CSV Parsing | papaparse |
 | Excel Parsing | xlsx |
 | State | React Hooks + Context |
-| Storage | localStorage |
+| Backend | Django 5.2 + Django REST Framework |
+| Database | PostgreSQL 16 |
+| Auth | Session-based (Django sessions) |
+| Container | Docker + Docker Compose |
 
 ## Project Structure
 
 ```
 src/
 ├── App.tsx                    # Main app with phase routing
+├── api/
+│   └── client.ts              # API client with transformations
 ├── components/
 │   ├── DivisionSelector.tsx   # Division management
 │   ├── DivisionCreator.tsx    # New division setup
@@ -196,13 +229,16 @@ src/
 │   ├── SimulationModal.tsx    # Draft simulation
 │   ├── TradeModal.tsx         # Post-draft trades
 │   ├── CompleteRosters.tsx    # Roster display
+│   ├── LoginPage.tsx          # User login
+│   ├── RegisterPage.tsx       # User registration
 │   └── evaluation/            # Excel import components
 ├── hooks/
-│   ├── useDivisions.ts        # Division state
-│   ├── useDraft.ts            # Draft logic
+│   ├── useDivisions.ts        # Division state (API mode)
+│   ├── useDraft.ts            # Draft logic (API mode)
 │   ├── useEvaluationImport.ts # Excel processing
 │   └── usePlayerScoring.ts    # Score calculations
 ├── contexts/
+│   ├── AuthContext.tsx        # Authentication state
 │   └── ViewContext.tsx        # Admin/Public mode
 ├── types/
 │   └── index.ts               # TypeScript interfaces
@@ -216,6 +252,20 @@ src/
 │   └── evaluationProcessor.ts # Excel processing
 └── e2e/
     └── draft-flow.spec.ts     # Playwright E2E tests
+
+server/
+├── draft/
+│   ├── models.py              # Django models (League, User, Division, Team, Player, etc.)
+│   ├── views.py               # DRF ViewSets and auth views
+│   ├── serializers.py         # DRF serializers
+│   ├── services.py            # Draft business logic
+│   ├── middleware.py          # Tenant middleware
+│   └── migrations/            # Database migrations
+├── league_draft/
+│   ├── settings.py            # Django settings
+│   └── urls.py                # URL routing
+├── Dockerfile                 # API container
+└── docker-compose.yml         # Full stack setup
 ```
 
 ## Branching Strategy
