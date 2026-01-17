@@ -83,9 +83,8 @@ DATABASES = {
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
-    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
-    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
+    {"NAME": "draft.validators.StrongPasswordValidator"},
 ]
 
 # Internationalization
@@ -139,3 +138,13 @@ CSRF_TRUSTED_ORIGINS = [
     "http://127.0.0.1:5173",
     "http://127.0.0.1:5174",
 ]
+
+# Email settings (console backend for development)
+EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+DEFAULT_FROM_EMAIL = "noreply@littleleaguedraft.local"
+
+# Password reset token expiration (in seconds) - 1 hour
+PASSWORD_RESET_TIMEOUT = 3600
+
+# Frontend URL for password reset links
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173")

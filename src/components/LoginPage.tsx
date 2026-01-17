@@ -4,9 +4,10 @@ import { useAuth } from '../contexts/AuthContext';
 
 interface LoginPageProps {
   onSwitchToRegister: () => void;
+  onForgotPassword: () => void;
 }
 
-export function LoginPage({ onSwitchToRegister }: LoginPageProps) {
+export function LoginPage({ onSwitchToRegister, onForgotPassword }: LoginPageProps) {
   const { login, isLoading } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -61,9 +62,18 @@ export function LoginPage({ onSwitchToRegister }: LoginPageProps) {
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-300 mb-1">
-                Password
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label htmlFor="password" className="block text-sm font-medium text-gray-300">
+                  Password
+                </label>
+                <button
+                  type="button"
+                  onClick={onForgotPassword}
+                  className="text-sm text-blue-400 hover:text-blue-300"
+                >
+                  Forgot password?
+                </button>
+              </div>
               <input
                 id="password"
                 type="password"

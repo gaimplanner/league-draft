@@ -415,6 +415,28 @@ export const api = {
     return transformUserFromApi(result);
   },
 
+  async requestPasswordReset(email: string): Promise<{ message: string }> {
+    const response = await fetch(`${API_BASE_URL}/auth/password-reset/`, {
+      ...getDefaultOptions('POST'),
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    });
+    return handleResponse<{ message: string }>(response);
+  },
+
+  async confirmPasswordReset(uid: string, token: string, newPassword: string): Promise<{ message: string }> {
+    const response = await fetch(`${API_BASE_URL}/auth/password-reset/confirm/`, {
+      ...getDefaultOptions('POST'),
+      method: 'POST',
+      body: JSON.stringify({
+        uid,
+        token,
+        new_password: newPassword,
+      }),
+    });
+    return handleResponse<{ message: string }>(response);
+  },
+
   // ---------------------------------------------------------------------------
   // Divisions
   // ---------------------------------------------------------------------------

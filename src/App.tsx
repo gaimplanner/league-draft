@@ -15,6 +15,8 @@ import { DraftBoard } from './components/DraftBoard';
 import { DraftComplete } from './components/DraftComplete';
 import { LoginPage } from './components/LoginPage';
 import { RegisterPage } from './components/RegisterPage';
+import { ForgotPasswordPage } from './components/ForgotPasswordPage';
+import { ResetPasswordPage } from './components/ResetPasswordPage';
 import { isApiMode } from './api';
 import {
   Player,
@@ -31,7 +33,7 @@ import { parseCSVWithMapping, CoachAssignment } from './utils/csvParser';
 import { savePlayersToApi, saveTeamsToApi } from './api';
 
 type AppMode = 'selector' | 'creator' | 'draft';
-type AuthPage = 'login' | 'register';
+type AuthPage = 'login' | 'register' | 'forgot-password' | 'reset-password';
 
 function App() {
   // All hooks must be called unconditionally at the top
@@ -39,6 +41,19 @@ function App() {
   const isPublicView = viewMode === 'public';
   const { isAuthenticated, isLoading: authLoading, user, logout } = useAuth();
   const [authPage, setAuthPage] = useState<AuthPage>('login');
+  const [resetParams, setResetParams] = useState<{ uid: string; token: string } | null>(null);
+
+  // Check for password reset URL params on mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const uid = params.get('uid');
+    const token = params.get('token');
+
+    if (uid && token && window.location.pathname === '/reset-password') {
+      setResetParams({ uid, token });
+      setAuthPage('reset-password');
+    }
+  }, []);
   const [mode, setMode] = useState<AppMode>('selector');
   const [csvData, setCSVData] = useState<ParsedCSVData | null>(null);
   const [importMode, setImportMode] = useState<'csv' | 'excel' | null>(null);
@@ -495,10 +510,35 @@ function App() {
 
   // Show auth pages when in API mode and not authenticated
   if (isApiMode() && !authLoading && !isAuthenticated && !isPublicView) {
+    // Helper to go back to login and clear URL
+    const handleBackToLogin = () => {
+      setAuthPage('login');
+      setResetParams(null);
+      // Clear URL params
+      window.history.replaceState({}, '', '/');
+    };
+
+    if (authPage === 'reset-password' && resetParams) {
+      return (
+        <ResetPasswordPage
+          uid={resetParams.uid}
+          token={resetParams.token}
+          onBackToLogin={handleBackToLogin}
+        />
+      );
+    }
+    if (authPage === 'forgot-password') {
+      return <ForgotPasswordPage onBackToLogin={handleBackToLogin} />;
+    }
     if (authPage === 'register') {
       return <RegisterPage onSwitchToLogin={() => setAuthPage('login')} />;
     }
-    return <LoginPage onSwitchToRegister={() => setAuthPage('register')} />;
+    return (
+      <LoginPage
+        onSwitchToRegister={() => setAuthPage('register')}
+        onForgotPassword={() => setAuthPage('forgot-password')}
+      />
+    );
   }
 
   // Render division selector or creator

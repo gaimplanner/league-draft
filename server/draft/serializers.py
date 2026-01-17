@@ -496,3 +496,26 @@ class BulkCreatePlayersSerializer(serializers.Serializer):
 
     division_id = serializers.UUIDField()
     players = serializers.ListField(child=serializers.DictField())
+
+
+# -----------------------------------------------------------------------------
+# Password Reset Serializers
+# -----------------------------------------------------------------------------
+
+
+class PasswordResetRequestSerializer(serializers.Serializer):
+    """Serializer for requesting a password reset."""
+
+    email = serializers.EmailField()
+
+
+class PasswordResetConfirmSerializer(serializers.Serializer):
+    """Serializer for confirming a password reset."""
+
+    uid = serializers.CharField()
+    token = serializers.CharField()
+    new_password = serializers.CharField(write_only=True)
+
+    def validate_new_password(self, value):
+        validate_password(value)
+        return value

@@ -1,5 +1,11 @@
+from django.conf import settings
 from django.contrib.auth import authenticate, login, logout, get_user_model
+from django.contrib.auth.tokens import default_token_generator
+from django.core.mail import send_mail
+from django.template.loader import render_to_string
 from django.utils import timezone
+from django.utils.encoding import force_bytes, force_str
+from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.utils.text import slugify
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -26,6 +32,8 @@ from .serializers import (
     RegisterSerializer,
     LoginSerializer,
     UserSerializer,
+    PasswordResetRequestSerializer,
+    PasswordResetConfirmSerializer,
 )
 from .services import DraftService
 
@@ -131,6 +139,94 @@ class MeView(APIView):
 
     def get(self, request):
         return Response(UserSerializer(request.user).data)
+
+
+class PasswordResetRequestView(APIView):
+    """Request a password reset email."""
+
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = PasswordResetRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        email = serializer.validated_data["email"].lower()
+
+        # Always return success to prevent email enumeration
+        try:
+            user = User.objects.get(email__iexact=email)
+
+            # Generate token
+            token = default_token_generator.make_token(user)
+            uid = urlsafe_base64_encode(force_bytes(user.pk))
+
+            # Build reset URL
+            frontend_url = getattr(settings, "FRONTEND_URL", "http://localhost:5173")
+            reset_url = f"{frontend_url}/reset-password?uid={uid}&token={token}"
+
+            # Send email
+            subject = "Password Reset Request - Little League Draft"
+            message = f"""
+Hello {user.first_name or user.email},
+
+You requested a password reset for your Little League Draft account.
+
+Click the link below to reset your password:
+{reset_url}
+
+This link will expire in 1 hour.
+
+If you did not request this reset, please ignore this email.
+
+Thanks,
+Little League Draft Team
+"""
+            send_mail(
+                subject,
+                message,
+                settings.DEFAULT_FROM_EMAIL,
+                [user.email],
+                fail_silently=False,
+            )
+        except User.DoesNotExist:
+            # Don't reveal that the user doesn't exist
+            pass
+
+        return Response(
+            {"message": "If an account exists with this email, a reset link has been sent."}
+        )
+
+
+class PasswordResetConfirmView(APIView):
+    """Confirm password reset with token."""
+
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = PasswordResetConfirmSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            uid = force_str(urlsafe_base64_decode(serializer.validated_data["uid"]))
+            user = User.objects.get(pk=uid)
+        except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+            return Response(
+                {"error": "Invalid reset link"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Verify token
+        if not default_token_generator.check_token(user, serializer.validated_data["token"]):
+            return Response(
+                {"error": "Invalid or expired reset link"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Set new password
+        user.set_password(serializer.validated_data["new_password"])
+        user.save()
+
+        return Response({"message": "Password has been reset successfully."})
 
 
 # -----------------------------------------------------------------------------

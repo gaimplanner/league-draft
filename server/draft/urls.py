@@ -7,6 +7,8 @@ from .views import (
     LoginView,
     LogoutView,
     MeView,
+    PasswordResetRequestView,
+    PasswordResetConfirmView,
     DivisionViewSet,
     TeamViewSet,
     PlayerViewSet,
@@ -26,6 +28,8 @@ urlpatterns = [
     path("api/auth/login/", LoginView.as_view(), name="login"),
     path("api/auth/logout/", LogoutView.as_view(), name="logout"),
     path("api/auth/me/", MeView.as_view(), name="me"),
+    path("api/auth/password-reset/", PasswordResetRequestView.as_view(), name="password-reset-request"),
+    path("api/auth/password-reset/confirm/", PasswordResetConfirmView.as_view(), name="password-reset-confirm"),
     # API endpoints
     path("api/", include(router.urls)),
 ]
