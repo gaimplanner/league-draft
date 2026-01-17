@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Play, Eye, Trash2, Calendar, Users, AlertCircle, LogOut, User } from 'lucide-react';
+import { Plus, Play, Eye, Trash2, Calendar, Users, AlertCircle, LogOut, User, Settings } from 'lucide-react';
 import { DivisionSummary, AppPhase, User as UserType } from '../types';
 
 interface DivisionSelectorProps {
@@ -9,6 +9,7 @@ interface DivisionSelectorProps {
   onDeleteDivision: (divisionId: string) => void;
   user?: UserType | null;
   onLogout?: () => void;
+  onOpenSettings?: () => void;
 }
 
 function getPhaseLabel(phase: AppPhase): string {
@@ -50,6 +51,7 @@ export const DivisionSelector = ({
   onDeleteDivision,
   user,
   onLogout,
+  onOpenSettings,
 }: DivisionSelectorProps) => {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
@@ -88,6 +90,15 @@ export const DivisionSelector = ({
                 </span>
               )}
             </div>
+            {onOpenSettings && (
+              <button
+                onClick={onOpenSettings}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-md transition-colors"
+              >
+                <Settings className="w-4 h-4" />
+                Settings
+              </button>
+            )}
             <button
               onClick={onLogout}
               className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors"

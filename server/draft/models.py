@@ -16,6 +16,10 @@ class League(models.Model):
     slug = models.SlugField(max_length=100, unique=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    # Join link fields
+    join_link_token = models.CharField(max_length=64, null=True, blank=True, unique=True)
+    join_link_enabled = models.BooleanField(default=False)
+
     class Meta:
         db_table = "leagues"
         ordering = ["-created_at"]
@@ -124,6 +128,58 @@ class LeagueMembership(models.Model):
 
     def __str__(self):
         return f"{self.user.email} - {self.league.name} ({self.role})"
+
+
+# -----------------------------------------------------------------------------
+# League Invitation Model
+# -----------------------------------------------------------------------------
+
+
+class LeagueInvitation(models.Model):
+    """Invitation to join a league (email or link-based)."""
+
+    ROLE_CHOICES = [
+        ("admin", "Admin"),
+        ("member", "Member"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    league = models.ForeignKey(
+        League,
+        on_delete=models.CASCADE,
+        related_name="invitations",
+    )
+    email = models.EmailField(null=True, blank=True)  # Null for link-based invites
+    token = models.CharField(max_length=64, unique=True)
+    invited_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="sent_invitations",
+    )
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default="member")
+    is_link_invite = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    accepted_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "league_invitations"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        if self.email:
+            return f"Invitation to {self.email} for {self.league.name}"
+        return f"Link invitation for {self.league.name}"
+
+    @property
+    def is_expired(self):
+        from django.utils import timezone
+        return timezone.now() > self.expires_at
+
+    @property
+    def is_pending(self):
+        return self.accepted_at is None and not self.is_expired
 
 
 # -----------------------------------------------------------------------------

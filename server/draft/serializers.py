@@ -2,7 +2,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 
-from .models import Division, Team, Player, DraftState, DraftPick, Trade, League, LeagueMembership
+from .models import Division, Team, Player, DraftState, DraftPick, Trade, League, LeagueMembership, LeagueInvitation
 
 User = get_user_model()
 
@@ -519,3 +519,121 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
     def validate_new_password(self, value):
         validate_password(value)
         return value
+
+
+# -----------------------------------------------------------------------------
+# Profile Serializers
+# -----------------------------------------------------------------------------
+
+
+class ProfileUpdateSerializer(serializers.Serializer):
+    """Serializer for updating user profile."""
+
+    first_name = serializers.CharField(max_length=150, required=False, allow_blank=True)
+    last_name = serializers.CharField(max_length=150, required=False, allow_blank=True)
+    email = serializers.EmailField(required=False)
+
+    def validate_email(self, value):
+        user = self.context.get("user")
+        if user and User.objects.filter(email__iexact=value).exclude(pk=user.pk).exists():
+            raise serializers.ValidationError("A user with this email already exists.")
+        return value.lower()
+
+
+class ChangePasswordSerializer(serializers.Serializer):
+    """Serializer for changing password."""
+
+    current_password = serializers.CharField(write_only=True)
+    new_password = serializers.CharField(write_only=True)
+
+    def validate_new_password(self, value):
+        validate_password(value)
+        return value
+
+
+# -----------------------------------------------------------------------------
+# League Member Serializers
+# -----------------------------------------------------------------------------
+
+
+class LeagueMemberSerializer(serializers.ModelSerializer):
+    """Serializer for league member info (user + membership)."""
+
+    user_id = serializers.UUIDField(source="user.id", read_only=True)
+    email = serializers.EmailField(source="user.email", read_only=True)
+    first_name = serializers.CharField(source="user.first_name", read_only=True)
+    last_name = serializers.CharField(source="user.last_name", read_only=True)
+    joined_at = serializers.DateTimeField(source="created_at", read_only=True)
+
+    class Meta:
+        model = LeagueMembership
+        fields = ["id", "user_id", "email", "first_name", "last_name", "role", "joined_at"]
+        read_only_fields = ["id", "user_id", "email", "first_name", "last_name", "joined_at"]
+
+
+class UpdateMemberRoleSerializer(serializers.Serializer):
+    """Serializer for updating member role."""
+
+    role = serializers.ChoiceField(choices=LeagueMembership.ROLE_CHOICES)
+
+
+# -----------------------------------------------------------------------------
+# League Invitation Serializers
+# -----------------------------------------------------------------------------
+
+
+class LeagueInvitationSerializer(serializers.ModelSerializer):
+    """Serializer for league invitations."""
+
+    invited_by_email = serializers.EmailField(source="invited_by.email", read_only=True)
+    is_expired = serializers.BooleanField(read_only=True)
+    is_pending = serializers.BooleanField(read_only=True)
+
+    class Meta:
+        model = LeagueInvitation
+        fields = [
+            "id",
+            "email",
+            "role",
+            "invited_by_email",
+            "is_link_invite",
+            "created_at",
+            "expires_at",
+            "accepted_at",
+            "is_expired",
+            "is_pending",
+        ]
+        read_only_fields = ["id", "created_at", "expires_at", "accepted_at"]
+
+
+class CreateInvitationSerializer(serializers.Serializer):
+    """Serializer for creating an email invitation."""
+
+    email = serializers.EmailField()
+    role = serializers.ChoiceField(choices=LeagueMembership.ROLE_CHOICES, default="member")
+
+
+class AcceptInvitationSerializer(serializers.Serializer):
+    """Serializer for accepting an invitation."""
+
+    token = serializers.CharField()
+
+
+# -----------------------------------------------------------------------------
+# Join Link Serializers
+# -----------------------------------------------------------------------------
+
+
+class JoinLinkStatusSerializer(serializers.Serializer):
+    """Serializer for join link status."""
+
+    enabled = serializers.BooleanField()
+    token = serializers.CharField(allow_null=True)
+    url = serializers.CharField(allow_null=True)
+
+
+class JoinLinkInfoSerializer(serializers.Serializer):
+    """Serializer for public join link info."""
+
+    league_name = serializers.CharField()
+    league_slug = serializers.CharField()

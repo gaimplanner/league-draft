@@ -1,3 +1,5 @@
+import secrets
+
 from django.conf import settings
 from django.contrib.auth import authenticate, login, logout, get_user_model
 from django.contrib.auth.tokens import default_token_generator
@@ -12,8 +14,9 @@ from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from datetime import timedelta
 
-from .models import Division, Team, Player, DraftState, DraftPick, Trade, League, LeagueMembership
+from .models import Division, Team, Player, DraftState, DraftPick, Trade, League, LeagueMembership, LeagueInvitation
 from .serializers import (
     DivisionSerializer,
     DivisionSummarySerializer,
@@ -34,6 +37,15 @@ from .serializers import (
     UserSerializer,
     PasswordResetRequestSerializer,
     PasswordResetConfirmSerializer,
+    ProfileUpdateSerializer,
+    ChangePasswordSerializer,
+    LeagueMemberSerializer,
+    UpdateMemberRoleSerializer,
+    LeagueInvitationSerializer,
+    CreateInvitationSerializer,
+    AcceptInvitationSerializer,
+    JoinLinkStatusSerializer,
+    JoinLinkInfoSerializer,
 )
 from .services import DraftService
 
@@ -139,6 +151,50 @@ class MeView(APIView):
 
     def get(self, request):
         return Response(UserSerializer(request.user).data)
+
+    def patch(self, request):
+        """Update current user profile."""
+        serializer = ProfileUpdateSerializer(
+            data=request.data,
+            context={"user": request.user},
+        )
+        serializer.is_valid(raise_exception=True)
+
+        user = request.user
+        if "first_name" in serializer.validated_data:
+            user.first_name = serializer.validated_data["first_name"]
+        if "last_name" in serializer.validated_data:
+            user.last_name = serializer.validated_data["last_name"]
+        if "email" in serializer.validated_data:
+            user.email = serializer.validated_data["email"]
+        user.save()
+
+        return Response(UserSerializer(user).data)
+
+
+class ChangePasswordView(APIView):
+    """Change password endpoint."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = ChangePasswordSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        user = request.user
+        if not user.check_password(serializer.validated_data["current_password"]):
+            return Response(
+                {"error": "Current password is incorrect"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user.set_password(serializer.validated_data["new_password"])
+        user.save()
+
+        # Keep user logged in after password change
+        login(request, user)
+
+        return Response({"message": "Password changed successfully."})
 
 
 class PasswordResetRequestView(APIView):
@@ -556,3 +612,484 @@ class DraftViewSet(viewsets.ViewSet):
             "players": PlayerSerializer(division.players.all(), many=True).data,
             "teams": TeamSerializer(division.teams.all(), many=True).data,
         }
+
+
+# -----------------------------------------------------------------------------
+# League Member Management
+# -----------------------------------------------------------------------------
+
+
+class LeagueMemberViewSet(viewsets.ViewSet):
+    """ViewSet for managing league members."""
+
+    permission_classes = [IsAuthenticated]
+
+    def _get_league(self, league_id):
+        """Get league and verify user is admin."""
+        try:
+            league = League.objects.get(id=league_id)
+        except League.DoesNotExist:
+            return None, Response(
+                {"error": "League not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return league, None
+
+    def _require_admin(self, request, league):
+        """Check if user is admin of the league."""
+        if not request.user.is_league_admin(league):
+            return Response(
+                {"error": "Only league admins can perform this action"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return None
+
+    def list(self, request, league_id=None):
+        """List all members of a league."""
+        league, error = self._get_league(league_id)
+        if error:
+            return error
+
+        # Verify user is a member
+        if not LeagueMembership.objects.filter(user=request.user, league=league).exists():
+            return Response(
+                {"error": "You are not a member of this league"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        memberships = LeagueMembership.objects.filter(league=league).select_related("user")
+        serializer = LeagueMemberSerializer(memberships, many=True)
+        return Response(serializer.data)
+
+    def destroy(self, request, league_id=None, pk=None):
+        """Remove a member from the league."""
+        league, error = self._get_league(league_id)
+        if error:
+            return error
+
+        error = self._require_admin(request, league)
+        if error:
+            return error
+
+        try:
+            membership = LeagueMembership.objects.get(league=league, user_id=pk)
+        except LeagueMembership.DoesNotExist:
+            return Response(
+                {"error": "Member not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Prevent removing self
+        if membership.user == request.user:
+            return Response(
+                {"error": "You cannot remove yourself from the league"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Prevent removing last admin
+        if membership.role == "admin":
+            admin_count = LeagueMembership.objects.filter(league=league, role="admin").count()
+            if admin_count <= 1:
+                return Response(
+                    {"error": "Cannot remove the last admin"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        membership.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=["patch"], url_path="role")
+    def update_role(self, request, league_id=None, pk=None):
+        """Update a member's role."""
+        league, error = self._get_league(league_id)
+        if error:
+            return error
+
+        error = self._require_admin(request, league)
+        if error:
+            return error
+
+        try:
+            membership = LeagueMembership.objects.get(league=league, user_id=pk)
+        except LeagueMembership.DoesNotExist:
+            return Response(
+                {"error": "Member not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = UpdateMemberRoleSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        new_role = serializer.validated_data["role"]
+
+        # Prevent demoting self if last admin
+        if membership.user == request.user and membership.role == "admin" and new_role != "admin":
+            admin_count = LeagueMembership.objects.filter(league=league, role="admin").count()
+            if admin_count <= 1:
+                return Response(
+                    {"error": "Cannot demote yourself as the last admin"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        membership.role = new_role
+        membership.save()
+        return Response(LeagueMemberSerializer(membership).data)
+
+
+# -----------------------------------------------------------------------------
+# League Invitations
+# -----------------------------------------------------------------------------
+
+
+class LeagueInvitationViewSet(viewsets.ViewSet):
+    """ViewSet for managing league invitations."""
+
+    permission_classes = [IsAuthenticated]
+
+    def _get_league(self, league_id):
+        """Get league."""
+        try:
+            league = League.objects.get(id=league_id)
+        except League.DoesNotExist:
+            return None, Response(
+                {"error": "League not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return league, None
+
+    def _require_admin(self, request, league):
+        """Check if user is admin of the league."""
+        if not request.user.is_league_admin(league):
+            return Response(
+                {"error": "Only league admins can perform this action"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return None
+
+    def list(self, request, league_id=None):
+        """List pending invitations."""
+        league, error = self._get_league(league_id)
+        if error:
+            return error
+
+        error = self._require_admin(request, league)
+        if error:
+            return error
+
+        invitations = LeagueInvitation.objects.filter(
+            league=league,
+            accepted_at__isnull=True,
+            is_link_invite=False,
+        ).select_related("invited_by")
+
+        # Filter out expired
+        invitations = [inv for inv in invitations if not inv.is_expired]
+
+        serializer = LeagueInvitationSerializer(invitations, many=True)
+        return Response(serializer.data)
+
+    def create(self, request, league_id=None):
+        """Send an email invitation."""
+        league, error = self._get_league(league_id)
+        if error:
+            return error
+
+        error = self._require_admin(request, league)
+        if error:
+            return error
+
+        serializer = CreateInvitationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        email = serializer.validated_data["email"].lower()
+        role = serializer.validated_data["role"]
+
+        # Check if already a member
+        if LeagueMembership.objects.filter(league=league, user__email__iexact=email).exists():
+            return Response(
+                {"error": "This user is already a member of the league"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Check for existing pending invitation
+        existing = LeagueInvitation.objects.filter(
+            league=league,
+            email__iexact=email,
+            accepted_at__isnull=True,
+        ).first()
+        if existing and not existing.is_expired:
+            return Response(
+                {"error": "An invitation has already been sent to this email"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Create invitation
+        token = secrets.token_urlsafe(32)
+        invitation = LeagueInvitation.objects.create(
+            league=league,
+            email=email,
+            token=token,
+            invited_by=request.user,
+            role=role,
+            is_link_invite=False,
+            expires_at=timezone.now() + timedelta(days=7),
+        )
+
+        # Send invitation email
+        frontend_url = getattr(settings, "FRONTEND_URL", "http://localhost:5173")
+        invite_url = f"{frontend_url}/join?token={token}"
+
+        subject = f"You're invited to join {league.name} - Little League Draft"
+        message = f"""
+Hello,
+
+{request.user.first_name or request.user.email} has invited you to join {league.name} on Little League Draft.
+
+Click the link below to accept the invitation:
+{invite_url}
+
+This invitation will expire in 7 days.
+
+Thanks,
+Little League Draft Team
+"""
+        try:
+            send_mail(
+                subject,
+                message,
+                settings.DEFAULT_FROM_EMAIL,
+                [email],
+                fail_silently=False,
+            )
+        except Exception:
+            # Log but don't fail if email fails
+            pass
+
+        return Response(LeagueInvitationSerializer(invitation).data, status=status.HTTP_201_CREATED)
+
+    def destroy(self, request, league_id=None, pk=None):
+        """Cancel an invitation."""
+        league, error = self._get_league(league_id)
+        if error:
+            return error
+
+        error = self._require_admin(request, league)
+        if error:
+            return error
+
+        try:
+            invitation = LeagueInvitation.objects.get(id=pk, league=league)
+        except LeagueInvitation.DoesNotExist:
+            return Response(
+                {"error": "Invitation not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        invitation.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class AcceptInvitationView(APIView):
+    """Accept an invitation (email or link-based)."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = AcceptInvitationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        token = serializer.validated_data["token"]
+
+        # First check if it's a join link token
+        league = League.objects.filter(
+            join_link_token=token,
+            join_link_enabled=True,
+        ).first()
+
+        if league:
+            # Join via link
+            if LeagueMembership.objects.filter(user=request.user, league=league).exists():
+                return Response(
+                    {"error": "You are already a member of this league"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            LeagueMembership.objects.create(
+                user=request.user,
+                league=league,
+                role="member",
+            )
+            return Response({
+                "message": "Successfully joined the league",
+                "league_id": str(league.id),
+                "league_name": league.name,
+            })
+
+        # Check email invitation
+        try:
+            invitation = LeagueInvitation.objects.get(
+                token=token,
+                accepted_at__isnull=True,
+            )
+        except LeagueInvitation.DoesNotExist:
+            return Response(
+                {"error": "Invalid or expired invitation"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if invitation.is_expired:
+            return Response(
+                {"error": "This invitation has expired"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # For email invites, check if email matches (optional - can be more flexible)
+        if invitation.email and invitation.email.lower() != request.user.email.lower():
+            return Response(
+                {"error": "This invitation was sent to a different email address"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Check if already a member
+        if LeagueMembership.objects.filter(user=request.user, league=invitation.league).exists():
+            invitation.accepted_at = timezone.now()
+            invitation.save()
+            return Response(
+                {"error": "You are already a member of this league"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Create membership
+        LeagueMembership.objects.create(
+            user=request.user,
+            league=invitation.league,
+            role=invitation.role,
+        )
+
+        invitation.accepted_at = timezone.now()
+        invitation.save()
+
+        return Response({
+            "message": "Successfully joined the league",
+            "league_id": str(invitation.league.id),
+            "league_name": invitation.league.name,
+        })
+
+
+# -----------------------------------------------------------------------------
+# Join Link Management
+# -----------------------------------------------------------------------------
+
+
+class JoinLinkView(APIView):
+    """Manage league join link."""
+
+    permission_classes = [IsAuthenticated]
+
+    def _get_league(self, league_id):
+        """Get league."""
+        try:
+            league = League.objects.get(id=league_id)
+        except League.DoesNotExist:
+            return None, Response(
+                {"error": "League not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return league, None
+
+    def _require_admin(self, request, league):
+        """Check if user is admin of the league."""
+        if not request.user.is_league_admin(league):
+            return Response(
+                {"error": "Only league admins can perform this action"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return None
+
+    def get(self, request, league_id):
+        """Get join link status."""
+        league, error = self._get_league(league_id)
+        if error:
+            return error
+
+        error = self._require_admin(request, league)
+        if error:
+            return error
+
+        frontend_url = getattr(settings, "FRONTEND_URL", "http://localhost:5173")
+        url = None
+        if league.join_link_enabled and league.join_link_token:
+            url = f"{frontend_url}/join/{league.join_link_token}"
+
+        return Response({
+            "enabled": league.join_link_enabled,
+            "token": league.join_link_token,
+            "url": url,
+        })
+
+    def post(self, request, league_id):
+        """Generate or regenerate join link."""
+        league, error = self._get_league(league_id)
+        if error:
+            return error
+
+        error = self._require_admin(request, league)
+        if error:
+            return error
+
+        # Generate new token
+        league.join_link_token = secrets.token_urlsafe(32)
+        league.join_link_enabled = True
+        league.save()
+
+        frontend_url = getattr(settings, "FRONTEND_URL", "http://localhost:5173")
+        url = f"{frontend_url}/join/{league.join_link_token}"
+
+        return Response({
+            "enabled": True,
+            "token": league.join_link_token,
+            "url": url,
+        })
+
+    def delete(self, request, league_id):
+        """Disable join link."""
+        league, error = self._get_league(league_id)
+        if error:
+            return error
+
+        error = self._require_admin(request, league)
+        if error:
+            return error
+
+        league.join_link_enabled = False
+        league.save()
+
+        return Response({
+            "enabled": False,
+            "token": league.join_link_token,
+            "url": None,
+        })
+
+
+class PublicJoinLinkView(APIView):
+    """Public endpoint to get league info from join link."""
+
+    permission_classes = [AllowAny]
+
+    def get(self, request, token):
+        """Get league info from join link token."""
+        league = League.objects.filter(
+            join_link_token=token,
+            join_link_enabled=True,
+        ).first()
+
+        if not league:
+            return Response(
+                {"error": "Invalid or disabled join link"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        return Response({
+            "league_name": league.name,
+            "league_slug": league.slug,
+        })

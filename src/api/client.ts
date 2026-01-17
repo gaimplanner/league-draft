@@ -19,6 +19,14 @@ import type {
   User,
   LoginCredentials,
   RegisterData,
+  ProfileUpdateData,
+  ChangePasswordData,
+  LeagueMember,
+  LeagueInvitation,
+  LeagueMembershipRole,
+  JoinLinkStatus,
+  JoinLinkInfo,
+  AcceptInvitationResult,
 } from '../types';
 
 // API base URL - defaults to local dev server
@@ -736,6 +744,185 @@ export const api = {
     const data = await handleResponse<Record<string, unknown>>(response);
     return transformDivisionFromApi(data);
   },
+
+  // ---------------------------------------------------------------------------
+  // Profile
+  // ---------------------------------------------------------------------------
+
+  async updateProfile(data: ProfileUpdateData): Promise<User> {
+    const body: Record<string, unknown> = {};
+    if (data.firstName !== undefined) body.first_name = data.firstName;
+    if (data.lastName !== undefined) body.last_name = data.lastName;
+    if (data.email !== undefined) body.email = data.email;
+
+    const response = await fetch(`${API_BASE_URL}/auth/me/`, {
+      ...getDefaultOptions('PATCH'),
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    });
+    const result = await handleResponse<Record<string, unknown>>(response);
+    return transformUserFromApi(result);
+  },
+
+  async changePassword(data: ChangePasswordData): Promise<{ message: string }> {
+    const response = await fetch(`${API_BASE_URL}/auth/change-password/`, {
+      ...getDefaultOptions('POST'),
+      method: 'POST',
+      body: JSON.stringify({
+        current_password: data.currentPassword,
+        new_password: data.newPassword,
+      }),
+    });
+    return handleResponse<{ message: string }>(response);
+  },
+
+  // ---------------------------------------------------------------------------
+  // League Members
+  // ---------------------------------------------------------------------------
+
+  async listLeagueMembers(leagueId: string): Promise<LeagueMember[]> {
+    const response = await fetch(`${API_BASE_URL}/leagues/${leagueId}/members/`, getDefaultOptions());
+    const data = await handleResponse<Record<string, unknown>[]>(response);
+    return data.map(transformLeagueMemberFromApi);
+  },
+
+  async removeLeagueMember(leagueId: string, userId: string): Promise<void> {
+    const response = await fetch(`${API_BASE_URL}/leagues/${leagueId}/members/${userId}/`, {
+      ...getDefaultOptions('DELETE'),
+      method: 'DELETE',
+    });
+    await handleResponse<void>(response);
+  },
+
+  async updateMemberRole(leagueId: string, userId: string, role: LeagueMembershipRole): Promise<LeagueMember> {
+    const response = await fetch(`${API_BASE_URL}/leagues/${leagueId}/members/${userId}/role/`, {
+      ...getDefaultOptions('PATCH'),
+      method: 'PATCH',
+      body: JSON.stringify({ role }),
+    });
+    const data = await handleResponse<Record<string, unknown>>(response);
+    return transformLeagueMemberFromApi(data);
+  },
+
+  // ---------------------------------------------------------------------------
+  // League Invitations
+  // ---------------------------------------------------------------------------
+
+  async listLeagueInvitations(leagueId: string): Promise<LeagueInvitation[]> {
+    const response = await fetch(`${API_BASE_URL}/leagues/${leagueId}/invitations/`, getDefaultOptions());
+    const data = await handleResponse<Record<string, unknown>[]>(response);
+    return data.map(transformLeagueInvitationFromApi);
+  },
+
+  async createInvitation(leagueId: string, email: string, role: LeagueMembershipRole = 'member'): Promise<LeagueInvitation> {
+    const response = await fetch(`${API_BASE_URL}/leagues/${leagueId}/invitations/`, {
+      ...getDefaultOptions('POST'),
+      method: 'POST',
+      body: JSON.stringify({ email, role }),
+    });
+    const data = await handleResponse<Record<string, unknown>>(response);
+    return transformLeagueInvitationFromApi(data);
+  },
+
+  async cancelInvitation(leagueId: string, invitationId: string): Promise<void> {
+    const response = await fetch(`${API_BASE_URL}/leagues/${leagueId}/invitations/${invitationId}/`, {
+      ...getDefaultOptions('DELETE'),
+      method: 'DELETE',
+    });
+    await handleResponse<void>(response);
+  },
+
+  async acceptInvitation(token: string): Promise<AcceptInvitationResult> {
+    const response = await fetch(`${API_BASE_URL}/invitations/accept/`, {
+      ...getDefaultOptions('POST'),
+      method: 'POST',
+      body: JSON.stringify({ token }),
+    });
+    const data = await handleResponse<Record<string, unknown>>(response);
+    return {
+      message: data.message as string,
+      leagueId: data.league_id as string,
+      leagueName: data.league_name as string,
+    };
+  },
+
+  // ---------------------------------------------------------------------------
+  // Join Link
+  // ---------------------------------------------------------------------------
+
+  async getJoinLinkStatus(leagueId: string): Promise<JoinLinkStatus> {
+    const response = await fetch(`${API_BASE_URL}/leagues/${leagueId}/join-link/`, getDefaultOptions());
+    const data = await handleResponse<Record<string, unknown>>(response);
+    return {
+      enabled: data.enabled as boolean,
+      token: data.token as string | null,
+      url: data.url as string | null,
+    };
+  },
+
+  async generateJoinLink(leagueId: string): Promise<JoinLinkStatus> {
+    const response = await fetch(`${API_BASE_URL}/leagues/${leagueId}/join-link/`, {
+      ...getDefaultOptions('POST'),
+      method: 'POST',
+    });
+    const data = await handleResponse<Record<string, unknown>>(response);
+    return {
+      enabled: data.enabled as boolean,
+      token: data.token as string | null,
+      url: data.url as string | null,
+    };
+  },
+
+  async disableJoinLink(leagueId: string): Promise<JoinLinkStatus> {
+    const response = await fetch(`${API_BASE_URL}/leagues/${leagueId}/join-link/`, {
+      ...getDefaultOptions('DELETE'),
+      method: 'DELETE',
+    });
+    const data = await handleResponse<Record<string, unknown>>(response);
+    return {
+      enabled: data.enabled as boolean,
+      token: data.token as string | null,
+      url: data.url as string | null,
+    };
+  },
+
+  async getJoinLinkInfo(token: string): Promise<JoinLinkInfo> {
+    const response = await fetch(`${API_BASE_URL}/leagues/join/${token}/`, getDefaultOptions());
+    const data = await handleResponse<Record<string, unknown>>(response);
+    return {
+      leagueName: data.league_name as string,
+      leagueSlug: data.league_slug as string,
+    };
+  },
 };
+
+// Transform league member from API
+function transformLeagueMemberFromApi(data: Record<string, unknown>): LeagueMember {
+  return {
+    id: data.id as string,
+    userId: data.user_id as string,
+    email: data.email as string,
+    firstName: data.first_name as string,
+    lastName: data.last_name as string,
+    role: data.role as LeagueMembershipRole,
+    joinedAt: data.joined_at as string,
+  };
+}
+
+// Transform league invitation from API
+function transformLeagueInvitationFromApi(data: Record<string, unknown>): LeagueInvitation {
+  return {
+    id: data.id as string,
+    email: data.email as string | null,
+    role: data.role as LeagueMembershipRole,
+    invitedByEmail: data.invited_by_email as string,
+    isLinkInvite: data.is_link_invite as boolean,
+    createdAt: data.created_at as string,
+    expiresAt: data.expires_at as string,
+    acceptedAt: data.accepted_at as string | null,
+    isExpired: data.is_expired as boolean,
+    isPending: data.is_pending as boolean,
+  };
+}
 
 export default api;

@@ -17,6 +17,8 @@ import { LoginPage } from './components/LoginPage';
 import { RegisterPage } from './components/RegisterPage';
 import { ForgotPasswordPage } from './components/ForgotPasswordPage';
 import { ResetPasswordPage } from './components/ResetPasswordPage';
+import { ProfilePage } from './components/profile';
+import { JoinPage } from './components/JoinPage';
 import { isApiMode } from './api';
 import {
   Player,
@@ -32,26 +34,47 @@ import {
 import { parseCSVWithMapping, CoachAssignment } from './utils/csvParser';
 import { savePlayersToApi, saveTeamsToApi } from './api';
 
-type AppMode = 'selector' | 'creator' | 'draft';
+type AppMode = 'selector' | 'creator' | 'draft' | 'settings' | 'join';
 type AuthPage = 'login' | 'register' | 'forgot-password' | 'reset-password';
 
 function App() {
   // All hooks must be called unconditionally at the top
   const viewMode = useViewMode();
   const isPublicView = viewMode === 'public';
-  const { isAuthenticated, isLoading: authLoading, user, logout } = useAuth();
+  const { isAuthenticated, isLoading: authLoading, user, logout, checkAuth } = useAuth();
   const [authPage, setAuthPage] = useState<AuthPage>('login');
   const [resetParams, setResetParams] = useState<{ uid: string; token: string } | null>(null);
+  const [joinToken, setJoinToken] = useState<string | null>(null);
 
-  // Check for password reset URL params on mount
+  // Check for password reset and join URL params on mount
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    const pathname = window.location.pathname;
+
+    // Check for password reset
     const uid = params.get('uid');
     const token = params.get('token');
-
-    if (uid && token && window.location.pathname === '/reset-password') {
+    if (uid && token && pathname === '/reset-password') {
       setResetParams({ uid, token });
       setAuthPage('reset-password');
+      return;
+    }
+
+    // Check for join link with token in path: /join/{token}
+    if (pathname.startsWith('/join/')) {
+      const pathToken = pathname.replace('/join/', '');
+      if (pathToken) {
+        setJoinToken(pathToken);
+        setMode('join');
+        return;
+      }
+    }
+
+    // Check for join invitation with token in query: /join?token={token}
+    const inviteToken = params.get('token');
+    if (pathname === '/join' && inviteToken) {
+      setJoinToken(inviteToken);
+      setMode('join');
     }
   }, []);
   const [mode, setMode] = useState<AppMode>('selector');
@@ -496,6 +519,22 @@ function App() {
     handleGoBack(phase);
   };
 
+  // Handle user update from profile page
+  const handleUserUpdate = useCallback(async () => {
+    await checkAuth();
+  }, [checkAuth]);
+
+  // Handle join completion
+  const handleJoinComplete = useCallback(() => {
+    // Refresh auth to get updated leagues
+    checkAuth();
+    // Clear join state and go to selector
+    setJoinToken(null);
+    setMode('selector');
+    // Clear URL
+    window.history.replaceState({}, '', '/');
+  }, [checkAuth]);
+
   // Show loading state while checking authentication
   if (isApiMode() && authLoading && !isPublicView) {
     return (
@@ -541,6 +580,32 @@ function App() {
     );
   }
 
+  // Render join page
+  if (mode === 'join' && joinToken) {
+    return (
+      <JoinPage
+        token={joinToken}
+        onJoinComplete={handleJoinComplete}
+        onCancel={() => {
+          setJoinToken(null);
+          setMode('selector');
+          window.history.replaceState({}, '', '/');
+        }}
+      />
+    );
+  }
+
+  // Render settings/profile page
+  if (mode === 'settings' && user) {
+    return (
+      <ProfilePage
+        user={user}
+        onBack={() => setMode('selector')}
+        onUserUpdate={handleUserUpdate}
+      />
+    );
+  }
+
   // Render division selector or creator
   if (mode === 'selector') {
     return (
@@ -551,6 +616,7 @@ function App() {
         onDeleteDivision={deleteDivision}
         user={user}
         onLogout={isApiMode() ? logout : undefined}
+        onOpenSettings={isApiMode() && user ? () => setMode('settings') : undefined}
       />
     );
   }

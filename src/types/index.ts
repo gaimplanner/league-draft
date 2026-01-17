@@ -45,6 +45,61 @@ export interface RegisterData {
   leagueSlug?: string;
 }
 
+export interface ProfileUpdateData {
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+}
+
+export interface ChangePasswordData {
+  currentPassword: string;
+  newPassword: string;
+}
+
+// -----------------------------------------------------------------------------
+// League Member Types
+// -----------------------------------------------------------------------------
+
+export interface LeagueMember {
+  id: string;
+  userId: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  role: LeagueMembershipRole;
+  joinedAt: string;
+}
+
+export interface LeagueInvitation {
+  id: string;
+  email: string | null;
+  role: LeagueMembershipRole;
+  invitedByEmail: string;
+  isLinkInvite: boolean;
+  createdAt: string;
+  expiresAt: string;
+  acceptedAt: string | null;
+  isExpired: boolean;
+  isPending: boolean;
+}
+
+export interface JoinLinkStatus {
+  enabled: boolean;
+  token: string | null;
+  url: string | null;
+}
+
+export interface JoinLinkInfo {
+  leagueName: string;
+  leagueSlug: string;
+}
+
+export interface AcceptInvitationResult {
+  message: string;
+  leagueId: string;
+  leagueName: string;
+}
+
 // -----------------------------------------------------------------------------
 // Game Types
 // -----------------------------------------------------------------------------
