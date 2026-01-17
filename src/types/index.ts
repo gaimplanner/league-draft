@@ -1,3 +1,45 @@
+// -----------------------------------------------------------------------------
+// Auth Types
+// -----------------------------------------------------------------------------
+
+export type UserRole = 'master_admin' | 'user';
+
+export interface User {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  role: UserRole;
+  leagueId?: string;
+  leagueName?: string;
+  leagueSlug?: string;
+}
+
+export interface League {
+  id: string;
+  name: string;
+  slug: string;
+  createdAt: string;
+}
+
+export interface LoginCredentials {
+  email: string;
+  password: string;
+}
+
+export interface RegisterData {
+  email: string;
+  password: string;
+  firstName?: string;
+  lastName?: string;
+  leagueName?: string;
+  leagueSlug?: string;
+}
+
+// -----------------------------------------------------------------------------
+// Game Types
+// -----------------------------------------------------------------------------
+
 export interface Player {
   id: string;
   bib: string; // Unique ID from evaluation day

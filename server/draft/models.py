@@ -1,5 +1,116 @@
 import uuid
 from django.db import models
+from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
+
+
+# -----------------------------------------------------------------------------
+# Tenant (League) Model
+# -----------------------------------------------------------------------------
+
+
+class League(models.Model):
+    """Tenant model - represents a Little League organization."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=255)
+    slug = models.SlugField(max_length=100, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "leagues"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.name
+
+
+# -----------------------------------------------------------------------------
+# Custom User Model
+# -----------------------------------------------------------------------------
+
+
+class UserManager(BaseUserManager):
+    """Custom user manager for email-based authentication."""
+
+    def create_user(self, email, password=None, **extra_fields):
+        if not email:
+            raise ValueError("Email is required")
+        email = self.normalize_email(email)
+        user = self.model(email=email, **extra_fields)
+        user.set_password(password)
+        user.save(using=self._db)
+        return user
+
+    def create_superuser(self, email, password=None, **extra_fields):
+        extra_fields.setdefault("is_staff", True)
+        extra_fields.setdefault("is_superuser", True)
+        extra_fields.setdefault("role", "master_admin")
+        return self.create_user(email, password, **extra_fields)
+
+
+class User(AbstractBaseUser, PermissionsMixin):
+    """Custom user model with email authentication and tenant membership."""
+
+    ROLE_CHOICES = [
+        ("master_admin", "Master Admin"),
+        ("user", "User"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    email = models.EmailField(unique=True)
+    first_name = models.CharField(max_length=150, blank=True)
+    last_name = models.CharField(max_length=150, blank=True)
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default="user")
+    league = models.ForeignKey(
+        League,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="users",
+    )
+    is_active = models.BooleanField(default=True)
+    is_staff = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    objects = UserManager()
+    USERNAME_FIELD = "email"
+    REQUIRED_FIELDS = []
+
+    class Meta:
+        db_table = "users"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.email
+
+
+# -----------------------------------------------------------------------------
+# Tenant-aware QuerySet and Manager
+# -----------------------------------------------------------------------------
+
+
+class TenantQuerySet(models.QuerySet):
+    """QuerySet that supports tenant filtering."""
+
+    def for_league(self, league):
+        if league is None:
+            return self.none()
+        return self.filter(league=league)
+
+
+class TenantManager(models.Manager):
+    """Manager that supports tenant filtering."""
+
+    def get_queryset(self):
+        return TenantQuerySet(self.model, using=self._db)
+
+    def for_league(self, league):
+        return self.get_queryset().for_league(league)
+
+
+# -----------------------------------------------------------------------------
+# Division Model
+# -----------------------------------------------------------------------------
 
 
 class Division(models.Model):
@@ -27,6 +138,13 @@ class Division(models.Model):
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    league = models.ForeignKey(
+        League,
+        on_delete=models.CASCADE,
+        related_name="divisions",
+        null=True,  # Temporary for migration
+        blank=True,
+    )
     name = models.CharField(max_length=100)
     preset = models.CharField(max_length=20, choices=PRESET_CHOICES)
     age_range_min = models.IntegerField()
@@ -47,12 +165,20 @@ class Division(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     completed_at = models.DateTimeField(null=True, blank=True)
 
+    # Use tenant-aware manager
+    objects = TenantManager()
+
     class Meta:
         db_table = "divisions"
         ordering = ["-created_at"]
 
     def __str__(self):
         return self.name
+
+
+# -----------------------------------------------------------------------------
+# Team Model
+# -----------------------------------------------------------------------------
 
 
 class Team(models.Model):

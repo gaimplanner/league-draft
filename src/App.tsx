@@ -3,6 +3,7 @@ import { useDivisions } from './hooks/useDivisions';
 import { useDraft } from './hooks/useDraft';
 import { usePlayerScoring } from './hooks/usePlayerScoring';
 import { useViewMode } from './contexts/ViewContext';
+import { useAuth } from './contexts/AuthContext';
 import { DivisionSelector } from './components/DivisionSelector';
 import { DivisionCreator } from './components/DivisionCreator';
 import { FileUpload } from './components/FileUpload';
@@ -12,6 +13,9 @@ import { PlayerReview } from './components/PlayerReview';
 import { DraftConfig } from './components/DraftConfig';
 import { DraftBoard } from './components/DraftBoard';
 import { DraftComplete } from './components/DraftComplete';
+import { LoginPage } from './components/LoginPage';
+import { RegisterPage } from './components/RegisterPage';
+import { isApiMode } from './api';
 import {
   Player,
   Team,
@@ -24,14 +28,17 @@ import {
   AppPhase,
 } from './types';
 import { parseCSVWithMapping, CoachAssignment } from './utils/csvParser';
-import { savePlayersToApi, saveTeamsToApi, isApiMode } from './api';
+import { savePlayersToApi, saveTeamsToApi } from './api';
 
 type AppMode = 'selector' | 'creator' | 'draft';
+type AuthPage = 'login' | 'register';
 
 function App() {
+  // All hooks must be called unconditionally at the top
   const viewMode = useViewMode();
   const isPublicView = viewMode === 'public';
-
+  const { isAuthenticated, isLoading: authLoading, user, logout } = useAuth();
+  const [authPage, setAuthPage] = useState<AuthPage>('login');
   const [mode, setMode] = useState<AppMode>('selector');
   const [csvData, setCSVData] = useState<ParsedCSVData | null>(null);
   const [importMode, setImportMode] = useState<'csv' | 'excel' | null>(null);
@@ -455,6 +462,26 @@ function App() {
     handleGoBack(phase);
   };
 
+  // Show loading state while checking authentication
+  if (isApiMode() && authLoading && !isPublicView) {
+    return (
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          <p className="text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show auth pages when in API mode and not authenticated
+  if (isApiMode() && !authLoading && !isAuthenticated && !isPublicView) {
+    if (authPage === 'register') {
+      return <RegisterPage onSwitchToLogin={() => setAuthPage('login')} />;
+    }
+    return <LoginPage onSwitchToRegister={() => setAuthPage('register')} />;
+  }
+
   // Render division selector or creator
   if (mode === 'selector') {
     return (
@@ -463,6 +490,8 @@ function App() {
         onSelectDivision={handleSelectDivision}
         onCreateNew={() => setMode('creator')}
         onDeleteDivision={deleteDivision}
+        user={user}
+        onLogout={isApiMode() ? logout : undefined}
       />
     );
   }

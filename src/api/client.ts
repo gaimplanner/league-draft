@@ -16,10 +16,45 @@ import type {
   ScoringMode,
   Trade,
   DraftPick,
+  User,
+  LoginCredentials,
+  RegisterData,
 } from '../types';
 
 // API base URL - defaults to local dev server
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+
+// Helper to get CSRF token from cookies
+function getCSRFToken(): string | null {
+  const cookies = document.cookie.split(';');
+  for (const cookie of cookies) {
+    const [name, value] = cookie.trim().split('=');
+    if (name === 'csrftoken') {
+      return value;
+    }
+  }
+  return null;
+}
+
+// Default fetch options for session-based auth
+function getDefaultOptions(method: string = 'GET'): RequestInit {
+  const options: RequestInit = {
+    credentials: 'include', // Include session cookies
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  };
+
+  // Add CSRF token for non-GET requests
+  if (method !== 'GET' && method !== 'HEAD') {
+    const csrfToken = getCSRFToken();
+    if (csrfToken) {
+      (options.headers as Record<string, string>)['X-CSRFToken'] = csrfToken;
+    }
+  }
+
+  return options;
+}
 
 // -----------------------------------------------------------------------------
 // Type Transformations (snake_case <-> camelCase)
@@ -236,6 +271,22 @@ function transformDivisionFromApi(data: Record<string, unknown>): Division {
 }
 
 /**
+ * Transform user data from API to frontend
+ */
+function transformUserFromApi(data: Record<string, unknown>): User {
+  return {
+    id: data.id as string,
+    email: data.email as string,
+    firstName: data.first_name as string,
+    lastName: data.last_name as string,
+    role: data.role as User['role'],
+    leagueId: data.league_id as string | undefined,
+    leagueName: data.league_name as string | undefined,
+    leagueSlug: data.league_slug as string | undefined,
+  };
+}
+
+/**
  * Transform division summary from API to frontend
  */
 function transformDivisionSummaryFromApi(data: Record<string, unknown>): DivisionSummary {
@@ -299,8 +350,56 @@ export const api = {
   // ---------------------------------------------------------------------------
 
   async health(): Promise<{ status: string }> {
-    const response = await fetch(`${API_BASE_URL.replace('/api', '')}/health`);
+    const response = await fetch(`${API_BASE_URL.replace('/api', '')}/health`, getDefaultOptions());
     return handleResponse(response);
+  },
+
+  // ---------------------------------------------------------------------------
+  // Auth
+  // ---------------------------------------------------------------------------
+
+  async register(data: RegisterData): Promise<User> {
+    const response = await fetch(`${API_BASE_URL}/auth/register/`, {
+      ...getDefaultOptions('POST'),
+      method: 'POST',
+      body: JSON.stringify({
+        email: data.email,
+        password: data.password,
+        first_name: data.firstName || '',
+        last_name: data.lastName || '',
+        league_name: data.leagueName || '',
+        league_slug: data.leagueSlug || '',
+      }),
+    });
+    const result = await handleResponse<Record<string, unknown>>(response);
+    return transformUserFromApi(result);
+  },
+
+  async login(credentials: LoginCredentials): Promise<User> {
+    const response = await fetch(`${API_BASE_URL}/auth/login/`, {
+      ...getDefaultOptions('POST'),
+      method: 'POST',
+      body: JSON.stringify({
+        email: credentials.email,
+        password: credentials.password,
+      }),
+    });
+    const result = await handleResponse<Record<string, unknown>>(response);
+    return transformUserFromApi(result);
+  },
+
+  async logout(): Promise<void> {
+    const response = await fetch(`${API_BASE_URL}/auth/logout/`, {
+      ...getDefaultOptions('POST'),
+      method: 'POST',
+    });
+    await handleResponse<void>(response);
+  },
+
+  async getCurrentUser(): Promise<User> {
+    const response = await fetch(`${API_BASE_URL}/auth/me/`, getDefaultOptions());
+    const result = await handleResponse<Record<string, unknown>>(response);
+    return transformUserFromApi(result);
   },
 
   // ---------------------------------------------------------------------------
@@ -308,13 +407,13 @@ export const api = {
   // ---------------------------------------------------------------------------
 
   async listDivisions(): Promise<DivisionSummary[]> {
-    const response = await fetch(`${API_BASE_URL}/divisions/`);
+    const response = await fetch(`${API_BASE_URL}/divisions/`, getDefaultOptions());
     const data = await handleResponse<Record<string, unknown>[]>(response);
     return data.map(transformDivisionSummaryFromApi);
   },
 
   async getDivision(id: string): Promise<Division> {
-    const response = await fetch(`${API_BASE_URL}/divisions/${id}/`);
+    const response = await fetch(`${API_BASE_URL}/divisions/${id}/`, getDefaultOptions());
     const data = await handleResponse<Record<string, unknown>>(response);
     return transformDivisionFromApi(data);
   },
@@ -330,8 +429,8 @@ export const api = {
     scoringMode?: ScoringMode;
   }): Promise<Division> {
     const response = await fetch(`${API_BASE_URL}/divisions/`, {
+      ...getDefaultOptions('POST'),
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         name: params.name,
         preset: params.preset,
@@ -375,8 +474,8 @@ export const api = {
     if (updates.phase !== undefined) body.phase = updates.phase;
 
     const response = await fetch(`${API_BASE_URL}/divisions/${id}/`, {
+      ...getDefaultOptions('PATCH'),
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
     const data = await handleResponse<Record<string, unknown>>(response);
@@ -385,6 +484,7 @@ export const api = {
 
   async deleteDivision(id: string): Promise<void> {
     const response = await fetch(`${API_BASE_URL}/divisions/${id}/`, {
+      ...getDefaultOptions('DELETE'),
       method: 'DELETE',
     });
     await handleResponse<void>(response);
@@ -395,15 +495,15 @@ export const api = {
   // ---------------------------------------------------------------------------
 
   async getPlayer(id: string): Promise<Player> {
-    const response = await fetch(`${API_BASE_URL}/players/${id}/`);
+    const response = await fetch(`${API_BASE_URL}/players/${id}/`, getDefaultOptions());
     const data = await handleResponse<Record<string, unknown>>(response);
     return transformPlayerFromApi(data);
   },
 
   async updatePlayer(id: string, updates: Partial<Player>): Promise<Player> {
     const response = await fetch(`${API_BASE_URL}/players/${id}/`, {
+      ...getDefaultOptions('PATCH'),
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(transformPlayerToApi(updates)),
     });
     const data = await handleResponse<Record<string, unknown>>(response);
@@ -412,6 +512,7 @@ export const api = {
 
   async deletePlayer(id: string): Promise<void> {
     const response = await fetch(`${API_BASE_URL}/players/${id}/`, {
+      ...getDefaultOptions('DELETE'),
       method: 'DELETE',
     });
     await handleResponse<void>(response);
@@ -419,8 +520,8 @@ export const api = {
 
   async bulkCreatePlayers(divisionId: string, players: Partial<Player>[]): Promise<Player[]> {
     const response = await fetch(`${API_BASE_URL}/players/bulk/`, {
+      ...getDefaultOptions('POST'),
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         division_id: divisionId,
         players: players.map(transformPlayerToApi),
@@ -432,6 +533,7 @@ export const api = {
 
   async deleteAllPlayers(divisionId: string): Promise<{ deleted: number }> {
     const response = await fetch(`${API_BASE_URL}/players/delete_by_division/?division_id=${divisionId}`, {
+      ...getDefaultOptions('DELETE'),
       method: 'DELETE',
     });
     return handleResponse<{ deleted: number }>(response);
@@ -442,7 +544,7 @@ export const api = {
   // ---------------------------------------------------------------------------
 
   async getTeam(id: string): Promise<Team> {
-    const response = await fetch(`${API_BASE_URL}/teams/${id}/`);
+    const response = await fetch(`${API_BASE_URL}/teams/${id}/`, getDefaultOptions());
     const data = await handleResponse<Record<string, unknown>>(response);
     return transformTeamFromApi(data);
   },
@@ -465,8 +567,8 @@ export const api = {
     if (updates.ageBreakdown !== undefined) body.age_breakdown = updates.ageBreakdown;
 
     const response = await fetch(`${API_BASE_URL}/teams/${id}/`, {
+      ...getDefaultOptions('PATCH'),
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
     const data = await handleResponse<Record<string, unknown>>(response);
@@ -474,7 +576,7 @@ export const api = {
   },
 
   async listTeams(divisionId: string): Promise<Team[]> {
-    const response = await fetch(`${API_BASE_URL}/teams/?division_id=${divisionId}`);
+    const response = await fetch(`${API_BASE_URL}/teams/?division_id=${divisionId}`, getDefaultOptions());
     const data = await handleResponse<Record<string, unknown>[]>(response);
     return data.map(transformTeamFromApi);
   },
@@ -489,8 +591,8 @@ export const api = {
     draftOrder: string[];
   }): Promise<{ draftState: DraftState; players: Player[]; teams: Team[] }> {
     const response = await fetch(`${API_BASE_URL}/draft/start/`, {
+      ...getDefaultOptions('POST'),
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         division_id: params.divisionId,
         draft_format: params.draftFormat,
@@ -516,8 +618,8 @@ export const api = {
     teamId: string;
   }): Promise<{ draftState: DraftState; players: Player[]; teams: Team[] }> {
     const response = await fetch(`${API_BASE_URL}/draft/pick/`, {
+      ...getDefaultOptions('POST'),
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         draft_state_id: params.draftStateId,
         player_id: params.playerId,
@@ -539,8 +641,8 @@ export const api = {
 
   async undoLastPick(draftStateId: string): Promise<{ draftState: DraftState; players: Player[]; teams: Team[] }> {
     const response = await fetch(`${API_BASE_URL}/draft/undo/`, {
+      ...getDefaultOptions('POST'),
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         draft_state_id: draftStateId,
       }),
@@ -567,8 +669,8 @@ export const api = {
     reason: string;
   }): Promise<{ draftState: DraftState; players: Player[]; teams: Team[] }> {
     const response = await fetch(`${API_BASE_URL}/draft/trade/`, {
+      ...getDefaultOptions('POST'),
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         draft_state_id: params.draftStateId,
         team1_id: params.team1Id,
@@ -593,8 +695,8 @@ export const api = {
 
   async resetDraft(divisionId: string): Promise<Division> {
     const response = await fetch(`${API_BASE_URL}/divisions/${divisionId}/reset/`, {
+      ...getDefaultOptions('POST'),
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
     });
     const data = await handleResponse<Record<string, unknown>>(response);
     return transformDivisionFromApi(data);

@@ -1,10 +1,13 @@
+from django.contrib.auth import authenticate, login, logout, get_user_model
 from django.utils import timezone
+from django.utils.text import slugify
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Division, Team, Player, DraftState, DraftPick, Trade
+from .models import Division, Team, Player, DraftState, DraftPick, Trade, League
 from .serializers import (
     DivisionSerializer,
     DivisionSummarySerializer,
@@ -20,21 +23,135 @@ from .serializers import (
     UndoPickSerializer,
     CreateTradeSerializer,
     BulkCreatePlayersSerializer,
+    RegisterSerializer,
+    LoginSerializer,
+    UserSerializer,
 )
 from .services import DraftService
+
+User = get_user_model()
 
 
 class HealthView(APIView):
     """Health check endpoint."""
 
+    permission_classes = [AllowAny]
+
     def get(self, request):
         return Response({"status": "ok", "timestamp": timezone.now().isoformat()})
+
+
+# -----------------------------------------------------------------------------
+# Auth Views
+# -----------------------------------------------------------------------------
+
+
+class RegisterView(APIView):
+    """User registration endpoint."""
+
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = RegisterSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        # Create league if league_name provided
+        league = None
+        if data.get("league_name"):
+            league_slug = data.get("league_slug") or slugify(data["league_name"])
+            if League.objects.filter(slug=league_slug).exists():
+                return Response(
+                    {"error": "A league with this slug already exists"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            league = League.objects.create(name=data["league_name"], slug=league_slug)
+
+        # Create user
+        user = User.objects.create_user(
+            email=data["email"],
+            password=data["password"],
+            first_name=data.get("first_name", ""),
+            last_name=data.get("last_name", ""),
+            league=league,
+        )
+
+        # Auto-login after registration
+        login(request, user)
+
+        return Response(UserSerializer(user).data, status=status.HTTP_201_CREATED)
+
+
+class LoginView(APIView):
+    """User login endpoint."""
+
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = LoginSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        user = authenticate(
+            request,
+            username=serializer.validated_data["email"],
+            password=serializer.validated_data["password"],
+        )
+
+        if user is None:
+            return Response(
+                {"error": "Invalid email or password"},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        login(request, user)
+        return Response(UserSerializer(user).data)
+
+
+class LogoutView(APIView):
+    """User logout endpoint."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        logout(request)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class MeView(APIView):
+    """Current user info endpoint."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return Response(UserSerializer(request.user).data)
+
+
+# -----------------------------------------------------------------------------
+# Data ViewSets
+# -----------------------------------------------------------------------------
 
 
 class DivisionViewSet(viewsets.ModelViewSet):
     """ViewSet for Division CRUD operations."""
 
     queryset = Division.objects.all()
+
+    def get_queryset(self):
+        """Filter divisions by tenant (league)."""
+        # Master admin can see all divisions
+        if hasattr(self.request, "user") and self.request.user.is_authenticated:
+            if self.request.user.role == "master_admin":
+                return Division.objects.all()
+        # Regular users see only their league's divisions
+        if hasattr(self.request, "league") and self.request.league:
+            return Division.objects.for_league(self.request.league)
+        # Unauthenticated or no league - return all for now (backward compatibility)
+        return Division.objects.all()
+
+    def perform_create(self, serializer):
+        """Set league when creating a division."""
+        league = getattr(self.request, "league", None)
+        serializer.save(league=league)
 
     def get_serializer_class(self):
         if self.action == "list":

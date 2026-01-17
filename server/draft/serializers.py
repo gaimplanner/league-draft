@@ -1,5 +1,77 @@
+from django.contrib.auth import get_user_model
+from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
-from .models import Division, Team, Player, DraftState, DraftPick, Trade
+
+from .models import Division, Team, Player, DraftState, DraftPick, Trade, League
+
+User = get_user_model()
+
+
+# -----------------------------------------------------------------------------
+# Auth Serializers
+# -----------------------------------------------------------------------------
+
+
+class RegisterSerializer(serializers.Serializer):
+    """Serializer for user registration."""
+
+    email = serializers.EmailField()
+    password = serializers.CharField(write_only=True)
+    first_name = serializers.CharField(max_length=150, required=False, allow_blank=True)
+    last_name = serializers.CharField(max_length=150, required=False, allow_blank=True)
+    league_name = serializers.CharField(max_length=255, required=False, allow_blank=True)
+    league_slug = serializers.SlugField(max_length=100, required=False, allow_blank=True)
+
+    def validate_email(self, value):
+        if User.objects.filter(email__iexact=value).exists():
+            raise serializers.ValidationError("A user with this email already exists.")
+        return value.lower()
+
+    def validate_password(self, value):
+        validate_password(value)
+        return value
+
+
+class LoginSerializer(serializers.Serializer):
+    """Serializer for user login."""
+
+    email = serializers.EmailField()
+    password = serializers.CharField(write_only=True)
+
+
+class UserSerializer(serializers.ModelSerializer):
+    """Serializer for user info."""
+
+    league_id = serializers.UUIDField(source="league.id", read_only=True, allow_null=True)
+    league_name = serializers.CharField(source="league.name", read_only=True, allow_null=True)
+    league_slug = serializers.CharField(source="league.slug", read_only=True, allow_null=True)
+
+    class Meta:
+        model = User
+        fields = [
+            "id",
+            "email",
+            "first_name",
+            "last_name",
+            "role",
+            "league_id",
+            "league_name",
+            "league_slug",
+        ]
+
+
+class LeagueSerializer(serializers.ModelSerializer):
+    """Serializer for League model."""
+
+    class Meta:
+        model = League
+        fields = ["id", "name", "slug", "created_at"]
+        read_only_fields = ["id", "created_at"]
+
+
+# -----------------------------------------------------------------------------
+# Game Data Serializers
+# -----------------------------------------------------------------------------
 
 
 # Default scoring weights
@@ -312,11 +384,14 @@ class DivisionCreateSerializer(serializers.Serializer):
         scoring_weights = validated_data.pop(
             "scoring_weights", DEFAULT_SCORING_WEIGHTS
         )
+        # league is passed from perform_create via validated_data
+        league = validated_data.pop("league", None)
 
         division = Division.objects.create(
             age_range_min=age_range["min"],
             age_range_max=age_range["max"],
             scoring_weights=scoring_weights,
+            league=league,
             **validated_data,
         )
 
