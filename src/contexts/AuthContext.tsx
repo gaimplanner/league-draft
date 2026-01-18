@@ -118,9 +118,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
     });
   }, []);
 
-  // Check authentication on mount
+  // Initialize CSRF token and check authentication on mount
   useEffect(() => {
-    checkAuth();
+    const init = async () => {
+      // Initialize CSRF token first
+      await api.initCSRF();
+      // Then check authentication
+      await checkAuth();
+    };
+    init();
   }, [checkAuth]);
 
   const value: AuthContextType = {

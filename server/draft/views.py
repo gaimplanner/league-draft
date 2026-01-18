@@ -6,15 +6,19 @@ from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from django.utils import timezone
+from django.utils.decorators import method_decorator
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.utils.text import slugify
+from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from datetime import timedelta
+
+from .throttling import AuthRateThrottle, PasswordResetRateThrottle
 
 from .models import Division, Team, Player, DraftState, DraftPick, Trade, League, LeagueMembership, LeagueInvitation
 from .serializers import (
@@ -61,15 +65,30 @@ class HealthView(APIView):
         return Response({"status": "ok", "timestamp": timezone.now().isoformat()})
 
 
+@method_decorator(ensure_csrf_cookie, name="dispatch")
+class CSRFTokenView(APIView):
+    """
+    Endpoint to get a CSRF token cookie.
+    Frontend should call this on app initialization to ensure the CSRF cookie is set.
+    """
+
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        return Response({"detail": "CSRF cookie set"})
+
+
 # -----------------------------------------------------------------------------
 # Auth Views
 # -----------------------------------------------------------------------------
 
 
+@method_decorator(ensure_csrf_cookie, name="dispatch")
 class RegisterView(APIView):
     """User registration endpoint."""
 
     permission_classes = [AllowAny]
+    throttle_classes = [AuthRateThrottle]
 
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
@@ -109,10 +128,12 @@ class RegisterView(APIView):
         return Response(UserSerializer(user).data, status=status.HTTP_201_CREATED)
 
 
+@method_decorator(ensure_csrf_cookie, name="dispatch")
 class LoginView(APIView):
     """User login endpoint."""
 
     permission_classes = [AllowAny]
+    throttle_classes = [AuthRateThrottle]
 
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
@@ -197,10 +218,12 @@ class ChangePasswordView(APIView):
         return Response({"message": "Password changed successfully."})
 
 
+@method_decorator(ensure_csrf_cookie, name="dispatch")
 class PasswordResetRequestView(APIView):
     """Request a password reset email."""
 
     permission_classes = [AllowAny]
+    throttle_classes = [PasswordResetRateThrottle]
 
     def post(self, request):
         serializer = PasswordResetRequestSerializer(data=request.data)
@@ -253,10 +276,12 @@ Little League Draft Team
         )
 
 
+@method_decorator(ensure_csrf_cookie, name="dispatch")
 class PasswordResetConfirmView(APIView):
     """Confirm password reset with token."""
 
     permission_classes = [AllowAny]
+    throttle_classes = [AuthRateThrottle]
 
     def post(self, request):
         serializer = PasswordResetConfirmSerializer(data=request.data)

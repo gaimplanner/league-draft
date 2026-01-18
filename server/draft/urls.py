@@ -3,6 +3,7 @@ from rest_framework.routers import DefaultRouter
 
 from .views import (
     HealthView,
+    CSRFTokenView,
     RegisterView,
     LoginView,
     LogoutView,
@@ -29,6 +30,8 @@ router.register(r"draft", DraftViewSet, basename="draft")
 
 urlpatterns = [
     path("health", HealthView.as_view(), name="health"),
+    # CSRF token endpoint
+    path("api/auth/csrf/", CSRFTokenView.as_view(), name="csrf-token"),
     # Auth endpoints
     path("api/auth/register/", RegisterView.as_view(), name="register"),
     path("api/auth/login/", LoginView.as_view(), name="login"),

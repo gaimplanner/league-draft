@@ -379,6 +379,25 @@ export const api = {
   },
 
   // ---------------------------------------------------------------------------
+  // CSRF Token
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Initialize CSRF token cookie.
+   * Call this on app initialization to ensure the CSRF cookie is set before any POST requests.
+   */
+  async initCSRF(): Promise<void> {
+    try {
+      await fetch(`${API_BASE_URL}/auth/csrf/`, {
+        ...getDefaultOptions(),
+        credentials: 'include',
+      });
+    } catch {
+      // Silently fail - CSRF cookie might already be set
+    }
+  },
+
+  // ---------------------------------------------------------------------------
   // Auth
   // ---------------------------------------------------------------------------
 

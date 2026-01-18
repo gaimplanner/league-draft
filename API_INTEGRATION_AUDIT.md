@@ -252,9 +252,9 @@ For each screen/flow:
 | 1 | 1 | Demo credentials exposed in LoginPage | Critical | LoginPage.tsx | ✅ |
 | 2 | 1 | Password validation mismatch client/server | Critical | RegisterPage/views.py | ✅ |
 | 3 | 1 | Missing email re-verification on email change | Critical | ProfileTab/views.py | ✅ |
-| 4 | 1 | CSRF token extraction issues | High | api/client.ts | ⬜ |
-| 5 | 1 | Session timeout not implemented | High | settings.py | ⬜ |
-| 6 | 1 | Rate limiting missing on auth endpoints | High | views.py | ⬜ |
+| 4 | 1 | CSRF token extraction issues | High | api/client.ts | ✅ |
+| 5 | 1 | Session timeout not implemented | High | settings.py | ✅ |
+| 6 | 1 | Rate limiting missing on auth endpoints | High | views.py | ✅ |
 | 7 | 2 | Rate limiting missing on public endpoints | Medium | views.py | ⬜ |
 | 8 | 2 | Audit logging not implemented | Medium | views.py | ⬜ |
 | 9 | 3 | **NO AUTHENTICATION on DivisionViewSet** | **CRITICAL** | views.py | ✅ |
@@ -269,7 +269,7 @@ For each screen/flow:
 | 18 | 4 | Delete-then-create not atomic | Medium | api/index.ts | ⬜ |
 | 19 | 5-6 | **NO AUTHENTICATION on DraftViewSet** | **CRITICAL** | views.py | ✅ |
 | 20 | 5-6 | No tenant verification in draft service | **CRITICAL** | views.py | ✅ |
-| 21 | 5-6 | Client-side mandatory pick bypass risk | High | useDraft.ts | ⬜ |
+| 21 | 5-6 | Client-side mandatory pick bypass risk | High | useDraft.ts | ✅ |
 | 22 | 5-6 | No authorization on undo operations | **CRITICAL** | views.py | ✅ |
 | 23 | 5-6 | Skip pick not implemented in API | Medium | services.py | ⬜ |
 | 24 | 7 | **NO AUTHORIZATION on trade endpoint** | **CRITICAL** | views.py | ✅ |

@@ -117,6 +117,15 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.AllowAny",
     ],
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": "100/hour",
+        "user": "1000/hour",
+        "auth": "5/minute",  # Strict limit for login/register/password-reset
+    },
     "EXCEPTION_HANDLER": "draft.exceptions.custom_exception_handler",
 }
 
@@ -131,7 +140,12 @@ CORS_ALLOW_CREDENTIALS = True
 # Session settings for cross-origin requests
 SESSION_COOKIE_SAMESITE = "Lax"
 SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_AGE = 86400  # 24 hours in seconds
+
+# Force CSRF cookie to be set on every response (fixes initial token extraction)
+CSRF_USE_SESSIONS = False
 CSRF_COOKIE_SAMESITE = "Lax"
+CSRF_COOKIE_HTTPONLY = False  # Must be False so JavaScript can read it
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:5173",
     "http://localhost:5174",
