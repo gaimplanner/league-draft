@@ -51,14 +51,15 @@ export const ColumnMapper = ({ csvData, onMappingComplete }: ColumnMapperProps) 
   const [showOptional, setShowOptional] = useState(false);
 
   // Auto-suggest mappings based on column names
+  // Be generous in matching - try to recognize common variations
   useEffect(() => {
     const autoMapping: ColumnMapping = {};
 
     csvData.headers.forEach((header) => {
       const lowerHeader = header.toLowerCase().trim();
 
-      // Try to match common variations
-      if (lowerHeader === 'bib' || lowerHeader.includes('bib number') || lowerHeader === 'bib #') {
+      // Required fields - match generously
+      if (lowerHeader === 'bib' || lowerHeader.includes('bib') || lowerHeader === '#') {
         autoMapping[header] = 'bib';
       } else if (
         lowerHeader === 'total' ||
@@ -66,14 +67,21 @@ export const ColumnMapper = ({ csvData, onMappingComplete }: ColumnMapperProps) 
         lowerHeader === 'overall' ||
         lowerHeader === 'overall score' ||
         lowerHeader === 'score' ||
-        (lowerHeader.includes('total') && lowerHeader.includes('score')) ||
-        (lowerHeader.includes('overall') && lowerHeader.includes('score'))
+        lowerHeader === 'points' ||
+        lowerHeader === 'total points' ||
+        (lowerHeader.includes('total') && (lowerHeader.includes('score') || lowerHeader.includes('point'))) ||
+        (lowerHeader.includes('overall') && (lowerHeader.includes('score') || lowerHeader.includes('point')))
       ) {
         autoMapping[header] = 'totalScore';
       } else if (lowerHeader.includes('first') && lowerHeader.includes('name')) {
         autoMapping[header] = 'firstName';
+      } else if (lowerHeader === 'first' || lowerHeader === 'firstname') {
+        autoMapping[header] = 'firstName';
       } else if (lowerHeader.includes('last') && lowerHeader.includes('name')) {
         autoMapping[header] = 'lastName';
+      } else if (lowerHeader === 'last' || lowerHeader === 'lastname') {
+        autoMapping[header] = 'lastName';
+      // Optional fields - also match generously
       } else if (lowerHeader.includes('field') && lowerHeader.includes('score')) {
         autoMapping[header] = 'fieldScore';
       } else if (lowerHeader.includes('throw') && lowerHeader.includes('score')) {
@@ -84,36 +92,51 @@ export const ColumnMapper = ({ csvData, onMappingComplete }: ColumnMapperProps) 
         autoMapping[header] = 'hitForm';
       } else if (lowerHeader.includes('hit') && lowerHeader.includes('contact')) {
         autoMapping[header] = 'hitContact';
-      } else if (lowerHeader.includes('pitching') && lowerHeader.includes('strength')) {
+      } else if (lowerHeader.includes('pitch') && (lowerHeader.includes('strength') || lowerHeader.includes('str'))) {
         autoMapping[header] = 'pitchingStrength';
-      } else if (lowerHeader.includes('pitching') && lowerHeader.includes('form')) {
+      } else if (lowerHeader.includes('pitch') && lowerHeader.includes('form')) {
         autoMapping[header] = 'pitchingForm';
-      } else if (lowerHeader.includes('fielding') && lowerHeader.includes('subtotal')) {
+      } else if (lowerHeader.includes('field') && lowerHeader.includes('subtotal')) {
         autoMapping[header] = 'fieldingSubtotal';
-      } else if (lowerHeader.includes('hitting') && lowerHeader.includes('subtotal')) {
+      } else if (lowerHeader.includes('hit') && lowerHeader.includes('subtotal')) {
         autoMapping[header] = 'hittingSubtotal';
-      } else if (lowerHeader.includes('pitching') && lowerHeader.includes('subtotal')) {
+      } else if (lowerHeader.includes('pitch') && lowerHeader.includes('subtotal')) {
         autoMapping[header] = 'pitchingSubtotal';
-      } else if (lowerHeader.includes('catch')) {
+      } else if (lowerHeader.includes('catch') && !lowerHeader.includes('catcher')) {
         autoMapping[header] = 'catchScore';
-      } else if (lowerHeader.includes('running') || lowerHeader.includes('base')) {
+      } else if (lowerHeader.includes('running') || lowerHeader.includes('run score') || lowerHeader.includes('base')) {
         autoMapping[header] = 'runningScore';
-      } else if (lowerHeader.includes('adjust') || lowerHeader.includes('official')) {
+      } else if (lowerHeader.includes('adjust') || lowerHeader.includes('official') || lowerHeader.includes('bonus')) {
         autoMapping[header] = 'officialAdjust';
-      } else if (lowerHeader.includes('age')) {
+      } else if (
+        lowerHeader.includes('age') ||
+        lowerHeader === 'll age' ||
+        lowerHeader.includes('league age')
+      ) {
         autoMapping[header] = 'littleLeagueAge';
-      } else if (lowerHeader.includes('birthday') || lowerHeader.includes('birth')) {
+      } else if (lowerHeader.includes('birthday') || lowerHeader.includes('birth') || lowerHeader.includes('dob') || lowerHeader === 'birthdate') {
         autoMapping[header] = 'birthday';
       } else if (lowerHeader.includes('all') && lowerHeader.includes('star')) {
         autoMapping[header] = 'isAllStar';
-      } else if (lowerHeader === 'dne') {
+      } else if (lowerHeader === 'allstar' || lowerHeader === 'all-star') {
+        autoMapping[header] = 'isAllStar';
+      } else if (
+        lowerHeader === 'dne' ||
+        lowerHeader.includes('did not') ||
+        lowerHeader.includes('not evaluate') ||
+        lowerHeader.includes('no eval')
+      ) {
         autoMapping[header] = 'isDNE';
-      } else if (lowerHeader.includes('coach') && !lowerHeader.includes('manager') && !lowerHeader.includes('assistant')) {
+      } else if (
+        (lowerHeader.includes('coach') && !lowerHeader.includes('manager') && !lowerHeader.includes('assistant')) ||
+        lowerHeader === 'coaches kid' ||
+        lowerHeader === 'coach kid' ||
+        lowerHeader === 'coachkid'
+      ) {
         autoMapping[header] = 'isCoachKid';
-      } else if (lowerHeader.includes('sibling')) {
+      } else if (lowerHeader.includes('sibling') || lowerHeader.includes('brother') || lowerHeader.includes('sister')) {
         autoMapping[header] = 'sibling';
       } else if (lowerHeader === 'team' || lowerHeader === 'teams') {
-        // Match both "Team" and "Teams" column names
         autoMapping[header] = 'teamColumn';
       } else if (lowerHeader.includes('manager') && lowerHeader.includes('team')) {
         autoMapping[header] = 'managerTeam';
