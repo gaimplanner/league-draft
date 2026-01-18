@@ -196,6 +196,40 @@ function App() {
     }
   }, [phase, activeDivision?.id, divisionStateLoaded]);
 
+  // Browser history management - handle back/forward navigation
+  useEffect(() => {
+    // Push initial state on mount
+    if (!window.history.state?.appState) {
+      window.history.replaceState({ appState: { mode: 'selector', phase: 'upload' } }, '');
+    }
+
+    const handlePopState = (event: PopStateEvent) => {
+      // User pressed back/forward button
+      const state = event.state?.appState;
+
+      // Always go back to a safe state (division selector)
+      // This prevents crashes from stale state and provides predictable UX
+      clearActiveDivision();
+      setMode(state?.mode === 'settings' ? 'settings' : 'selector');
+      setCSVData(null);
+      setImportMode(null);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [clearActiveDivision]);
+
+  // Push state to history when mode changes (forward navigation)
+  useEffect(() => {
+    const currentState = window.history.state?.appState;
+    const newState = { mode, phase, divisionId: activeDivision?.id };
+
+    // Only push if state actually changed (avoid duplicate entries)
+    if (currentState?.mode !== mode || currentState?.phase !== phase) {
+      window.history.pushState({ appState: newState }, '');
+    }
+  }, [mode, phase, activeDivision?.id]);
+
   // Handle selecting an existing division
   const handleSelectDivision = useCallback((divisionId: string) => {
     selectDivision(divisionId);
