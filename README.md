@@ -186,9 +186,9 @@ Each tab should include:
 - Round bumping available for conflicts
 
 ### Siblings
-- If one sibling is drafted, the team must draft the other
-- Prevents siblings from being separated
-- Automatic locking when first sibling is picked
+- If one sibling is drafted, the team must draft the other in that sibling's projected round
+- Prevents siblings from being separated while respecting their skill-based draft position
+- Automatic locking when first sibling is picked (but mandatory pick only triggers in the sibling's projected round)
 
 ### Age Limits (Optional)
 - Enforce maximum players per age group

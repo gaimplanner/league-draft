@@ -23,8 +23,8 @@ Has name, roster (drafted players), totalScore, draftPosition, coachKids array, 
 - **Recalculated**: Lowest roster score picks first each round
 
 ### Mandatory Picks
-- **Coach's kids**: Must be drafted by assigned team in their projected round
-- **Siblings**: When one is drafted, team must draft the other (locked via lockedToTeamId)
+- **Coach's kids**: Must be drafted by assigned team in their projected round (or lockedToRound if bumped due to conflicts)
+- **Siblings**: When one is drafted, team must draft the other in the sibling's projected round (locked via lockedToTeamId, respects projectedRound/lockedToRound)
 
 ## Architecture
 
