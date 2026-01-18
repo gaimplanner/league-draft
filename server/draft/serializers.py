@@ -1,5 +1,6 @@
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
+from django.db import models
 from rest_framework import serializers
 
 from .models import Division, Team, Player, DraftState, DraftPick, Trade, League, LeagueMembership, LeagueInvitation
@@ -404,6 +405,18 @@ class DivisionCreateSerializer(serializers.Serializer):
         )
         # league is passed from perform_create via validated_data
         league = validated_data.pop("league", None)
+
+        # Clean up any empty divisions with the same name (in the same league)
+        # These can occur when players get wiped or imports fail
+        name = validated_data.get("name")
+        if name and league:
+            empty_divisions = Division.objects.filter(
+                league=league,
+                name__iexact=name,
+            ).annotate(
+                player_count=models.Count("players")
+            ).filter(player_count=0)
+            empty_divisions.delete()
 
         division = Division.objects.create(
             age_range_min=age_range["min"],

@@ -669,11 +669,17 @@ function App() {
   }
 
   if (mode === 'creator') {
+    // Only check names of divisions that have players (non-empty divisions)
+    // Empty divisions are not shown to users, so shouldn't block new creation
+    const existingNames = summaries
+      .filter(s => s.playerCount > 0)
+      .map(s => s.name);
+
     return (
       <DivisionCreator
         onCancel={() => setMode('selector')}
         onCreate={handleCreateDivision}
-        existingNames={summaries.map(s => s.name)}
+        existingNames={existingNames}
       />
     );
   }
