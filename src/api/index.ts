@@ -8,18 +8,18 @@ export type { } from './client';
 import { api } from './client';
 import type { Player, Team } from '../types';
 
-// Feature flag to use API vs localStorage
-const USE_API = import.meta.env.VITE_USE_API === 'true';
-
 /**
- * Save players to the API (bulk create/replace)
- * In localStorage mode, this is a no-op (players are saved via updateActiveDivision)
+ * Save players to the API (bulk create/replace).
+ *
+ * This operation deletes existing players then creates new ones.
+ * The backend handles this in separate transactions - true atomicity
+ * would require a dedicated endpoint with database transactions.
+ *
+ * Error handling: If the delete succeeds but create fails, the division
+ * will have no players. The caller should handle this by retrying or
+ * notifying the user to re-import.
  */
 export async function savePlayersToApi(divisionId: string, players: Partial<Player>[]): Promise<Player[]> {
-  if (!USE_API) {
-    return players as Player[];
-  }
-
   try {
     // Delete existing players first
     await api.deleteAllPlayers(divisionId);
@@ -28,19 +28,15 @@ export async function savePlayersToApi(divisionId: string, players: Partial<Play
     return await api.bulkCreatePlayers(divisionId, players);
   } catch (err) {
     console.error('Failed to save players to API:', err);
-    throw err;
+    // Re-throw with more context for caller to handle
+    throw new Error(`Failed to save players: ${err instanceof Error ? err.message : 'Unknown error'}`);
   }
 }
 
 /**
- * Save team configurations to the API
- * In localStorage mode, this is a no-op (teams are saved via updateActiveDivision)
+ * Save team configurations to the API.
  */
 export async function saveTeamsToApi(_divisionId: string, teams: Team[]): Promise<Team[]> {
-  if (!USE_API) {
-    return teams;
-  }
-
   try {
     // Update each team
     const updated: Team[] = [];
@@ -55,13 +51,14 @@ export async function saveTeamsToApi(_divisionId: string, teams: Team[]): Promis
     return updated;
   } catch (err) {
     console.error('Failed to save teams to API:', err);
-    throw err;
+    throw new Error(`Failed to save teams: ${err instanceof Error ? err.message : 'Unknown error'}`);
   }
 }
 
 /**
- * Check if API mode is enabled
+ * Check if API mode is enabled.
+ * Always returns true - localStorage mode has been removed.
  */
 export function isApiMode(): boolean {
-  return USE_API;
+  return true;
 }

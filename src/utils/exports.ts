@@ -2,6 +2,16 @@ import { Team, Player, DraftPick, Division, Trade } from '../types';
 import { getTeamDisplayName } from './teamUtils';
 
 /**
+ * Escape HTML entities to prevent XSS attacks.
+ * Used when inserting user-generated content into HTML documents.
+ */
+function escapeHtml(text: string): string {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+/**
  * Generate public rosters for distribution to families.
  * NO scores, NO draft order, NO rankings - just alphabetical player lists.
  */
@@ -275,7 +285,8 @@ export function downloadCSV(content: string, filename: string): void {
 }
 
 /**
- * Open content in a new window for printing
+ * Open content in a new window for printing.
+ * Content is escaped to prevent XSS attacks from user-generated data.
  */
 export function openPrintWindow(content: string, title: string): void {
   const printWindow = window.open('', '_blank');
@@ -284,11 +295,15 @@ export function openPrintWindow(content: string, title: string): void {
     return;
   }
 
+  // Escape both title and content to prevent XSS
+  const safeTitle = escapeHtml(title);
+  const safeContent = escapeHtml(content);
+
   printWindow.document.write(`
 <!DOCTYPE html>
 <html>
 <head>
-  <title>${title}</title>
+  <title>${safeTitle}</title>
   <style>
     body {
       font-family: 'Courier New', Courier, monospace;
@@ -301,7 +316,7 @@ export function openPrintWindow(content: string, title: string): void {
     }
   </style>
 </head>
-<body>${content}</body>
+<body>${safeContent}</body>
 </html>
   `);
   printWindow.document.close();

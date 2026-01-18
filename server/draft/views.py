@@ -15,6 +15,7 @@ from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
 from datetime import timedelta
 
@@ -60,6 +61,7 @@ class HealthView(APIView):
     """Health check endpoint."""
 
     permission_classes = [AllowAny]
+    throttle_classes = [AnonRateThrottle]  # Security: Rate limit public endpoint
 
     def get(self, request):
         return Response({"status": "ok", "timestamp": timezone.now().isoformat()})
@@ -372,6 +374,15 @@ class DivisionViewSet(viewsets.ModelViewSet):
     def update(self, request, *args, **kwargs):
         partial = kwargs.pop("partial", False)
         instance = self.get_object()
+
+        # Security: Check if phase is being updated - require admin role
+        if "phase" in request.data:
+            if request.user.role != "master_admin" and not request.user.is_league_admin(instance.league):
+                return Response(
+                    {"error": "Only league admins can change division phase"},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
         division = serializer.save()
@@ -1218,6 +1229,7 @@ class PublicJoinLinkView(APIView):
     """Public endpoint to get league info from join link or email invitation token."""
 
     permission_classes = [AllowAny]
+    throttle_classes = [AnonRateThrottle]  # Security: Rate limit public endpoint
 
     def get(self, request, token):
         """Get league info from join link token or email invitation token."""

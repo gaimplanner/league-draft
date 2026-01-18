@@ -6,6 +6,19 @@ import { useScoringWeights } from '../hooks/useScoringWeights';
 import { recalculateAllScores } from '../utils/scoreCalculation';
 import { PlayerReviewTable } from './PlayerReviewTable';
 
+// Security: Team name validation constants
+const MAX_TEAM_NAME_LENGTH = 100;
+
+/**
+ * Sanitize team name to prevent XSS and enforce length limits.
+ */
+function sanitizeTeamName(name: string): string {
+  return name
+    .trim()
+    .slice(0, MAX_TEAM_NAME_LENGTH)
+    .replace(/[<>]/g, ''); // Remove HTML-like characters
+}
+
 interface PlayerReviewProps {
   players: Player[];
   teams: Team[];
@@ -58,16 +71,19 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
   }, [weights, scoringMode]);
 
   const handleTeamNameUpdate = (teamId: string, newName: string) => {
+    // Security: Sanitize team name input
+    const sanitizedName = sanitizeTeamName(newName);
     const updatedTeams = teams.map(t =>
-      t.id === teamId ? { ...t, name: newName } : t
+      t.id === teamId ? { ...t, name: sanitizedName } : t
     );
     onTeamsUpdate(updatedTeams);
   };
 
   const handleAssistantCoachesUpdate = (teamId: string, assistantCoachesText: string) => {
+    // Security: Sanitize each assistant coach name
     const assistantCoaches = assistantCoachesText
       .split(',')
-      .map(name => name.trim())
+      .map(name => sanitizeTeamName(name)) // Reuse sanitization function
       .filter(name => name.length > 0);
 
     const updatedTeams = teams.map(t =>
