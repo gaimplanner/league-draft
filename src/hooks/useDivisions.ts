@@ -125,9 +125,10 @@ export function useDivisions() {
   }, []);
 
   // Check if a division name already exists (case-insensitive)
+  // Only check divisions that have players - empty ones will be cleaned up by the backend
   const divisionNameExists = useCallback((name: string): boolean => {
     const normalizedName = name.trim().toLowerCase();
-    return summaries.some(s => s.name.trim().toLowerCase() === normalizedName);
+    return summaries.some(s => s.playerCount > 0 && s.name.trim().toLowerCase() === normalizedName);
   }, [summaries]);
 
   // Create a new division
