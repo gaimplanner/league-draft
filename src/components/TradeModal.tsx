@@ -1,7 +1,8 @@
 import { useState, useMemo } from 'react';
-import { X, ArrowLeftRight, AlertTriangle } from 'lucide-react';
+import { X, ArrowLeftRight, AlertTriangle, AlertCircle } from 'lucide-react';
 import { Team, Player } from '../types';
 import { getTeamDisplayName } from '../utils/teamUtils';
+import { ApiError } from '../api/client';
 
 interface TradeModalProps {
   teams: Team[];
@@ -24,6 +25,8 @@ export const TradeModal = ({ teams, players, onExecuteTrade, onClose }: TradeMod
   const [reason, setReason] = useState<string>('');
   // Prevent double-submit (Issue #11)
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Error state for displaying trade failures to user
+  const [error, setError] = useState<string | null>(null);
 
   // Get rosters for selected teams
   const team1 = teams.find(t => t.id === team1Id);
@@ -73,11 +76,25 @@ export const TradeModal = ({ teams, players, onExecuteTrade, onClose }: TradeMod
     if (!canTrade) return;
     // Prevent double-submit (Issue #11)
     setIsSubmitting(true);
+    setError(null);
     try {
       await onExecuteTrade(team1Id, team2Id, player1Id, player2Id, reason.trim());
       onClose();
-    } catch {
-      // Allow retry if trade fails
+    } catch (err) {
+      // Display error to user and allow retry
+      let errorMessage = 'Failed to execute trade. Please try again.';
+      if (err instanceof ApiError) {
+        if (err.status === 401) {
+          errorMessage = 'Your session has expired. Please log in again to continue.';
+        } else if (err.details?.error && typeof err.details.error === 'string') {
+          errorMessage = err.details.error;
+        } else if (err.details?.detail && typeof err.details.detail === 'string') {
+          errorMessage = err.details.detail;
+        }
+      } else if (err instanceof Error) {
+        errorMessage = err.message;
+      }
+      setError(errorMessage);
       setIsSubmitting(false);
     }
   };
@@ -338,6 +355,16 @@ export const TradeModal = ({ teams, players, onExecuteTrade, onClose }: TradeMod
               <strong>Note:</strong> Trades are recorded in the official draft record. This action cannot be undone, but another trade can be made to reverse it.
             </div>
           </div>
+
+          {/* Error Display */}
+          {error && (
+            <div className="flex items-start gap-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg mb-6">
+              <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-red-800 dark:text-red-200">
+                <strong>Error:</strong> {error}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Footer */}

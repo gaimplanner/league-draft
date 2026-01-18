@@ -16,7 +16,8 @@ export function JoinLinkSection({ leagueId }: JoinLinkSectionProps) {
 
   useEffect(() => {
     loadStatus();
-  }, [leagueId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [leagueId]); // loadStatus is stable, only re-run when leagueId changes
 
   const loadStatus = async () => {
     try {
@@ -25,9 +26,15 @@ export function JoinLinkSection({ leagueId }: JoinLinkSectionProps) {
       const data = await api.getJoinLinkStatus(leagueId);
       setStatus(data);
     } catch (err) {
-      if (err instanceof Error && err.name === 'ApiError') {
-        const apiError = err as ApiError;
-        setError(apiError.details?.error as string || 'Failed to load join link');
+      // Handle all error types (Issue #27 - missing else clauses, 403 handling)
+      if (err instanceof ApiError) {
+        if (err.status === 403) {
+          setError('You no longer have permission to manage join links. Your admin access may have been revoked.');
+        } else {
+          setError(err.details?.error as string || 'Failed to load join link');
+        }
+      } else {
+        setError('Failed to load join link');
       }
     } finally {
       setLoading(false);
@@ -41,9 +48,15 @@ export function JoinLinkSection({ leagueId }: JoinLinkSectionProps) {
       const data = await api.generateJoinLink(leagueId);
       setStatus(data);
     } catch (err) {
-      if (err instanceof Error && err.name === 'ApiError') {
-        const apiError = err as ApiError;
-        setError(apiError.details?.error as string || 'Failed to generate link');
+      // Handle all error types (Issue #27 - missing else clauses, 403 handling)
+      if (err instanceof ApiError) {
+        if (err.status === 403) {
+          setError('You no longer have permission to generate join links. Your admin access may have been revoked.');
+        } else {
+          setError(err.details?.error as string || 'Failed to generate link');
+        }
+      } else {
+        setError('Failed to generate link');
       }
     } finally {
       setActionLoading(false);
@@ -57,9 +70,15 @@ export function JoinLinkSection({ leagueId }: JoinLinkSectionProps) {
       const data = await api.disableJoinLink(leagueId);
       setStatus(data);
     } catch (err) {
-      if (err instanceof Error && err.name === 'ApiError') {
-        const apiError = err as ApiError;
-        setError(apiError.details?.error as string || 'Failed to disable link');
+      // Handle all error types (Issue #27 - missing else clauses, 403 handling)
+      if (err instanceof ApiError) {
+        if (err.status === 403) {
+          setError('You no longer have permission to disable join links. Your admin access may have been revoked.');
+        } else {
+          setError(err.details?.error as string || 'Failed to disable link');
+        }
+      } else {
+        setError('Failed to disable link');
       }
     } finally {
       setActionLoading(false);

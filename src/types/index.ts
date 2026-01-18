@@ -109,6 +109,7 @@ export interface AcceptInvitationResult {
 
 export interface Player {
   id: string;
+  divisionId?: string; // ID of the division this player belongs to (from API)
   bib: string; // Unique ID from evaluation day
   firstName: string;
   lastName: string;
@@ -162,13 +163,14 @@ export interface Player {
 
 export interface Team {
   id: string;
+  divisionId?: string; // ID of the division this team belongs to (from API)
   name: string;
   roster: Player[];
   totalScore: number;
   draftPosition: number; // 1-8
   coachKids: string[]; // player IDs
   assistantCoaches: string[]; // assistant coach last names
-  ageBreakdown: Record<number, number>; // { 10: 3, 11: 4, 12: 2 } - count per age
+  ageBreakdown: Record<string, number>; // { "10": 3, "11": 4, "12": 2 } - count per age (string keys from JSON)
 }
 
 export interface DraftPick {
@@ -190,6 +192,7 @@ export interface DraftConfig {
 
 export interface DraftState {
   id?: string; // Backend draft state ID (for API mode)
+  divisionId?: string; // ID of the division this draft belongs to (from API)
   players: Player[];
   teams: Team[];
   draftFormat: DraftFormat;
@@ -339,6 +342,7 @@ export interface Division {
   scoringMode: ScoringMode; // Whether CSV scores are raw or pre-weighted
   phase: AppPhase;
   createdAt: string; // ISO date string
+  updatedAt?: string; // ISO date string (from API)
   completedAt?: string; // ISO date string
 }
 

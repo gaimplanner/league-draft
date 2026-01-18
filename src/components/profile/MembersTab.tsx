@@ -32,9 +32,13 @@ export function MembersTab({ leagueId, leagueName, isAdmin, currentUserId }: Mem
       setMembers(membersData);
       setInvitations(invitationsData);
     } catch (err) {
-      if (err instanceof Error && err.name === 'ApiError') {
-        const apiError = err as ApiError;
-        setError(apiError.details?.error as string || 'Failed to load members');
+      // Handle all error types including 403 (Issue #27 - admin 403 handling)
+      if (err instanceof ApiError) {
+        if (err.status === 403) {
+          setError('You no longer have permission to view members. Your admin access may have been revoked.');
+        } else {
+          setError(err.details?.error as string || 'Failed to load members');
+        }
       } else {
         setError('Failed to load members');
       }
@@ -53,15 +57,28 @@ export function MembersTab({ leagueId, leagueName, isAdmin, currentUserId }: Mem
       return;
     }
 
+    // Store previous state for rollback (Issue #27 - optimistic updates)
+    const previousMembers = [...members];
+
     try {
       setActionLoading(userId);
-      await api.removeLeagueMember(leagueId, userId);
+      // Optimistically update UI
       setMembers(members.filter(m => m.userId !== userId));
       setDeleteConfirm(null);
+      // Then make API call
+      await api.removeLeagueMember(leagueId, userId);
     } catch (err) {
-      if (err instanceof Error && err.name === 'ApiError') {
-        const apiError = err as ApiError;
-        setError(apiError.details?.error as string || 'Failed to remove member');
+      // Rollback on failure
+      setMembers(previousMembers);
+      // Handle all error types including 403 (Issue #27 - admin 403 handling)
+      if (err instanceof ApiError) {
+        if (err.status === 403) {
+          setError('You no longer have permission to remove members. Your admin access may have been revoked.');
+        } else {
+          setError(err.details?.error as string || 'Failed to remove member');
+        }
+      } else {
+        setError('Failed to remove member');
       }
     } finally {
       setActionLoading(null);
@@ -69,14 +86,31 @@ export function MembersTab({ leagueId, leagueName, isAdmin, currentUserId }: Mem
   };
 
   const handleUpdateRole = async (userId: string, newRole: LeagueMembershipRole) => {
+    // Store previous state for rollback (Issue #27 - optimistic updates)
+    const previousMembers = [...members];
+    const member = members.find(m => m.userId === userId);
+    if (!member) return;
+
     try {
       setActionLoading(userId);
+      // Optimistically update UI
+      setMembers(members.map(m => m.userId === userId ? { ...m, role: newRole } : m));
+      // Then make API call
       const updated = await api.updateMemberRole(leagueId, userId, newRole);
-      setMembers(members.map(m => m.userId === userId ? updated : m));
+      // Update with actual server response
+      setMembers(prev => prev.map(m => m.userId === userId ? updated : m));
     } catch (err) {
-      if (err instanceof Error && err.name === 'ApiError') {
-        const apiError = err as ApiError;
-        setError(apiError.details?.error as string || 'Failed to update role');
+      // Rollback on failure
+      setMembers(previousMembers);
+      // Handle all error types including 403 (Issue #27 - admin 403 handling)
+      if (err instanceof ApiError) {
+        if (err.status === 403) {
+          setError('You no longer have permission to change roles. Your admin access may have been revoked.');
+        } else {
+          setError(err.details?.error as string || 'Failed to update role');
+        }
+      } else {
+        setError('Failed to update role');
       }
     } finally {
       setActionLoading(null);
@@ -84,14 +118,27 @@ export function MembersTab({ leagueId, leagueName, isAdmin, currentUserId }: Mem
   };
 
   const handleCancelInvitation = async (invitationId: string) => {
+    // Store previous state for rollback (Issue #27 - optimistic updates)
+    const previousInvitations = [...invitations];
+
     try {
       setActionLoading(invitationId);
-      await api.cancelInvitation(leagueId, invitationId);
+      // Optimistically update UI
       setInvitations(invitations.filter(i => i.id !== invitationId));
+      // Then make API call
+      await api.cancelInvitation(leagueId, invitationId);
     } catch (err) {
-      if (err instanceof Error && err.name === 'ApiError') {
-        const apiError = err as ApiError;
-        setError(apiError.details?.error as string || 'Failed to cancel invitation');
+      // Rollback on failure
+      setInvitations(previousInvitations);
+      // Handle all error types including 403 (Issue #27 - admin 403 handling)
+      if (err instanceof ApiError) {
+        if (err.status === 403) {
+          setError('You no longer have permission to cancel invitations. Your admin access may have been revoked.');
+        } else {
+          setError(err.details?.error as string || 'Failed to cancel invitation');
+        }
+      } else {
+        setError('Failed to cancel invitation');
       }
     } finally {
       setActionLoading(null);

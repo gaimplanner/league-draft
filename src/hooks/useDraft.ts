@@ -1,6 +1,32 @@
 import { useState, useCallback, useRef } from 'react';
 import { Player, Team, DraftState, DraftFormat, AppPhase, Division } from '../types';
-import { api } from '../api/client';
+import { api, ApiError } from '../api/client';
+
+/**
+ * Check if an error is a session expiry error (401 Unauthorized)
+ */
+function isSessionExpiredError(err: unknown): boolean {
+  return err instanceof ApiError && err.status === 401;
+}
+
+/**
+ * Get a user-friendly error message from an API error
+ */
+function getErrorMessage(err: unknown, defaultMessage: string): string {
+  if (isSessionExpiredError(err)) {
+    return 'Your session has expired. Please log in again to continue.';
+  }
+  if (err instanceof ApiError) {
+    // Check for specific error details from the API
+    if (err.details?.error && typeof err.details.error === 'string') {
+      return err.details.error;
+    }
+    if (err.details?.detail && typeof err.details.detail === 'string') {
+      return err.details.detail;
+    }
+  }
+  return defaultMessage;
+}
 
 const initialDraftState: DraftState = {
   players: [],
@@ -76,6 +102,7 @@ export const useDraft = (_divisionId?: string) => {
           setError(null);
         } catch (err) {
           console.error('Failed to reset draft:', err);
+          setError(getErrorMessage(err, 'Failed to reset draft on server, but local state has been reset.'));
           // Still reset local state even if API fails
           setDraftState({
             ...initialDraftState,
@@ -168,7 +195,7 @@ export const useDraft = (_divisionId?: string) => {
       }, 0);
     } catch (err) {
       console.error('Failed to start draft:', err);
-      setError('Failed to start draft');
+      setError(getErrorMessage(err, 'Failed to start draft. Please try again.'));
     } finally {
       setIsLoading(false);
     }
@@ -214,7 +241,7 @@ export const useDraft = (_divisionId?: string) => {
         }
       } catch (err) {
         console.error('Failed to draft player:', err);
-        setError('Failed to draft player');
+        setError(getErrorMessage(err, 'Failed to draft player. Please try again.'));
       } finally {
         setIsLoading(false);
       }
@@ -245,7 +272,7 @@ export const useDraft = (_divisionId?: string) => {
       }
     } catch (err) {
       console.error('Failed to undo pick:', err);
-      setError('Failed to undo pick');
+      setError(getErrorMessage(err, 'Failed to undo pick. Please try again.'));
     } finally {
       setIsLoading(false);
     }
@@ -290,7 +317,9 @@ export const useDraft = (_divisionId?: string) => {
       setError(null);
     } catch (err) {
       console.error('Failed to execute trade:', err);
-      setError('Failed to execute trade');
+      setError(getErrorMessage(err, 'Failed to execute trade. Please try again.'));
+      // Re-throw so TradeModal can handle it (e.g., re-enable submit button)
+      throw err;
     } finally {
       setIsLoading(false);
     }

@@ -101,16 +101,16 @@ function getDefaultOptions(method: string = 'GET'): RequestInit {
 
 /**
  * Safely parse a numeric value that may come as string from Django DecimalField (Issue #3)
- * Returns 0 if the value is null, undefined, or cannot be parsed.
+ * Returns the defaultValue (default: 0) if the value is null, undefined, or cannot be parsed.
  */
-function safeParseNumber(value: unknown): number {
-  if (value === null || value === undefined) return 0;
+function safeParseNumber(value: unknown, defaultValue: number = 0): number {
+  if (value === null || value === undefined) return defaultValue;
   if (typeof value === 'number') return value;
   if (typeof value === 'string') {
     const parsed = parseFloat(value);
-    return isNaN(parsed) ? 0 : parsed;
+    return isNaN(parsed) ? defaultValue : parsed;
   }
-  return 0;
+  return defaultValue;
 }
 
 /**
@@ -133,6 +133,8 @@ function safeParseOptionalNumber(value: unknown): number | undefined {
 function transformPlayerFromApi(data: Record<string, unknown>): Player {
   return {
     id: data.id as string,
+    // Extract divisionId from API response (Issue #27 - data shape mismatch)
+    divisionId: (data.division_id as string | null) ?? undefined,
     bib: data.bib as string,
     firstName: data.first_name as string,
     lastName: data.last_name as string,
@@ -155,7 +157,8 @@ function transformPlayerFromApi(data: Record<string, unknown>): Player {
     officialAdjust: safeParseNumber(data.official_adjust),
     totalScore: safeParseNumber(data.total_score),
     rank: safeParseNumber(data.rank),
-    projectedRound: safeParseNumber(data.projected_round),
+    // Use 1 as default for projectedRound to match Django model default (Issue #27)
+    projectedRound: safeParseNumber(data.projected_round, 1),
     littleLeagueAge: safeParseNumber(data.little_league_age),
     birthday: data.birthday as string,
     isAllStar: data.is_all_star as boolean,
@@ -234,6 +237,8 @@ function transformTeamFromApi(data: Record<string, unknown>): Team {
 
   return {
     id: data.id as string,
+    // Extract divisionId from API response (Issue #27 - data shape mismatch)
+    divisionId: (data.division_id as string | null) ?? undefined,
     name: data.name as string,
     roster,
     // Use safe parsing for numeric fields (Issue #3)
@@ -241,7 +246,7 @@ function transformTeamFromApi(data: Record<string, unknown>): Team {
     draftPosition: safeParseNumber(data.draft_position),
     coachKids,
     assistantCoaches: data.assistant_coaches as string[] || [],
-    ageBreakdown: data.age_breakdown as Record<number, number> || {},
+    ageBreakdown: data.age_breakdown as Record<string, number> || {},
   };
 }
 
@@ -301,6 +306,8 @@ function transformDraftStateFromApi(
   return {
     // Convert null to undefined (Issue #8)
     id: (data.id as string | null) ?? undefined,
+    // Extract divisionId from API response (Issue #27 - data shape mismatch)
+    divisionId: (data.division_id as string | null) ?? undefined,
     players,
     teams,
     draftFormat: data.draft_format as DraftFormat,
@@ -348,6 +355,8 @@ function transformDivisionFromApi(data: Record<string, unknown>): Division {
     scoringMode: data.scoring_mode as ScoringMode,
     phase: data.phase as Division['phase'],
     createdAt: data.created_at as string,
+    // Extract updatedAt from API response (Issue #27 - data shape mismatch)
+    updatedAt: (data.updated_at as string | null) ?? undefined,
     // Convert null to undefined (Issue #8)
     completedAt: (data.completed_at as string | null) ?? undefined,
   };
@@ -429,6 +438,76 @@ export function setSessionExpiredCallback(callback: (() => void) | null): void {
 // Track if we're currently refreshing CSRF token to avoid loops (Issue #9)
 let isRefreshingCSRF = false;
 
+/**
+ * Refresh CSRF token by calling the CSRF endpoint.
+ * Returns true if refresh was successful.
+ */
+async function refreshCSRFToken(): Promise<boolean> {
+  if (isRefreshingCSRF) return false;
+
+  isRefreshingCSRF = true;
+  try {
+    await fetch(`${API_BASE_URL}/auth/csrf/`, {
+      credentials: 'include',
+    });
+    return true;
+  } catch {
+    return false;
+  } finally {
+    isRefreshingCSRF = false;
+  }
+}
+
+/**
+ * Execute a fetch request with automatic CSRF token refresh on 403.
+ * Will retry once after refreshing the CSRF token.
+ */
+async function fetchWithCSRFRetry(
+  url: string,
+  options: RequestInit,
+  useTimeout: boolean = false,
+  timeoutMs: number = DEFAULT_TIMEOUT_MS
+): Promise<Response> {
+  const doFetch = useTimeout
+    ? () => fetchWithTimeout(url, options, timeoutMs)
+    : () => fetch(url, options);
+
+  const response = await doFetch();
+
+  // Check for CSRF error (403 with specific message)
+  if (response.status === 403 && !isRefreshingCSRF) {
+    // Clone the response to read the body without consuming it
+    const clonedResponse = response.clone();
+    try {
+      const contentType = clonedResponse.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        const details = await clonedResponse.json();
+        const isCSRFError =
+          details?.detail === 'CSRF Failed: CSRF token missing or incorrect.' ||
+          details?.detail?.includes('CSRF');
+
+        if (isCSRFError) {
+          console.warn('CSRF token expired, refreshing and retrying request...');
+          const refreshed = await refreshCSRFToken();
+          if (refreshed) {
+            // Get fresh CSRF token for retry
+            const csrfToken = getCSRFToken();
+            if (csrfToken && options.headers) {
+              (options.headers as Record<string, string>)['X-CSRFToken'] = csrfToken;
+            }
+            // Retry the request once
+            return doFetch();
+          }
+        }
+      }
+    } catch {
+      // Failed to parse response, continue with original response
+    }
+  }
+
+  return response;
+}
+
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     let details: Record<string, unknown> | undefined;
@@ -461,15 +540,7 @@ async function handleResponse<T>(response: Response): Promise<T> {
       }
     }
 
-    // Handle 403 Forbidden - might be CSRF token issue (Issue #9)
-    if (response.status === 403 && !isRefreshingCSRF) {
-      const csrfError = details?.detail === 'CSRF Failed: CSRF token missing or incorrect.';
-      if (csrfError) {
-        console.warn('CSRF token expired, will refresh on next request');
-        // The next request will get a fresh CSRF token
-        // We could try to auto-retry here, but that's complex and error-prone
-      }
-    }
+    // Note: CSRF 403 errors are now handled in fetchWithCSRFRetry with automatic retry
 
     throw new ApiError(
       `API request failed: ${response.statusText}`,
@@ -533,7 +604,7 @@ export const api = {
   // ---------------------------------------------------------------------------
 
   async register(data: RegisterData): Promise<User> {
-    const response = await fetch(`${API_BASE_URL}/auth/register/`, {
+    const response = await fetchWithCSRFRetry(`${API_BASE_URL}/auth/register/`, {
       ...getDefaultOptions('POST'),
       method: 'POST',
       body: JSON.stringify({
@@ -550,7 +621,7 @@ export const api = {
   },
 
   async login(credentials: LoginCredentials): Promise<User> {
-    const response = await fetch(`${API_BASE_URL}/auth/login/`, {
+    const response = await fetchWithCSRFRetry(`${API_BASE_URL}/auth/login/`, {
       ...getDefaultOptions('POST'),
       method: 'POST',
       body: JSON.stringify({
@@ -563,7 +634,7 @@ export const api = {
   },
 
   async logout(): Promise<void> {
-    const response = await fetch(`${API_BASE_URL}/auth/logout/`, {
+    const response = await fetchWithCSRFRetry(`${API_BASE_URL}/auth/logout/`, {
       ...getDefaultOptions('POST'),
       method: 'POST',
     });
@@ -577,7 +648,7 @@ export const api = {
   },
 
   async requestPasswordReset(email: string): Promise<{ message: string }> {
-    const response = await fetch(`${API_BASE_URL}/auth/password-reset/`, {
+    const response = await fetchWithCSRFRetry(`${API_BASE_URL}/auth/password-reset/`, {
       ...getDefaultOptions('POST'),
       method: 'POST',
       body: JSON.stringify({ email }),
@@ -586,7 +657,7 @@ export const api = {
   },
 
   async confirmPasswordReset(uid: string, token: string, newPassword: string): Promise<{ message: string }> {
-    const response = await fetch(`${API_BASE_URL}/auth/password-reset/confirm/`, {
+    const response = await fetchWithCSRFRetry(`${API_BASE_URL}/auth/password-reset/confirm/`, {
       ...getDefaultOptions('POST'),
       method: 'POST',
       body: JSON.stringify({
@@ -624,7 +695,7 @@ export const api = {
     scoringWeights?: ScoringWeights;
     scoringMode?: ScoringMode;
   }): Promise<Division> {
-    const response = await fetch(`${API_BASE_URL}/divisions/`, {
+    const response = await fetchWithCSRFRetry(`${API_BASE_URL}/divisions/`, {
       ...getDefaultOptions('POST'),
       method: 'POST',
       body: JSON.stringify({
@@ -669,7 +740,7 @@ export const api = {
     if (updates.scoringMode !== undefined) body.scoring_mode = updates.scoringMode;
     if (updates.phase !== undefined) body.phase = updates.phase;
 
-    const response = await fetch(`${API_BASE_URL}/divisions/${id}/`, {
+    const response = await fetchWithCSRFRetry(`${API_BASE_URL}/divisions/${id}/`, {
       ...getDefaultOptions('PATCH'),
       method: 'PATCH',
       body: JSON.stringify(body),
@@ -679,7 +750,7 @@ export const api = {
   },
 
   async deleteDivision(id: string): Promise<void> {
-    const response = await fetch(`${API_BASE_URL}/divisions/${id}/`, {
+    const response = await fetchWithCSRFRetry(`${API_BASE_URL}/divisions/${id}/`, {
       ...getDefaultOptions('DELETE'),
       method: 'DELETE',
     });
@@ -697,7 +768,7 @@ export const api = {
   },
 
   async updatePlayer(id: string, updates: Partial<Player>): Promise<Player> {
-    const response = await fetch(`${API_BASE_URL}/players/${id}/`, {
+    const response = await fetchWithCSRFRetry(`${API_BASE_URL}/players/${id}/`, {
       ...getDefaultOptions('PATCH'),
       method: 'PATCH',
       body: JSON.stringify(transformPlayerToApi(updates)),
@@ -707,7 +778,7 @@ export const api = {
   },
 
   async deletePlayer(id: string): Promise<void> {
-    const response = await fetch(`${API_BASE_URL}/players/${id}/`, {
+    const response = await fetchWithCSRFRetry(`${API_BASE_URL}/players/${id}/`, {
       ...getDefaultOptions('DELETE'),
       method: 'DELETE',
     });
@@ -715,20 +786,20 @@ export const api = {
   },
 
   async bulkCreatePlayers(divisionId: string, players: Partial<Player>[]): Promise<Player[]> {
-    const response = await fetchWithTimeout(`${API_BASE_URL}/players/bulk/`, {
+    const response = await fetchWithCSRFRetry(`${API_BASE_URL}/players/bulk/`, {
       ...getDefaultOptions('POST'),
       method: 'POST',
       body: JSON.stringify({
         division_id: divisionId,
         players: players.map(transformPlayerToApi),
       }),
-    });
+    }, true); // Use timeout for bulk operations
     const data = await handleResponse<Record<string, unknown>[]>(response);
     return data.map(transformPlayerFromApi);
   },
 
   async deleteAllPlayers(divisionId: string): Promise<{ deleted: number }> {
-    const response = await fetch(`${API_BASE_URL}/players/delete_by_division/?division_id=${divisionId}`, {
+    const response = await fetchWithCSRFRetry(`${API_BASE_URL}/players/delete_by_division/?division_id=${divisionId}`, {
       ...getDefaultOptions('DELETE'),
       method: 'DELETE',
     });
@@ -752,7 +823,7 @@ export const api = {
       draftPosition: number;
       assistantCoaches: string[];
       totalScore: number;
-      ageBreakdown: Record<number, number>;
+      ageBreakdown: Record<string, number>;
     }>
   ): Promise<Team> {
     const body: Record<string, unknown> = {};
@@ -762,7 +833,7 @@ export const api = {
     if (updates.totalScore !== undefined) body.total_score = updates.totalScore;
     if (updates.ageBreakdown !== undefined) body.age_breakdown = updates.ageBreakdown;
 
-    const response = await fetch(`${API_BASE_URL}/teams/${id}/`, {
+    const response = await fetchWithCSRFRetry(`${API_BASE_URL}/teams/${id}/`, {
       ...getDefaultOptions('PATCH'),
       method: 'PATCH',
       body: JSON.stringify(body),
@@ -786,7 +857,7 @@ export const api = {
     draftFormat: DraftFormat;
     draftOrder: string[];
   }): Promise<{ draftState: DraftState; players: Player[]; teams: Team[] }> {
-    const response = await fetchWithTimeout(`${API_BASE_URL}/draft/start/`, {
+    const response = await fetchWithCSRFRetry(`${API_BASE_URL}/draft/start/`, {
       ...getDefaultOptions('POST'),
       method: 'POST',
       body: JSON.stringify({
@@ -794,7 +865,7 @@ export const api = {
         draft_format: params.draftFormat,
         draft_order: params.draftOrder,
       }),
-    });
+    }, true); // Use timeout for draft operations
     const data = await handleResponse<Record<string, unknown>>(response);
 
     const players = (data.players as Record<string, unknown>[]).map(transformPlayerFromApi);
@@ -813,7 +884,7 @@ export const api = {
     playerId: string;
     teamId: string;
   }): Promise<{ draftState: DraftState; players: Player[]; teams: Team[] }> {
-    const response = await fetchWithTimeout(`${API_BASE_URL}/draft/pick/`, {
+    const response = await fetchWithCSRFRetry(`${API_BASE_URL}/draft/pick/`, {
       ...getDefaultOptions('POST'),
       method: 'POST',
       body: JSON.stringify({
@@ -821,7 +892,7 @@ export const api = {
         player_id: params.playerId,
         team_id: params.teamId,
       }),
-    });
+    }, true); // Use timeout for draft operations
     const data = await handleResponse<Record<string, unknown>>(response);
 
     const players = (data.players as Record<string, unknown>[]).map(transformPlayerFromApi);
@@ -836,13 +907,13 @@ export const api = {
   },
 
   async undoLastPick(draftStateId: string): Promise<{ draftState: DraftState; players: Player[]; teams: Team[] }> {
-    const response = await fetchWithTimeout(`${API_BASE_URL}/draft/undo/`, {
+    const response = await fetchWithCSRFRetry(`${API_BASE_URL}/draft/undo/`, {
       ...getDefaultOptions('POST'),
       method: 'POST',
       body: JSON.stringify({
         draft_state_id: draftStateId,
       }),
-    });
+    }, true); // Use timeout for draft operations
     const data = await handleResponse<Record<string, unknown>>(response);
 
     const players = (data.players as Record<string, unknown>[]).map(transformPlayerFromApi);
@@ -864,7 +935,7 @@ export const api = {
     player2Id: string;
     reason: string;
   }): Promise<{ draftState: DraftState; players: Player[]; teams: Team[] }> {
-    const response = await fetchWithTimeout(`${API_BASE_URL}/draft/trade/`, {
+    const response = await fetchWithCSRFRetry(`${API_BASE_URL}/draft/trade/`, {
       ...getDefaultOptions('POST'),
       method: 'POST',
       body: JSON.stringify({
@@ -875,7 +946,7 @@ export const api = {
         player2_id: params.player2Id,
         reason: params.reason,
       }),
-    });
+    }, true); // Use timeout for draft operations
     const data = await handleResponse<Record<string, unknown>>(response);
 
     const players = (data.players as Record<string, unknown>[]).map(transformPlayerFromApi);
@@ -890,7 +961,7 @@ export const api = {
   },
 
   async resetDraft(divisionId: string): Promise<Division> {
-    const response = await fetch(`${API_BASE_URL}/divisions/${divisionId}/reset/`, {
+    const response = await fetchWithCSRFRetry(`${API_BASE_URL}/divisions/${divisionId}/reset/`, {
       ...getDefaultOptions('POST'),
       method: 'POST',
     });
@@ -908,7 +979,7 @@ export const api = {
     if (data.lastName !== undefined) body.last_name = data.lastName;
     if (data.email !== undefined) body.email = data.email;
 
-    const response = await fetch(`${API_BASE_URL}/auth/me/`, {
+    const response = await fetchWithCSRFRetry(`${API_BASE_URL}/auth/me/`, {
       ...getDefaultOptions('PATCH'),
       method: 'PATCH',
       body: JSON.stringify(body),
@@ -918,7 +989,7 @@ export const api = {
   },
 
   async changePassword(data: ChangePasswordData): Promise<{ message: string }> {
-    const response = await fetch(`${API_BASE_URL}/auth/change-password/`, {
+    const response = await fetchWithCSRFRetry(`${API_BASE_URL}/auth/change-password/`, {
       ...getDefaultOptions('POST'),
       method: 'POST',
       body: JSON.stringify({
@@ -940,7 +1011,7 @@ export const api = {
   },
 
   async removeLeagueMember(leagueId: string, userId: string): Promise<void> {
-    const response = await fetch(`${API_BASE_URL}/leagues/${leagueId}/members/${userId}/`, {
+    const response = await fetchWithCSRFRetry(`${API_BASE_URL}/leagues/${leagueId}/members/${userId}/`, {
       ...getDefaultOptions('DELETE'),
       method: 'DELETE',
     });
@@ -948,7 +1019,7 @@ export const api = {
   },
 
   async updateMemberRole(leagueId: string, userId: string, role: LeagueMembershipRole): Promise<LeagueMember> {
-    const response = await fetch(`${API_BASE_URL}/leagues/${leagueId}/members/${userId}/role/`, {
+    const response = await fetchWithCSRFRetry(`${API_BASE_URL}/leagues/${leagueId}/members/${userId}/role/`, {
       ...getDefaultOptions('PATCH'),
       method: 'PATCH',
       body: JSON.stringify({ role }),
@@ -968,7 +1039,7 @@ export const api = {
   },
 
   async createInvitation(leagueId: string, email: string, role: LeagueMembershipRole = 'member'): Promise<LeagueInvitation> {
-    const response = await fetch(`${API_BASE_URL}/leagues/${leagueId}/invitations/`, {
+    const response = await fetchWithCSRFRetry(`${API_BASE_URL}/leagues/${leagueId}/invitations/`, {
       ...getDefaultOptions('POST'),
       method: 'POST',
       body: JSON.stringify({ email, role }),
@@ -978,7 +1049,7 @@ export const api = {
   },
 
   async cancelInvitation(leagueId: string, invitationId: string): Promise<void> {
-    const response = await fetch(`${API_BASE_URL}/leagues/${leagueId}/invitations/${invitationId}/`, {
+    const response = await fetchWithCSRFRetry(`${API_BASE_URL}/leagues/${leagueId}/invitations/${invitationId}/`, {
       ...getDefaultOptions('DELETE'),
       method: 'DELETE',
     });
@@ -986,7 +1057,7 @@ export const api = {
   },
 
   async acceptInvitation(token: string): Promise<AcceptInvitationResult> {
-    const response = await fetch(`${API_BASE_URL}/invitations/accept/`, {
+    const response = await fetchWithCSRFRetry(`${API_BASE_URL}/invitations/accept/`, {
       ...getDefaultOptions('POST'),
       method: 'POST',
       body: JSON.stringify({ token }),
@@ -1014,7 +1085,7 @@ export const api = {
   },
 
   async generateJoinLink(leagueId: string): Promise<JoinLinkStatus> {
-    const response = await fetch(`${API_BASE_URL}/leagues/${leagueId}/join-link/`, {
+    const response = await fetchWithCSRFRetry(`${API_BASE_URL}/leagues/${leagueId}/join-link/`, {
       ...getDefaultOptions('POST'),
       method: 'POST',
     });
@@ -1027,7 +1098,7 @@ export const api = {
   },
 
   async disableJoinLink(leagueId: string): Promise<JoinLinkStatus> {
-    const response = await fetch(`${API_BASE_URL}/leagues/${leagueId}/join-link/`, {
+    const response = await fetchWithCSRFRetry(`${API_BASE_URL}/leagues/${leagueId}/join-link/`, {
       ...getDefaultOptions('DELETE'),
       method: 'DELETE',
     });

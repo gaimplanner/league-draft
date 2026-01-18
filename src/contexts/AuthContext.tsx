@@ -123,6 +123,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
       isAuthenticated: false,
       isLoading: false,
     });
+    // Notify other tabs about logout (Issue #27 - cross-tab sync)
+    localStorage.setItem('logout-event', Date.now().toString());
     // Note: Draft state is stored in useDraft hook which is re-initialized on re-mount
     // after logout/login cycle. No explicit cleanup needed here.
   }, []);
@@ -148,6 +150,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
           isAuthenticated: false,
           isLoading: false,
         });
+        // Notify other tabs about logout (Issue #27 - cross-tab sync)
+        localStorage.setItem('logout-event', Date.now().toString());
       }
     });
 
@@ -156,6 +160,31 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setSessionExpiredCallback(null);
     };
   }, [checkAuth]);
+
+  // Cross-tab logout synchronization (Issue #27)
+  // When user logs out in one tab, all other tabs should also log out
+  useEffect(() => {
+    const handleStorageChange = (event: StorageEvent) => {
+      // Check for logout event from another tab
+      if (event.key === 'logout-event' && event.newValue) {
+        console.log('Logout detected from another tab, clearing auth state');
+        // Only clear state if we're currently authenticated
+        if (state.isAuthenticated && !sessionExpiredHandled.current) {
+          sessionExpiredHandled.current = true;
+          setState({
+            user: null,
+            isAuthenticated: false,
+            isLoading: false,
+          });
+        }
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, [state.isAuthenticated]);
 
   const value: AuthContextType = {
     ...state,

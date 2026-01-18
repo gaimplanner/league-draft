@@ -662,15 +662,17 @@ export const DraftBoard = ({
             <div className="flex gap-4 justify-center">
               <button
                 onClick={onCancelComplete}
-                className="px-4 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-lg font-medium transition-colors"
+                disabled={isLoading}
+                className="px-4 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 ← Go Back & Review
               </button>
               <button
                 onClick={onFinalizeDraft}
-                className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors"
+                disabled={isLoading}
+                className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Finalize Draft →
+                {isLoading ? 'Finalizing...' : 'Finalize Draft →'}
               </button>
             </div>
           </div>

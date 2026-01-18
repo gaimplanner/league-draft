@@ -166,6 +166,12 @@ function App() {
   // Track if we're currently updating to prevent race conditions (Issue #6)
   const isUpdatingPhase = useRef(false);
 
+  // Track save errors to display to user (Issue #27 - silent failures)
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Track loading state for phase transitions (Issue #27 - missing loading feedback)
+  const [isSaving, setIsSaving] = useState(false);
+
   // Reset divisionStateLoaded when division changes
   useEffect(() => {
     setDivisionStateLoaded(false);
@@ -196,14 +202,23 @@ function App() {
           draftState,
           teams: draftState.teams,
           players: draftState.players,
+        }).then(() => {
+          setSaveError(null);
         }).catch((err) => {
-          console.error('Failed to save phase change:', err);
+          console.error('Failed to save draft completion:', err);
+          // Show user-friendly error message
+          const message = err instanceof Error ? err.message : 'Unknown error';
+          setSaveError(`Failed to save draft completion: ${message}. Your draft data may not be saved. Please try refreshing the page.`);
         }).finally(() => {
           isUpdatingPhase.current = false;
         });
       } else {
-        updateActiveDivision({ phase }).catch((err) => {
+        updateActiveDivision({ phase }).then(() => {
+          setSaveError(null);
+        }).catch((err) => {
           console.error('Failed to save phase change:', err);
+          const message = err instanceof Error ? err.message : 'Unknown error';
+          setSaveError(`Failed to save progress: ${message}. Please check your connection and try again.`);
         }).finally(() => {
           isUpdatingPhase.current = false;
         });
@@ -353,6 +368,7 @@ function App() {
     // In API mode, save players and teams to the database
     if (isApiMode()) {
       try {
+        setIsSaving(true);
         // Save teams first (for coach assignments)
         await saveTeamsToApi(activeDivision.id, updatedTeams);
         // Save players
@@ -364,6 +380,8 @@ function App() {
         const errorMessage = err instanceof Error ? err.message : 'Unknown error';
         alert(`Failed to save player data: ${errorMessage}\n\nPlease try again or check your network connection.`);
         return; // Don't continue with corrupted state
+      } finally {
+        setIsSaving(false);
       }
     }
 
@@ -475,6 +493,7 @@ function App() {
       // In API mode, save players to the database (includes coach kid assignments, sibling links, etc.)
       if (isApiMode()) {
         try {
+          setIsSaving(true);
           await saveTeamsToApi(activeDivision.id, teams);
           const savedPlayers = await savePlayersToApi(activeDivision.id, playersToSave);
           setPlayers(savedPlayers);
@@ -484,6 +503,8 @@ function App() {
           const errorMessage = err instanceof Error ? err.message : 'Unknown error';
           alert(`Failed to save player data: ${errorMessage}\n\nPlease try again or check your network connection.`);
           return; // Don't continue with corrupted state
+        } finally {
+          setIsSaving(false);
         }
       }
 
@@ -504,6 +525,7 @@ function App() {
     // In API mode, save resolved players (with lockedToRound values) before starting draft
     if (activeDivision && isApiMode()) {
       try {
+        setIsSaving(true);
         await savePlayersToApi(activeDivision.id, resolvedPlayers);
       } catch (err) {
         // Issue #5: Show error and return early on save failures
@@ -511,6 +533,8 @@ function App() {
         const errorMessage = err instanceof Error ? err.message : 'Unknown error';
         alert(`Failed to save player data: ${errorMessage}\n\nPlease try again or check your network connection.`);
         return; // Don't continue with corrupted state
+      } finally {
+        setIsSaving(false);
       }
     }
 
@@ -758,7 +782,42 @@ function App() {
     <>
       {phase !== 'upload' && phase !== 'complete' && <DivisionHeader />}
 
-      <div className={phase !== 'upload' && phase !== 'complete' ? 'pt-12' : ''}>
+      {/* Saving Overlay (Issue #27 - loading state feedback) */}
+      {isSaving && (
+        <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl px-6 py-4 flex items-center gap-3">
+            <svg className="w-5 h-5 animate-spin text-blue-600" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+            </svg>
+            <span className="text-gray-700 dark:text-gray-200 font-medium">Saving...</span>
+          </div>
+        </div>
+      )}
+
+      {/* Save Error Banner (Issue #27 - show failures to user) */}
+      {saveError && (
+        <div className="fixed top-0 left-0 right-0 z-50 bg-red-600 text-white px-4 py-3 shadow-lg">
+          <div className="max-w-6xl mx-auto flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <svg className="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+              <span className="text-sm font-medium">{saveError}</span>
+            </div>
+            <button
+              onClick={() => setSaveError(null)}
+              className="text-white/80 hover:text-white transition-colors"
+            >
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className={`${phase !== 'upload' && phase !== 'complete' ? 'pt-12' : ''} ${saveError ? 'mt-12' : ''}`}>
         {phase === 'upload' && (
           <div>
             {/* Back button - separate bar above content (hidden for Excel import which has its own) */}
