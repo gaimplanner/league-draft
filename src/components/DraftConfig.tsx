@@ -419,13 +419,13 @@ export const DraftConfig = ({ teams, players, onConfigComplete, onBack }: DraftC
           </div>
         )}
 
-        <div className="grid lg:grid-cols-2 gap-6">
+        <div className="grid lg:grid-cols-2 gap-4">
           {/* Draft Format */}
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
               Draft Format
             </h2>
-            <div className="space-y-3">
+            <div className="space-y-2">
               {[
                 { value: 'straight', label: 'Straight', desc: '1-8, 1-8, 1-8...' },
                 { value: 'snake', label: 'Snake', desc: '1-8, 8-1, 1-8, 8-1...' },
@@ -433,7 +433,7 @@ export const DraftConfig = ({ teams, players, onConfigComplete, onBack }: DraftC
               ].map((format) => (
                 <label
                   key={format.value}
-                  className="flex items-start gap-3 p-3 border border-gray-200 dark:border-gray-600 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700"
+                  className="flex items-center gap-2 px-2 py-1.5 border border-gray-200 dark:border-gray-600 rounded cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700"
                 >
                   <input
                     type="radio"
@@ -441,11 +441,11 @@ export const DraftConfig = ({ teams, players, onConfigComplete, onBack }: DraftC
                     value={format.value}
                     checked={draftFormat === format.value}
                     onChange={(e) => setDraftFormat(e.target.value as DraftFormat)}
-                    className="mt-1 accent-blue-600"
+                    className="accent-blue-600"
                   />
-                  <div>
-                    <div className="font-medium text-gray-900 dark:text-white">{format.label}</div>
-                    <div className="text-sm text-gray-600 dark:text-gray-400">{format.desc}</div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-sm font-medium text-gray-900 dark:text-white">{format.label}</span>
+                    <span className="text-xs text-gray-500 dark:text-gray-400">{format.desc}</span>
                   </div>
                 </label>
               ))}
@@ -453,31 +453,31 @@ export const DraftConfig = ({ teams, players, onConfigComplete, onBack }: DraftC
           </div>
 
           {/* Draft Order */}
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+            <div className="flex justify-between items-center mb-2">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
                 Draft Order
               </h2>
               <button
                 onClick={handleRandomizeOrder}
-                className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm font-medium flex items-center gap-1"
+                className="px-2 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded text-xs font-medium flex items-center gap-1"
               >
                 🎲 Randomize
               </button>
             </div>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-              Enter a position number (1-{teams.length}) for each team. Position 1 picks first in round 1.
+            <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">
+              Position 1 picks first in round 1.
             </p>
 
             {/* Validation Error */}
             {!validation.valid && (
-              <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-start gap-2">
-                <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
-                <span className="text-sm text-red-700 dark:text-red-300">{validation.error}</span>
+              <div className="mb-2 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400 flex-shrink-0" />
+                <span className="text-xs text-red-700 dark:text-red-300">{validation.error}</span>
               </div>
             )}
 
-            <div className="space-y-2">
+            <div className="space-y-1">
               {sortedTeams.map((team) => {
                 const position = teamPositions[team.id];
                 const teamCoachKids = resolvedPlayers.filter(p => p.coachTeamId === team.id);
@@ -486,7 +486,7 @@ export const DraftConfig = ({ teams, players, onConfigComplete, onBack }: DraftC
                 return (
                   <div
                     key={team.id}
-                    className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
+                    className={`flex items-center gap-2 px-2 py-1.5 rounded transition-colors ${
                       hasError
                         ? 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800'
                         : 'bg-gray-50 dark:bg-gray-700'
@@ -498,23 +498,23 @@ export const DraftConfig = ({ teams, players, onConfigComplete, onBack }: DraftC
                       max={teams.length}
                       value={position ?? ''}
                       onChange={(e) => handlePositionChange(team.id, e.target.value)}
-                      className={`w-16 px-3 py-2 text-center border rounded-lg font-semibold text-lg ${
+                      className={`w-12 px-2 py-1 text-center border rounded font-semibold ${
                         hasError
                           ? 'border-red-500 bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300'
                           : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white'
                       } focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
                     />
-                    <div className="flex-1">
-                      <span className="text-gray-900 dark:text-white font-medium">{getTeamDisplayName(team)}</span>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm text-gray-900 dark:text-white font-medium">{getTeamDisplayName(team)}</span>
                       {teamCoachKids.length > 0 && (
-                        <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
-                          (Coach: {teamCoachKids.map(p => p.name).join(', ')})
+                        <span className="ml-2 text-xs text-gray-500 dark:text-gray-400 hidden sm:inline">
+                          ({teamCoachKids.map(p => p.name).join(', ')})
                         </span>
                       )}
                     </div>
                     {hasError && isDuplicate(position) && (
                       <span className="text-xs text-red-600 dark:text-red-400">
-                        Duplicate
+                        Dup
                       </span>
                     )}
                   </div>
@@ -524,11 +524,9 @@ export const DraftConfig = ({ teams, players, onConfigComplete, onBack }: DraftC
 
             {/* Valid Order Preview */}
             {validation.valid && (
-              <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-                <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Draft order preview:
-                </p>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
+              <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
+                <p className="text-xs text-gray-600 dark:text-gray-400">
+                  <span className="font-medium text-gray-700 dark:text-gray-300">Order: </span>
                   {draftOrder.map(id => {
                     const team = teams.find(t => t.id === id);
                     return team ? getTeamDisplayName(team) : 'Unknown';
