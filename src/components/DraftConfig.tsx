@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
-import { ChevronRight, ChevronLeft, CheckCircle, AlertCircle, Users } from 'lucide-react';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { ChevronRight, ChevronLeft, ChevronDown, ChevronUp, CheckCircle, AlertCircle, Users, UserCheck } from 'lucide-react';
 import { Team, Player, DraftFormat } from '../types';
 import { SimulationModal } from './SimulationModal';
 import { getTeamDisplayName } from '../utils/teamUtils';
@@ -47,11 +47,18 @@ function validateDraftOrder(positions: (number | null)[], teamCount: number): Or
   return { valid: true, duplicates: [], missing: [] };
 }
 
+// Debounce delay for resorting after position changes (ms)
+const SORT_DEBOUNCE_MS = 800;
+
 export const DraftConfig = ({ teams, players, onConfigComplete, onBack }: DraftConfigProps) => {
   const [draftFormat, setDraftFormat] = useState<DraftFormat | null>(null);
-  // Store position by team ID
+  // Store position by team ID (immediate updates for input display)
   const [teamPositions, setTeamPositions] = useState<Record<string, number | null>>({});
+  // Committed positions used for sorting (debounced updates)
+  const [sortPositions, setSortPositions] = useState<Record<string, number | null>>({});
   const [showSimulation, setShowSimulation] = useState(false);
+  const [showRulesPanel, setShowRulesPanel] = useState(false);
+  const sortTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Compute resolved players with lockedToRound set for coach's kids with conflicts
   // This is a defensive fix to handle cases where lockedToRound wasn't set in PlayerReview
@@ -114,7 +121,17 @@ export const DraftConfig = ({ teams, players, onConfigComplete, onBack }: DraftC
       initial[team.id] = null;
     });
     setTeamPositions(initial);
+    setSortPositions(initial);
   }, [teams]);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (sortTimeoutRef.current) {
+        clearTimeout(sortTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const coachKids = resolvedPlayers.filter((p) => p.isCoachKid);
 
@@ -160,13 +177,24 @@ export const DraftConfig = ({ teams, players, onConfigComplete, onBack }: DraftC
     return pairs.map(p => p.id);
   }, [teams, teamPositions, validation.valid]);
 
-  // Handle position change for a team
+  // Handle position change for a team (with debounced sorting)
   const handlePositionChange = (teamId: string, value: string) => {
     const num = parseInt(value);
-    setTeamPositions(prev => ({
-      ...prev,
+    const newPositions = {
+      ...teamPositions,
       [teamId]: isNaN(num) ? null : num,
-    }));
+    };
+
+    // Update input value immediately
+    setTeamPositions(newPositions);
+
+    // Debounce the sort update
+    if (sortTimeoutRef.current) {
+      clearTimeout(sortTimeoutRef.current);
+    }
+    sortTimeoutRef.current = setTimeout(() => {
+      setSortPositions(newPositions);
+    }, SORT_DEBOUNCE_MS);
   };
 
   // Check if a position has a duplicate
@@ -177,6 +205,11 @@ export const DraftConfig = ({ teams, players, onConfigComplete, onBack }: DraftC
 
   // Randomize draft order using Fisher-Yates shuffle
   const handleRandomizeOrder = () => {
+    // Clear any pending sort timeout
+    if (sortTimeoutRef.current) {
+      clearTimeout(sortTimeoutRef.current);
+    }
+
     const teamIds = [...teams.map(t => t.id)];
 
     // Fisher-Yates shuffle
@@ -191,7 +224,9 @@ export const DraftConfig = ({ teams, players, onConfigComplete, onBack }: DraftC
       newPositions[id] = index + 1;
     });
 
+    // Update both immediately for randomize (intentional action)
     setTeamPositions(newPositions);
+    setSortPositions(newPositions);
   };
 
   const handleStart = () => {
@@ -218,14 +253,14 @@ export const DraftConfig = ({ teams, players, onConfigComplete, onBack }: DraftC
     onConfigComplete(draftFormat, draftOrder, resolvedPlayers);
   };
 
-  // Sort teams by their current position for display
+  // Sort teams by their committed position for display (debounced)
   const sortedTeams = useMemo(() => {
     return [...teams].sort((a, b) => {
-      const posA = teamPositions[a.id] ?? Infinity;
-      const posB = teamPositions[b.id] ?? Infinity;
+      const posA = sortPositions[a.id] ?? Infinity;
+      const posB = sortPositions[b.id] ?? Infinity;
       return posA - posB;
     });
-  }, [teams, teamPositions]);
+  }, [teams, sortPositions]);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
@@ -274,77 +309,113 @@ export const DraftConfig = ({ teams, players, onConfigComplete, onBack }: DraftC
           </div>
         </div>
 
-        {/* Coach's Kids Summary */}
-        {coachKids.length > 0 && (
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700 mb-6">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
-              Coach's Kids Assignments
-            </h2>
-            {coachKids.every(p => p.coachTeamId) ? (
-              <div className="flex items-start gap-3 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
-                <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  <div className="font-medium text-green-800 dark:text-green-200 mb-2">
-                    All coach's kids assigned
-                  </div>
-                  <div className="space-y-1">
-                    {coachKids.map(player => {
-                      const team = teams.find(t => t.id === player.coachTeamId);
-                      const effectiveRound = player.lockedToRound ?? player.projectedRound;
-                      const isBumped = player.lockedToRound && player.lockedToRound !== player.projectedRound;
-                      return (
-                        <div key={player.id} className="text-sm text-green-700 dark:text-green-300">
-                          • {player.name} → {team ? getTeamDisplayName(team) : 'Unknown'} (Round {effectiveRound}{isBumped && '*'})
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
+        {/* Draft Rules Summary - Collapsible */}
+        {(coachKids.length > 0 || siblingGroups.length > 0) && (
+          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 mb-6">
+            {/* Collapsible Header */}
+            <button
+              onClick={() => setShowRulesPanel(!showRulesPanel)}
+              className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors rounded-lg"
+            >
+              <div className="flex items-center gap-4 flex-wrap">
+                <span className="font-semibold text-gray-900 dark:text-white">Draft Rules</span>
+
+                {/* Coach's Kids Badge */}
+                {coachKids.length > 0 && (
+                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
+                    coachKids.every(p => p.coachTeamId)
+                      ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+                      : 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300'
+                  }`}>
+                    {coachKids.every(p => p.coachTeamId) ? (
+                      <CheckCircle className="w-3.5 h-3.5" />
+                    ) : (
+                      <AlertCircle className="w-3.5 h-3.5" />
+                    )}
+                    <UserCheck className="w-3.5 h-3.5" />
+                    {coachKids.length} Coach's Kid{coachKids.length !== 1 ? 's' : ''}
+                  </span>
+                )}
+
+                {/* Sibling Groups Badge */}
+                {siblingGroups.length > 0 && (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300">
+                    <Users className="w-3.5 h-3.5" />
+                    {siblingGroups.length} Sibling Group{siblingGroups.length !== 1 ? 's' : ''}
+                  </span>
+                )}
               </div>
-            ) : (
-              <div className="flex items-start gap-3 p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg border border-orange-200 dark:border-orange-800">
-                <AlertCircle className="w-5 h-5 text-orange-600 dark:text-orange-400 flex-shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  <div className="font-medium text-orange-800 dark:text-orange-200 mb-2">
-                    Coach's kids need assignment
-                  </div>
-                  <div className="text-sm text-orange-700 dark:text-orange-300 mb-2">
-                    Please go back to the Review phase to assign these players to their teams:
-                  </div>
-                  <div className="space-y-1">
-                    {coachKids.filter(p => !p.coachTeamId).map(player => (
-                      <div key={player.id} className="text-sm text-orange-700 dark:text-orange-300">
-                        • {player.name} (Rank #{player.rank}, Round {player.lockedToRound ?? player.projectedRound})
+
+              {showRulesPanel ? (
+                <ChevronUp className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+              ) : (
+                <ChevronDown className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+              )}
+            </button>
+
+            {/* Expanded Content */}
+            {showRulesPanel && (
+              <div className="px-4 pb-4 pt-2 border-t border-gray-200 dark:border-gray-700">
+                <div className="grid sm:grid-cols-2 gap-4">
+                  {/* Coach's Kids Detail */}
+                  {coachKids.length > 0 && (
+                    <div className={`p-3 rounded-lg ${
+                      coachKids.every(p => p.coachTeamId)
+                        ? 'bg-green-50 dark:bg-green-900/20'
+                        : 'bg-orange-50 dark:bg-orange-900/20'
+                    }`}>
+                      <div className={`text-sm font-medium mb-2 ${
+                        coachKids.every(p => p.coachTeamId)
+                          ? 'text-green-800 dark:text-green-200'
+                          : 'text-orange-800 dark:text-orange-200'
+                      }`}>
+                        Coach's Kids
                       </div>
-                    ))}
-                  </div>
+                      <div className="space-y-1">
+                        {coachKids.map(player => {
+                          const team = teams.find(t => t.id === player.coachTeamId);
+                          const effectiveRound = player.lockedToRound ?? player.projectedRound;
+                          const isBumped = player.lockedToRound && player.lockedToRound !== player.projectedRound;
+                          return (
+                            <div key={player.id} className={`text-xs ${
+                              player.coachTeamId
+                                ? 'text-green-700 dark:text-green-300'
+                                : 'text-orange-700 dark:text-orange-300'
+                            }`}>
+                              {player.name} → {team ? getTeamDisplayName(team) : <span className="italic">Unassigned</span>} (R{effectiveRound}{isBumped && '*'})
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Sibling Groups Detail */}
+                  {siblingGroups.length > 0 && (
+                    <div className="p-3 rounded-lg bg-purple-50 dark:bg-purple-900/20">
+                      <div className="text-sm font-medium text-purple-800 dark:text-purple-200 mb-2">
+                        Sibling Groups
+                      </div>
+                      <div className="space-y-1">
+                        {siblingGroups.map(({ player1, player2 }) => (
+                          <div key={`${player1.id}-${player2.id}`} className="text-xs text-purple-700 dark:text-purple-300">
+                            {player1.name} ↔ {player2.name}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
+
+                {/* Warning for unassigned coach's kids */}
+                {coachKids.some(p => !p.coachTeamId) && (
+                  <div className="mt-3 p-2 bg-orange-100 dark:bg-orange-900/30 border border-orange-200 dark:border-orange-800 rounded text-xs text-orange-700 dark:text-orange-300">
+                    <AlertCircle className="w-3.5 h-3.5 inline mr-1" />
+                    Go back to Review to assign coach's kids before starting draft
+                  </div>
+                )}
               </div>
             )}
-          </div>
-        )}
-
-        {/* Sibling Groups Summary */}
-        {siblingGroups.length > 0 && (
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700 mb-6">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
-              Sibling Groups
-            </h2>
-            <div className="flex items-start gap-3 p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800">
-              <Users className="w-5 h-5 text-purple-600 dark:text-purple-400 flex-shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <div className="font-medium text-purple-800 dark:text-purple-200 mb-2">
-                  {siblingGroups.length} sibling group{siblingGroups.length !== 1 ? 's' : ''} linked
-                </div>
-                <div className="space-y-1">
-                  {siblingGroups.map(({ player1, player2 }) => (
-                    <div key={`${player1.id}-${player2.id}`} className="text-sm text-purple-700 dark:text-purple-300">
-                      • {player1.name} ↔ {player2.name}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
           </div>
         )}
 
