@@ -12,12 +12,12 @@ const REQUIRED_FIELDS: { field: AppField; label: string }[] = [
   { field: 'lastName', label: 'Last Name' },
   { field: 'littleLeagueAge', label: 'Little League Age' },
   { field: 'isAllStar', label: 'All-Star' },
-  { field: 'isDNE', label: 'DNE (Did Not Evaluate)' },
 ];
 
 const OPTIONAL_FIELDS: { field: AppField; label: string }[] = [
   { field: 'bib', label: 'Bib Number' },
   { field: 'birthday', label: 'Birthday' },
+  { field: 'isDNE', label: 'DNE (Did Not Evaluate)' },
   // Raw component scores (preferred)
   { field: 'fieldScore', label: 'Field Score' },
   { field: 'throwScore', label: 'Throw Score' },
