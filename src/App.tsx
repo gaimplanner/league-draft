@@ -60,11 +60,17 @@ function App() {
       return;
     }
 
+    // Sanitize token - remove any non-URL-safe characters (hidden unicode, etc.)
+    const sanitizeToken = (token: string): string => {
+      // Only allow alphanumeric, dash, underscore, and common base64 chars
+      return token.replace(/[^a-zA-Z0-9_-]/g, '');
+    };
+
     // Check for join link with token in path: /join/{token}
     if (pathname.startsWith('/join/')) {
       const pathToken = pathname.replace('/join/', '');
       if (pathToken) {
-        setJoinToken(pathToken);
+        setJoinToken(sanitizeToken(decodeURIComponent(pathToken)));
         setMode('join');
         return;
       }
@@ -73,7 +79,7 @@ function App() {
     // Check for join invitation with token in query: /join?token={token}
     const inviteToken = params.get('token');
     if (pathname === '/join' && inviteToken) {
-      setJoinToken(inviteToken);
+      setJoinToken(sanitizeToken(inviteToken));
       setMode('join');
     }
   }, []);
@@ -415,7 +421,7 @@ function App() {
   };
 
   // Handle review phase completion
-  const handleReviewComplete = (updatedPlayers?: Player[]) => {
+  const handleReviewComplete = async (updatedPlayers?: Player[]) => {
     // Use passed players if available, otherwise use current state
     const playersToSave = updatedPlayers ?? players;
 
@@ -425,6 +431,18 @@ function App() {
 
     // Save to division
     if (activeDivision) {
+      // In API mode, save players to the database (includes coach kid assignments, sibling links, etc.)
+      if (isApiMode()) {
+        try {
+          await saveTeamsToApi(activeDivision.id, teams);
+          const savedPlayers = await savePlayersToApi(activeDivision.id, playersToSave);
+          setPlayers(savedPlayers);
+        } catch (err) {
+          console.error('Failed to save players to API:', err);
+          // Continue anyway - local state is updated
+        }
+      }
+
       updateActiveDivision({
         players: playersToSave,
         teams,
@@ -435,9 +453,19 @@ function App() {
   };
 
   // Handle draft config completion
-  const handleConfigComplete = (format: DraftFormat, order: string[], resolvedPlayers: Player[]) => {
+  const handleConfigComplete = async (format: DraftFormat, order: string[], resolvedPlayers: Player[]) => {
     // Update players with resolved lockedToRound values before starting draft
     setPlayers(resolvedPlayers);
+
+    // In API mode, save resolved players (with lockedToRound values) before starting draft
+    if (activeDivision && isApiMode()) {
+      try {
+        await savePlayersToApi(activeDivision.id, resolvedPlayers);
+      } catch (err) {
+        console.error('Failed to save resolved players to API:', err);
+        // Continue anyway - the draft will still work with local state
+      }
+    }
 
     // Pass format and order directly to startDraft to avoid race conditions
     startDraft(format, order, resolvedPlayers);
@@ -547,6 +575,22 @@ function App() {
     );
   }
 
+  // Render join page (allow for both authenticated and unauthenticated users)
+  // This must come before the auth check so unauthenticated users see the invite details
+  if (mode === 'join' && joinToken) {
+    return (
+      <JoinPage
+        token={joinToken}
+        onJoinComplete={handleJoinComplete}
+        onCancel={() => {
+          setJoinToken(null);
+          setMode('selector');
+          window.history.replaceState({}, '', '/');
+        }}
+      />
+    );
+  }
+
   // Show auth pages when in API mode and not authenticated
   if (isApiMode() && !authLoading && !isAuthenticated && !isPublicView) {
     // Helper to go back to login and clear URL
@@ -576,21 +620,6 @@ function App() {
       <LoginPage
         onSwitchToRegister={() => setAuthPage('register')}
         onForgotPassword={() => setAuthPage('forgot-password')}
-      />
-    );
-  }
-
-  // Render join page
-  if (mode === 'join' && joinToken) {
-    return (
-      <JoinPage
-        token={joinToken}
-        onJoinComplete={handleJoinComplete}
-        onCancel={() => {
-          setJoinToken(null);
-          setMode('selector');
-          window.history.replaceState({}, '', '/');
-        }}
       />
     );
   }

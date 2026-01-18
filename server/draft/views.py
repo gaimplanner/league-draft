@@ -1072,24 +1072,41 @@ class JoinLinkView(APIView):
 
 
 class PublicJoinLinkView(APIView):
-    """Public endpoint to get league info from join link."""
+    """Public endpoint to get league info from join link or email invitation token."""
 
     permission_classes = [AllowAny]
 
     def get(self, request, token):
-        """Get league info from join link token."""
+        """Get league info from join link token or email invitation token."""
+        # First, check if it's a join link token
         league = League.objects.filter(
             join_link_token=token,
             join_link_enabled=True,
         ).first()
 
-        if not league:
-            return Response(
-                {"error": "Invalid or disabled join link"},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+        if league:
+            return Response({
+                "league_name": league.name,
+                "league_slug": league.slug,
+                "type": "join_link",
+            })
 
-        return Response({
-            "league_name": league.name,
-            "league_slug": league.slug,
-        })
+        # Check if it's an email invitation token
+        invitation = LeagueInvitation.objects.filter(
+            token=token,
+            accepted_at__isnull=True,
+        ).select_related("league", "invited_by").first()
+
+        if invitation and not invitation.is_expired:
+            return Response({
+                "league_name": invitation.league.name,
+                "league_slug": invitation.league.slug,
+                "type": "email_invitation",
+                "invited_by": invitation.invited_by.email if invitation.invited_by else None,
+                "role": invitation.role,
+            })
+
+        return Response(
+            {"error": "Invalid or expired invitation link"},
+            status=status.HTTP_404_NOT_FOUND,
+        )

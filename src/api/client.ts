@@ -892,6 +892,9 @@ export const api = {
     return {
       leagueName: data.league_name as string,
       leagueSlug: data.league_slug as string,
+      type: data.type as 'join_link' | 'email_invitation' | undefined,
+      invitedBy: data.invited_by as string | null | undefined,
+      role: data.role as LeagueMembershipRole | undefined,
     };
   },
 };

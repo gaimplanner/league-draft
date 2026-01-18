@@ -92,6 +92,9 @@ export interface JoinLinkStatus {
 export interface JoinLinkInfo {
   leagueName: string;
   leagueSlug: string;
+  type?: 'join_link' | 'email_invitation';
+  invitedBy?: string | null;
+  role?: LeagueMembershipRole;
 }
 
 export interface AcceptInvitationResult {

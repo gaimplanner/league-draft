@@ -1,26 +1,47 @@
 import { useState, useEffect } from 'react';
-import { Users, Loader2, AlertCircle, Check, LogIn, ArrowLeft } from 'lucide-react';
+import { Users, Loader2, AlertCircle, Check, LogIn, UserPlus, ArrowLeft } from 'lucide-react';
 import { api, ApiError } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import { JoinLinkInfo } from '../types';
+
+type AuthMode = 'choice' | 'login' | 'register';
 
 interface JoinPageProps {
   token: string;
   onJoinComplete: () => void;
   onCancel: () => void;
+  onNeedAuth?: (authType: 'login' | 'register') => void;
+  authPage?: string;
+  onAuthSuccess?: () => void;
 }
 
 export function JoinPage({ token, onJoinComplete, onCancel }: JoinPageProps) {
-  const { isAuthenticated, isLoading: authLoading, user } = useAuth();
+  const { isAuthenticated, isLoading: authLoading, user, login, register } = useAuth();
   const [linkInfo, setLinkInfo] = useState<JoinLinkInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
+  // Auth form state
+  const [authMode, setAuthMode] = useState<AuthMode>('choice');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [authLoading2, setAuthLoading2] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+
   useEffect(() => {
     loadLinkInfo();
   }, [token]);
+
+  // Auto-join after authentication
+  useEffect(() => {
+    if (isAuthenticated && linkInfo && !success && !joining) {
+      handleJoin();
+    }
+  }, [isAuthenticated, linkInfo]);
 
   const loadLinkInfo = async () => {
     try {
@@ -31,9 +52,9 @@ export function JoinPage({ token, onJoinComplete, onCancel }: JoinPageProps) {
     } catch (err) {
       if (err instanceof Error && err.name === 'ApiError') {
         const apiError = err as ApiError;
-        setError(apiError.details?.error as string || 'Invalid or expired join link');
+        setError(apiError.details?.error as string || 'Invalid or expired invitation link');
       } else {
-        setError('Failed to load league information');
+        setError('Failed to load invitation details');
       }
     } finally {
       setLoading(false);
@@ -41,11 +62,7 @@ export function JoinPage({ token, onJoinComplete, onCancel }: JoinPageProps) {
   };
 
   const handleJoin = async () => {
-    if (!isAuthenticated) {
-      // Redirect to login with return URL
-      window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}`;
-      return;
-    }
+    if (!isAuthenticated) return;
 
     try {
       setJoining(true);
@@ -67,19 +84,47 @@ export function JoinPage({ token, onJoinComplete, onCancel }: JoinPageProps) {
     }
   };
 
-  // Show loading state while checking auth
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setAuthLoading2(true);
+      setAuthError(null);
+      await login({ email, password });
+      // After login, useEffect will auto-join
+    } catch (err) {
+      setAuthError(err instanceof Error ? err.message : 'Login failed');
+    } finally {
+      setAuthLoading2(false);
+    }
+  };
+
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setAuthLoading2(true);
+      setAuthError(null);
+      await register({ email, password, firstName, lastName });
+      // After register, useEffect will auto-join
+    } catch (err) {
+      setAuthError(err instanceof Error ? err.message : 'Registration failed');
+    } finally {
+      setAuthLoading2(false);
+    }
+  };
+
+  // Show loading state
   if (authLoading || loading) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
-          <p className="text-gray-500 dark:text-gray-400">Loading...</p>
+          <p className="text-gray-500 dark:text-gray-400">Loading invitation...</p>
         </div>
       </div>
     );
   }
 
-  // Show error state
+  // Show error state (no link info loaded)
   if (error && !linkInfo) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center p-4">
@@ -88,7 +133,7 @@ export function JoinPage({ token, onJoinComplete, onCancel }: JoinPageProps) {
             <AlertCircle className="w-8 h-8 text-red-600 dark:text-red-400" />
           </div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-            Invalid Link
+            Invalid Invitation
           </h1>
           <p className="text-gray-600 dark:text-gray-400 mb-6">
             {error}
@@ -98,7 +143,7 @@ export function JoinPage({ token, onJoinComplete, onCancel }: JoinPageProps) {
             className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors mx-auto"
           >
             <ArrowLeft className="w-4 h-4" />
-            Go Back
+            Go to Home
           </button>
         </div>
       </div>
@@ -124,6 +169,20 @@ export function JoinPage({ token, onJoinComplete, onCancel }: JoinPageProps) {
     );
   }
 
+  // Show joining state
+  if (joining) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white dark:bg-gray-800 rounded-lg shadow-lg p-8 text-center">
+          <Loader2 className="w-12 h-12 animate-spin text-blue-500 mx-auto mb-4" />
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+            Joining {linkInfo?.leagueName}...
+          </h1>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center p-4">
       <div className="max-w-md w-full bg-white dark:bg-gray-800 rounded-lg shadow-lg p-8">
@@ -133,79 +192,248 @@ export function JoinPage({ token, onJoinComplete, onCancel }: JoinPageProps) {
             <Users className="w-8 h-8 text-blue-600 dark:text-blue-400" />
           </div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-            Join {linkInfo?.leagueName}
+            You're Invited!
           </h1>
           <p className="text-gray-600 dark:text-gray-400">
-            You've been invited to join this league on Little League Draft.
+            {linkInfo?.invitedBy ? (
+              <>
+                <span className="font-medium">{linkInfo.invitedBy}</span> invited you to join{' '}
+              </>
+            ) : (
+              <>Join </>
+            )}
+            <span className="font-semibold text-gray-900 dark:text-white">{linkInfo?.leagueName}</span>
+            {linkInfo?.role === 'admin' && (
+              <span className="ml-1 text-purple-600 dark:text-purple-400">(as admin)</span>
+            )}
           </p>
         </div>
 
         {/* Error */}
-        {error && (
+        {(error || authError) && (
           <div className="flex items-center gap-2 p-3 mb-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
             <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400 flex-shrink-0" />
-            <span className="text-sm text-red-700 dark:text-red-300">{error}</span>
+            <span className="text-sm text-red-700 dark:text-red-300">{error || authError}</span>
           </div>
         )}
 
-        {/* User Info */}
+        {/* Authenticated user - show join button */}
         {isAuthenticated && user && (
-          <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg mb-6">
-            <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">
-              Joining as:
-            </p>
-            <p className="font-medium text-gray-900 dark:text-white">
-              {user.firstName || user.lastName
-                ? `${user.firstName} ${user.lastName}`.trim()
-                : user.email}
-            </p>
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              {user.email}
-            </p>
-          </div>
+          <>
+            <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg mb-6">
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">
+                Joining as:
+              </p>
+              <p className="font-medium text-gray-900 dark:text-white">
+                {user.firstName || user.lastName
+                  ? `${user.firstName} ${user.lastName}`.trim()
+                  : user.email}
+              </p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                {user.email}
+              </p>
+            </div>
+            <button
+              onClick={handleJoin}
+              disabled={joining}
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+            >
+              <Users className="w-5 h-5" />
+              Join League
+            </button>
+          </>
         )}
 
-        {/* Not logged in */}
+        {/* Not authenticated - show auth options */}
         {!isAuthenticated && (
-          <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg mb-6">
-            <p className="text-sm text-yellow-700 dark:text-yellow-300">
-              You need to sign in or create an account to join this league.
-            </p>
-          </div>
+          <>
+            {authMode === 'choice' && (
+              <div className="space-y-3">
+                <p className="text-center text-gray-600 dark:text-gray-400 mb-4">
+                  Sign in or create an account to join this league.
+                </p>
+                <button
+                  onClick={() => setAuthMode('login')}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  <LogIn className="w-5 h-5" />
+                  Sign In
+                </button>
+                <button
+                  onClick={() => setAuthMode('register')}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                >
+                  <UserPlus className="w-5 h-5" />
+                  Create Account
+                </button>
+              </div>
+            )}
+
+            {authMode === 'login' && (
+              <form onSubmit={handleLogin} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Email
+                  </label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                    required
+                    autoFocus
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Password
+                  </label>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={authLoading2}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                >
+                  {authLoading2 ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <LogIn className="w-5 h-5" />
+                  )}
+                  Sign In & Join
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthMode('choice');
+                    setAuthError(null);
+                  }}
+                  className="w-full text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+                >
+                  Back to options
+                </button>
+                <p className="text-center text-sm text-gray-600 dark:text-gray-400">
+                  Don't have an account?{' '}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAuthMode('register');
+                      setAuthError(null);
+                    }}
+                    className="text-blue-600 dark:text-blue-400 hover:underline"
+                  >
+                    Create one
+                  </button>
+                </p>
+              </form>
+            )}
+
+            {authMode === 'register' && (
+              <form onSubmit={handleRegister} className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      First Name
+                    </label>
+                    <input
+                      type="text"
+                      value={firstName}
+                      onChange={(e) => setFirstName(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                      autoFocus
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Last Name
+                    </label>
+                    <input
+                      type="text"
+                      value={lastName}
+                      onChange={(e) => setLastName(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Email
+                  </label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Password
+                  </label>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                    required
+                    minLength={8}
+                  />
+                  <p className="mt-1 text-xs text-gray-500">At least 8 characters</p>
+                </div>
+                <button
+                  type="submit"
+                  disabled={authLoading2}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                >
+                  {authLoading2 ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <UserPlus className="w-5 h-5" />
+                  )}
+                  Create Account & Join
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthMode('choice');
+                    setAuthError(null);
+                  }}
+                  className="w-full text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+                >
+                  Back to options
+                </button>
+                <p className="text-center text-sm text-gray-600 dark:text-gray-400">
+                  Already have an account?{' '}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAuthMode('login');
+                      setAuthError(null);
+                    }}
+                    className="text-blue-600 dark:text-blue-400 hover:underline"
+                  >
+                    Sign in
+                  </button>
+                </p>
+              </form>
+            )}
+          </>
         )}
 
-        {/* Actions */}
-        <div className="space-y-3">
-          <button
-            onClick={handleJoin}
-            disabled={joining}
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            {joining ? (
-              <>
-                <Loader2 className="w-5 h-5 animate-spin" />
-                Joining...
-              </>
-            ) : isAuthenticated ? (
-              <>
-                <Users className="w-5 h-5" />
-                Join League
-              </>
-            ) : (
-              <>
-                <LogIn className="w-5 h-5" />
-                Sign In to Join
-              </>
-            )}
-          </button>
-
-          <button
-            onClick={onCancel}
-            className="w-full px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-          >
-            Cancel
-          </button>
-        </div>
+        {/* Cancel button */}
+        <button
+          onClick={onCancel}
+          className="w-full mt-4 px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+        >
+          Cancel
+        </button>
       </div>
     </div>
   );
