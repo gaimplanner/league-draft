@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState } from 'react';
 import { Upload, AlertCircle, CheckCircle, ChevronRight } from 'lucide-react';
 import { parseCSVFile } from '../utils/csvParser';
 import { ParsedCSVData } from '../types';
@@ -19,14 +19,6 @@ export const FileUpload = ({ onCSVParsed, onNext, existingPlayerCount = 0, onCon
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const hasExistingPlayers = existingPlayerCount > 0;
-
-  // Track if component is mounted to prevent state updates after unmount (Issue #12)
-  const isMounted = useRef(true);
-  useEffect(() => {
-    return () => {
-      isMounted.current = false;
-    };
-  }, []);
 
   const handleFile = async (file: File) => {
     // Security: Validate file extension
@@ -53,9 +45,6 @@ export const FileUpload = ({ onCSVParsed, onNext, existingPlayerCount = 0, onCon
     try {
       const csvData = await parseCSVFile(file);
 
-      // Check if component is still mounted (Issue #12)
-      if (!isMounted.current) return;
-
       if (csvData.rows.length === 0) {
         setError('No data found in CSV');
         setIsLoading(false);
@@ -72,8 +61,6 @@ export const FileUpload = ({ onCSVParsed, onNext, existingPlayerCount = 0, onCon
       setIsLoading(false);
       onNext();
     } catch (err) {
-      // Check if component is still mounted (Issue #12)
-      if (!isMounted.current) return;
       setError('Failed to parse CSV file. Please check the format.');
       setIsLoading(false);
     }
