@@ -832,8 +832,69 @@ function App() {
               </div>
             )}
 
-            {/* Import Type Selection */}
-            {!importMode && (
+            {/* Data Ready State - when returning with existing players */}
+            {!importMode && (activeDivision?.players.length ?? 0) > 0 && (
+              <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center p-4">
+                <div className="max-w-2xl w-full">
+                  <div className="text-center mb-8">
+                    <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-2">
+                      {activeDivision.name}
+                    </h1>
+                    <p className="text-gray-600 dark:text-gray-400">
+                      Your players are loaded and ready.
+                    </p>
+                  </div>
+
+                  <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-6 mb-6">
+                    <div className="flex items-center gap-3">
+                      <svg className="w-8 h-8 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <div className="flex-1">
+                        <h3 className="text-lg font-semibold text-green-800 dark:text-green-200">
+                          {activeDivision.players.length} Players Loaded
+                        </h3>
+                        <p className="text-sm text-green-700 dark:text-green-300">
+                          Continue to review and configure your draft, or import new data.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setPhase('review')}
+                      className="mt-4 w-full px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold flex items-center justify-center gap-2"
+                    >
+                      Continue to Review
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </button>
+                  </div>
+
+                  <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-4 text-center">
+                      Or start fresh with new player data:
+                    </p>
+                    <div className="grid grid-cols-2 gap-4">
+                      <button
+                        onClick={() => setImportMode('csv')}
+                        className="px-4 py-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg hover:border-blue-500 dark:hover:border-blue-500 transition-colors text-gray-700 dark:text-gray-300 font-medium"
+                      >
+                        Import CSV
+                      </button>
+                      <button
+                        onClick={() => setImportMode('excel')}
+                        className="px-4 py-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg hover:border-green-500 dark:hover:border-green-500 transition-colors text-gray-700 dark:text-gray-300 font-medium"
+                      >
+                        Import Excel
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Import Type Selection - only when no data exists */}
+            {!importMode && (activeDivision?.players.length ?? 0) === 0 && (
               <ImportTypeSelector
                 onSelectCSV={() => setImportMode('csv')}
                 onSelectExcel={() => setImportMode('excel')}

@@ -216,17 +216,18 @@ export function PlayerReviewTable({
     <div className="space-y-4">
       {/* Teams & Detection Panel */}
       <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-        <button
-          onClick={() => setTeamsExpanded(!teamsExpanded)}
-          className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-        >
-          <div className="flex items-center gap-4">
-            <span className="font-medium text-gray-900 dark:text-white flex items-center gap-2">
-              {teamsExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-              <Users className="w-4 h-4 text-gray-500" />
-              Teams & Detection
+        <div className="px-4 py-3 flex flex-wrap items-center justify-between gap-2">
+          <button
+            onClick={() => setTeamsExpanded(!teamsExpanded)}
+            className="flex items-center gap-2 sm:gap-4 hover:bg-gray-50 dark:hover:bg-gray-700 -ml-2 px-2 py-1 rounded-lg transition-colors min-w-0"
+          >
+            <span className="font-medium text-gray-900 dark:text-white flex items-center gap-2 whitespace-nowrap">
+              {teamsExpanded ? <ChevronUp className="w-4 h-4 flex-shrink-0" /> : <ChevronDown className="w-4 h-4 flex-shrink-0" />}
+              <Users className="w-4 h-4 text-gray-500 flex-shrink-0" />
+              <span className="hidden xs:inline">Teams & Detection</span>
+              <span className="xs:hidden">Teams</span>
             </span>
-            <div className="flex items-center gap-3 text-sm text-gray-600 dark:text-gray-400">
+            <div className="hidden sm:flex items-center gap-3 text-sm text-gray-600 dark:text-gray-400">
               <span>{teams.length} teams</span>
               {coachKidCount > 0 && (
                 <span className="text-blue-600 dark:text-blue-400">
@@ -241,12 +242,22 @@ export function PlayerReviewTable({
                 </span>
               )}
             </div>
-          </div>
-        </button>
+          </button>
+          {/* Detection Button - always visible in header */}
+          <button
+            onClick={onRunAutoDetection}
+            className="flex items-center gap-2 px-3 py-1.5 bg-purple-500 hover:bg-purple-600 text-white rounded-lg font-medium text-sm flex-shrink-0"
+            title="Auto-detect coach's kids and siblings by matching last names"
+          >
+            <Wand2 className="w-4 h-4" />
+            <span className="hidden sm:inline">Find Coach Kids & Siblings</span>
+            <span className="sm:hidden">Detect</span>
+          </button>
+        </div>
 
         {teamsExpanded && (
           <div className="px-4 pb-4 border-t border-gray-200 dark:border-gray-700">
-            <div className="mt-4 space-y-4">
+            <div className="mt-4">
               {/* Team Names & Coaches Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 {teams.map(team => {
@@ -286,18 +297,6 @@ export function PlayerReviewTable({
                   );
                 })}
               </div>
-
-              {/* Detection Button */}
-              <div className="flex items-center gap-3 pt-2 border-t border-gray-200 dark:border-gray-700">
-                <button
-                  onClick={onRunAutoDetection}
-                  className="flex items-center gap-2 px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg font-medium"
-                  title="Auto-detect coach's kids and siblings by matching last names"
-                >
-                  <Wand2 className="w-4 h-4" />
-                  Find Coach Kids & Siblings
-                </button>
-              </div>
             </div>
           </div>
         )}
@@ -308,14 +307,15 @@ export function PlayerReviewTable({
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
           <button
             onClick={() => setWeightsExpanded(!weightsExpanded)}
-            className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+            className="w-full px-4 py-3 flex flex-wrap items-center justify-between gap-2 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
           >
-            <div className="flex items-center gap-4">
-              <span className="font-medium text-gray-900 dark:text-white flex items-center gap-2">
-                {weightsExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                Scoring Weights
+            <div className="flex items-center gap-2 sm:gap-4 min-w-0">
+              <span className="font-medium text-gray-900 dark:text-white flex items-center gap-2 whitespace-nowrap">
+                {weightsExpanded ? <ChevronUp className="w-4 h-4 flex-shrink-0" /> : <ChevronDown className="w-4 h-4 flex-shrink-0" />}
+                <span className="hidden xs:inline">Scoring Weights</span>
+                <span className="xs:hidden">Weights</span>
               </span>
-              <div className="flex items-center gap-3 text-sm text-gray-600 dark:text-gray-400">
+              <div className="hidden md:flex items-center gap-3 text-sm text-gray-600 dark:text-gray-400">
                 <span>F: {weights.fielding.field + weights.fielding.throw}%</span>
                 <span>H: {weights.hitting.power + weights.hitting.form + weights.hitting.contact}%</span>
                 <span>P: {weights.pitching.strength + weights.pitching.form}%</span>
@@ -323,7 +323,7 @@ export function PlayerReviewTable({
                 <span>R: {weights.running}%</span>
               </div>
             </div>
-            <span className={`text-sm font-medium ${weightsValidation.isValid ? 'text-green-600' : 'text-red-600'}`}>
+            <span className={`text-sm font-medium flex-shrink-0 ${weightsValidation.isValid ? 'text-green-600' : 'text-red-600'}`}>
               Total: {weightsValidation.total}%
             </span>
           </button>
@@ -342,38 +342,40 @@ export function PlayerReviewTable({
       )}
 
       {/* Scoring Mode Toggle (compact) */}
-      <div className="flex items-center gap-4 text-sm">
-        <span className="text-gray-600 dark:text-gray-400">Scoring Mode:</span>
-        <label className={`px-3 py-1.5 rounded-lg cursor-pointer transition-all ${
-          scoringMode === 'pre-weighted'
-            ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-300 dark:border-blue-700'
-            : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-600'
-        }`}>
-          <input
-            type="radio"
-            name="scoringMode"
-            value="pre-weighted"
-            checked={scoringMode === 'pre-weighted'}
-            onChange={() => onScoringModeChange('pre-weighted')}
-            className="sr-only"
-          />
-          Pre-weighted
-        </label>
-        <label className={`px-3 py-1.5 rounded-lg cursor-pointer transition-all ${
-          scoringMode === 'raw'
-            ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-300 dark:border-blue-700'
-            : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-600'
-        }`}>
-          <input
-            type="radio"
-            name="scoringMode"
-            value="raw"
-            checked={scoringMode === 'raw'}
-            onChange={() => onScoringModeChange('raw')}
-            className="sr-only"
-          />
-          Raw Scores
-        </label>
+      <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-sm">
+        <span className="text-gray-600 dark:text-gray-400 whitespace-nowrap">Scoring Mode:</span>
+        <div className="flex items-center gap-2">
+          <label className={`px-3 py-1.5 rounded-lg cursor-pointer transition-all ${
+            scoringMode === 'pre-weighted'
+              ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-300 dark:border-blue-700'
+              : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-600'
+          }`}>
+            <input
+              type="radio"
+              name="scoringMode"
+              value="pre-weighted"
+              checked={scoringMode === 'pre-weighted'}
+              onChange={() => onScoringModeChange('pre-weighted')}
+              className="sr-only"
+            />
+            Pre-weighted
+          </label>
+          <label className={`px-3 py-1.5 rounded-lg cursor-pointer transition-all ${
+            scoringMode === 'raw'
+              ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-300 dark:border-blue-700'
+              : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-600'
+          }`}>
+            <input
+              type="radio"
+              name="scoringMode"
+              value="raw"
+              checked={scoringMode === 'raw'}
+              onChange={() => onScoringModeChange('raw')}
+              className="sr-only"
+            />
+            Raw Scores
+          </label>
+        </div>
       </div>
 
       {/* Search and Count */}

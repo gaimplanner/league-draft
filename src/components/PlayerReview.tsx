@@ -42,12 +42,14 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
   const [selectedSiblingPairs, setSelectedSiblingPairs] = useState<Set<string>>(new Set());
   const { weights, updateWeight, resetToDefaults, validation } = useScoringWeights();
 
-  // Recalculate all player scores when weights change (only in raw mode)
+  // Recalculate all player scores when weights change (raw mode) or mode changes
   useEffect(() => {
-    // Skip recalculation in pre-weighted mode - CSV scores are already weighted
-    if (scoringMode === 'pre-weighted') return;
+    // In raw mode: weights affect calculation, so recalculate on weight changes
+    // When switching modes: always recalculate to restore correct values from raw scores
+    // Skip weight validation in pre-weighted mode since weights aren't used
+    if (scoringMode === 'raw' && !validation.isValid) return;
 
-    if (validation.isValid && players.length > 0) {
+    if (players.length > 0) {
       const recalculated = recalculateAllScores(players, weights, scoringMode);
       // Only update if scores actually changed to avoid infinite loops
       const hasChanges = recalculated.some((p, i) =>
