@@ -3,6 +3,10 @@ import { Upload, AlertCircle, CheckCircle, ChevronRight } from 'lucide-react';
 import { parseCSVFile } from '../utils/csvParser';
 import { ParsedCSVData } from '../types';
 
+// Security: File upload limits
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const ALLOWED_MIME_TYPES = ['text/csv', 'application/vnd.ms-excel', 'text/plain'];
+
 interface FileUploadProps {
   onCSVParsed: (csvData: ParsedCSVData) => void;
   onNext: () => void;
@@ -17,8 +21,21 @@ export const FileUpload = ({ onCSVParsed, onNext, existingPlayerCount = 0, onCon
   const hasExistingPlayers = existingPlayerCount > 0;
 
   const handleFile = async (file: File) => {
-    if (!file.name.endsWith('.csv')) {
+    // Security: Validate file extension
+    if (!file.name.toLowerCase().endsWith('.csv')) {
       setError('Please upload a CSV file');
+      return;
+    }
+
+    // Security: Validate file size
+    if (file.size > MAX_FILE_SIZE) {
+      setError('File too large. Maximum size is 10MB.');
+      return;
+    }
+
+    // Security: Validate MIME type (allow empty for drag-drop edge cases)
+    if (file.type && !ALLOWED_MIME_TYPES.includes(file.type)) {
+      setError('Invalid file type. Please upload a CSV file.');
       return;
     }
 

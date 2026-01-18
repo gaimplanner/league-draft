@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useDivisions } from './hooks/useDivisions';
 import { useDraft } from './hooks/useDraft';
 import { usePlayerScoring } from './hooks/usePlayerScoring';
 import { useViewMode } from './contexts/ViewContext';
+import { useAuth } from './contexts/AuthContext';
 import { DivisionSelector } from './components/DivisionSelector';
 import { DivisionCreator } from './components/DivisionCreator';
 import { FileUpload } from './components/FileUpload';
@@ -12,6 +13,13 @@ import { PlayerReview } from './components/PlayerReview';
 import { DraftConfig } from './components/DraftConfig';
 import { DraftBoard } from './components/DraftBoard';
 import { DraftComplete } from './components/DraftComplete';
+import { LoginPage } from './components/LoginPage';
+import { RegisterPage } from './components/RegisterPage';
+import { ForgotPasswordPage } from './components/ForgotPasswordPage';
+import { ResetPasswordPage } from './components/ResetPasswordPage';
+import { ProfilePage } from './components/profile';
+import { JoinPage } from './components/JoinPage';
+import { isApiMode } from './api';
 import {
   Player,
   Team,
@@ -24,13 +32,57 @@ import {
   AppPhase,
 } from './types';
 import { parseCSVWithMapping, CoachAssignment } from './utils/csvParser';
+import { savePlayersToApi, saveTeamsToApi } from './api';
 
-type AppMode = 'selector' | 'creator' | 'draft';
+type AppMode = 'selector' | 'creator' | 'draft' | 'settings' | 'join';
+type AuthPage = 'login' | 'register' | 'forgot-password' | 'reset-password';
 
 function App() {
+  // All hooks must be called unconditionally at the top
   const viewMode = useViewMode();
   const isPublicView = viewMode === 'public';
+  const { isAuthenticated, isLoading: authLoading, user, logout, checkAuth } = useAuth();
+  const [authPage, setAuthPage] = useState<AuthPage>('login');
+  const [resetParams, setResetParams] = useState<{ uid: string; token: string } | null>(null);
+  const [joinToken, setJoinToken] = useState<string | null>(null);
 
+  // Check for password reset and join URL params on mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const pathname = window.location.pathname;
+
+    // Check for password reset
+    const uid = params.get('uid');
+    const token = params.get('token');
+    if (uid && token && pathname === '/reset-password') {
+      setResetParams({ uid, token });
+      setAuthPage('reset-password');
+      return;
+    }
+
+    // Sanitize token - remove any non-URL-safe characters (hidden unicode, etc.)
+    const sanitizeToken = (token: string): string => {
+      // Only allow alphanumeric, dash, underscore, and common base64 chars
+      return token.replace(/[^a-zA-Z0-9_-]/g, '');
+    };
+
+    // Check for join link with token in path: /join/{token}
+    if (pathname.startsWith('/join/')) {
+      const pathToken = pathname.replace('/join/', '');
+      if (pathToken) {
+        setJoinToken(sanitizeToken(decodeURIComponent(pathToken)));
+        setMode('join');
+        return;
+      }
+    }
+
+    // Check for join invitation with token in query: /join?token={token}
+    const inviteToken = params.get('token');
+    if (pathname === '/join' && inviteToken) {
+      setJoinToken(sanitizeToken(inviteToken));
+      setMode('join');
+    }
+  }, []);
   const [mode, setMode] = useState<AppMode>('selector');
   const [csvData, setCSVData] = useState<ParsedCSVData | null>(null);
   const [importMode, setImportMode] = useState<'csv' | 'excel' | null>(null);
@@ -62,6 +114,7 @@ function App() {
     executeTrade,
     finalizeDraft,
     cancelPendingComplete,
+    isLoading,
   } = useDraft(activeDivision?.id);
 
   const { players, updatePlayer, updatePlayerField, linkSiblings, unlinkSibling, setAllPlayers } = usePlayerScoring(
@@ -85,7 +138,7 @@ function App() {
       setMode('draft');
       loadDivisionState(activeDivision);
     }
-  }, [activeDivision?.id]); // Only trigger when division changes
+  }, [activeDivision, loadDivisionState]);
 
   // Scroll to top when phase changes
   useEffect(() => {
@@ -107,9 +160,40 @@ function App() {
     return () => window.removeEventListener('storage', handleStorageChange);
   }, [isPublicView, refreshDivisions]);
 
-  // Save phase changes back to division
+  // Track if division state has been loaded (to avoid overwriting API phase with default 'upload')
+  const [divisionStateLoaded, setDivisionStateLoaded] = useState(false);
+
+  // Track if we're currently updating to prevent race conditions (Issue #6)
+  const isUpdatingPhase = useRef(false);
+
+  // Track save errors to display to user (Issue #27 - silent failures)
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Track loading state for phase transitions (Issue #27 - missing loading feedback)
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Reset divisionStateLoaded when division changes
   useEffect(() => {
-    if (activeDivision && phase !== activeDivision.phase) {
+    setDivisionStateLoaded(false);
+    isUpdatingPhase.current = false;
+  }, [activeDivision?.id]);
+
+  // Mark division state as loaded after loadDivisionState runs
+  useEffect(() => {
+    if (activeDivision && !divisionStateLoaded) {
+      // Small delay to ensure loadDivisionState has completed
+      const timer = setTimeout(() => setDivisionStateLoaded(true), 100);
+      return () => clearTimeout(timer);
+    }
+  }, [activeDivision, divisionStateLoaded]);
+
+  // Save phase changes back to division (only after initial load)
+  useEffect(() => {
+    // Only sync phase changes AFTER the division state has been loaded
+    // This prevents the default 'upload' phase from overwriting the API-loaded phase
+    // Also prevent concurrent updates (Issue #6)
+    if (divisionStateLoaded && activeDivision && phase !== activeDivision.phase && !isUpdatingPhase.current) {
+      isUpdatingPhase.current = true;
       // When draft completes, also save the completion timestamp and final state
       if (phase === 'complete') {
         updateActiveDivision({
@@ -118,12 +202,47 @@ function App() {
           draftState,
           teams: draftState.teams,
           players: draftState.players,
+        }).then(() => {
+          setSaveError(null);
+        }).catch((err) => {
+          console.error('Failed to save draft completion:', err);
+          // Show user-friendly error message
+          const message = err instanceof Error ? err.message : 'Unknown error';
+          setSaveError(`Failed to save draft completion: ${message}. Your draft data may not be saved. Please try refreshing the page.`);
+        }).finally(() => {
+          isUpdatingPhase.current = false;
         });
       } else {
-        updateActiveDivision({ phase });
+        updateActiveDivision({ phase }).then(() => {
+          setSaveError(null);
+        }).catch((err) => {
+          console.error('Failed to save phase change:', err);
+          const message = err instanceof Error ? err.message : 'Unknown error';
+          setSaveError(`Failed to save progress: ${message}. Please check your connection and try again.`);
+        }).finally(() => {
+          isUpdatingPhase.current = false;
+        });
       }
     }
-  }, [phase, activeDivision?.id]);
+  }, [phase, activeDivision?.id, divisionStateLoaded]);
+
+  // Browser history management - handle back/forward navigation
+  // Strategy: Push a state entry on load, and when user presses back,
+  // re-push to prevent actual navigation while keeping the app stable
+  useEffect(() => {
+    // Push initial state on mount to have something in history
+    window.history.replaceState({ appState: true }, '');
+    window.history.pushState({ appState: true }, '');
+
+    const handlePopState = () => {
+      // User pressed back button - push state again to prevent leaving the app
+      // This keeps the user in the app without losing any data
+      window.history.pushState({ appState: true }, '');
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   // Handle selecting an existing division
   const handleSelectDivision = useCallback((divisionId: string) => {
@@ -131,7 +250,7 @@ function App() {
   }, [selectDivision]);
 
   // Handle creating a new division
-  const handleCreateDivision = useCallback((config: {
+  const handleCreateDivision = useCallback(async (config: {
     name: string;
     preset: DivisionPreset;
     teamCount: number;
@@ -139,8 +258,10 @@ function App() {
     enforceAgeLimit: boolean;
     maxPerAge: number;
   }) => {
-    createDivision(config);
-    setMode('draft');
+    const division = await createDivision(config);
+    if (division) {
+      setMode('draft');
+    }
   }, [createDivision]);
 
   // Handle CSV parsing
@@ -149,7 +270,7 @@ function App() {
   };
 
   // Handle column mapping completion
-  const handleMappingComplete = (mapping: ColumnMapping) => {
+  const handleMappingComplete = async (mapping: ColumnMapping) => {
     if (!csvData || !activeDivision) return;
 
     const { players: loadedPlayers, coachAssignments } = parseCSVWithMapping(
@@ -244,6 +365,26 @@ function App() {
       // and confirm matches before they are applied.
     }
 
+    // In API mode, save players and teams to the database
+    if (isApiMode()) {
+      try {
+        setIsSaving(true);
+        // Save teams first (for coach assignments)
+        await saveTeamsToApi(activeDivision.id, updatedTeams);
+        // Save players
+        const savedPlayers = await savePlayersToApi(activeDivision.id, updatedPlayers);
+        updatedPlayers = savedPlayers;
+      } catch (err) {
+        // Issue #5: Show error and return early on save failures
+        console.error('Failed to save to API:', err);
+        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+        alert(`Failed to save player data: ${errorMessage}\n\nPlease try again or check your network connection.`);
+        return; // Don't continue with corrupted state
+      } finally {
+        setIsSaving(false);
+      }
+    }
+
     setAllPlayers(updatedPlayers);
     setPlayers(updatedPlayers);
 
@@ -261,7 +402,7 @@ function App() {
 
   // Handle Excel evaluation import completion
   // Skips review phase since all adjustments are done in the evaluation summary
-  const handleEvaluationComplete = (
+  const handleEvaluationComplete = async (
     importedPlayers: Player[],
     teamNames: string[],
     assistantCoaches: string[][]
@@ -269,7 +410,7 @@ function App() {
     if (!activeDivision) return;
 
     // Update teams with names and assistant coaches from evaluation
-    const updatedTeams = activeDivision.teams.map((team, i) => ({
+    let updatedTeams = activeDivision.teams.map((team, i) => ({
       ...team,
       name: teamNames[i] || team.name,
       assistantCoaches: assistantCoaches[i] || [],
@@ -283,12 +424,29 @@ function App() {
     });
 
     // Fix coachTeamId references to use actual division team IDs
-    const fixedPlayers = importedPlayers.map(player => {
+    let fixedPlayers = importedPlayers.map(player => {
       if (player.coachTeamId && teamIdMapping[player.coachTeamId]) {
         return { ...player, coachTeamId: teamIdMapping[player.coachTeamId] };
       }
       return player;
     });
+
+    // In API mode, save players and teams to the database
+    if (isApiMode()) {
+      try {
+        // Save teams first (for coach assignments)
+        await saveTeamsToApi(activeDivision.id, updatedTeams);
+        // Save players
+        const savedPlayers = await savePlayersToApi(activeDivision.id, fixedPlayers);
+        fixedPlayers = savedPlayers;
+      } catch (err) {
+        // Issue #5: Show error and return early on save failures
+        console.error('Failed to save to API:', err);
+        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+        alert(`Failed to save player data: ${errorMessage}\n\nPlease try again or check your network connection.`);
+        return; // Don't continue with corrupted state
+      }
+    }
 
     setAllPlayers(fixedPlayers);
     setPlayers(fixedPlayers);
@@ -322,7 +480,7 @@ function App() {
   };
 
   // Handle review phase completion
-  const handleReviewComplete = (updatedPlayers?: Player[]) => {
+  const handleReviewComplete = async (updatedPlayers?: Player[]) => {
     // Use passed players if available, otherwise use current state
     const playersToSave = updatedPlayers ?? players;
 
@@ -332,6 +490,24 @@ function App() {
 
     // Save to division
     if (activeDivision) {
+      // In API mode, save players to the database (includes coach kid assignments, sibling links, etc.)
+      if (isApiMode()) {
+        try {
+          setIsSaving(true);
+          await saveTeamsToApi(activeDivision.id, teams);
+          const savedPlayers = await savePlayersToApi(activeDivision.id, playersToSave);
+          setPlayers(savedPlayers);
+        } catch (err) {
+          // Issue #5: Show error and return early on save failures
+          console.error('Failed to save players to API:', err);
+          const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+          alert(`Failed to save player data: ${errorMessage}\n\nPlease try again or check your network connection.`);
+          return; // Don't continue with corrupted state
+        } finally {
+          setIsSaving(false);
+        }
+      }
+
       updateActiveDivision({
         players: playersToSave,
         teams,
@@ -342,18 +518,34 @@ function App() {
   };
 
   // Handle draft config completion
-  const handleConfigComplete = (format: DraftFormat, order: string[], resolvedPlayers: Player[]) => {
+  const handleConfigComplete = async (format: DraftFormat, order: string[], resolvedPlayers: Player[]) => {
     // Update players with resolved lockedToRound values before starting draft
     setPlayers(resolvedPlayers);
+
+    // In API mode, save resolved players (with lockedToRound values) before starting draft
+    if (activeDivision && isApiMode()) {
+      try {
+        setIsSaving(true);
+        await savePlayersToApi(activeDivision.id, resolvedPlayers);
+      } catch (err) {
+        // Issue #5: Show error and return early on save failures
+        console.error('Failed to save resolved players to API:', err);
+        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+        alert(`Failed to save player data: ${errorMessage}\n\nPlease try again or check your network connection.`);
+        return; // Don't continue with corrupted state
+      } finally {
+        setIsSaving(false);
+      }
+    }
 
     // Pass format and order directly to startDraft to avoid race conditions
     startDraft(format, order, resolvedPlayers);
   };
 
   // Handle going back to division selector
-  const handleBackToSelector = () => {
-    // Save current state to division before leaving
-    if (activeDivision) {
+  const handleBackToSelector = async () => {
+    // Save current state to division before leaving (fire and forget for API mode)
+    if (activeDivision && !isApiMode()) {
       updateActiveDivision({
         players: draftState.players.length > 0 ? draftState.players : activeDivision.players,
         teams: draftState.teams.length > 0 ? draftState.teams : activeDivision.teams,
@@ -376,17 +568,19 @@ function App() {
       case 'draft':
         // Going back from draft/complete resets draft progress but preserves all data
         if (draftState.picks.length > 0) {
-          if (!window.confirm('Going back will reset all draft picks. Continue?')) {
+          if (!window.confirm('Warning: This will delete all draft rounds and picks. Are you sure you want to return to Draft Setup?')) {
             return;
           }
         }
         // Reset players' draft status but keep all other data
+        // Also clear lockedToTeamId which gets set when a sibling is drafted
         const resetPlayers = activeDivision.players.map(p => ({
           ...p,
           isDrafted: false,
           draftedByTeamId: undefined,
           draftedInRound: undefined,
           draftedAtPick: undefined,
+          lockedToTeamId: undefined,
         }));
         // Reset team rosters but keep names, coaches, etc.
         const resetTeams = activeDivision.teams.map(t => ({
@@ -424,6 +618,94 @@ function App() {
     handleGoBack(phase);
   };
 
+  // Handle user update from profile page
+  const handleUserUpdate = useCallback(async () => {
+    await checkAuth();
+  }, [checkAuth]);
+
+  // Handle join completion
+  const handleJoinComplete = useCallback(() => {
+    // Refresh auth to get updated leagues
+    checkAuth();
+    // Clear join state and go to selector
+    setJoinToken(null);
+    setMode('selector');
+    // Clear URL
+    window.history.replaceState({}, '', '/');
+  }, [checkAuth]);
+
+  // Show loading state while checking authentication
+  if (isApiMode() && authLoading && !isPublicView) {
+    return (
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          <p className="text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Render join page (allow for both authenticated and unauthenticated users)
+  // This must come before the auth check so unauthenticated users see the invite details
+  if (mode === 'join' && joinToken) {
+    return (
+      <JoinPage
+        token={joinToken}
+        onJoinComplete={handleJoinComplete}
+        onCancel={() => {
+          setJoinToken(null);
+          setMode('selector');
+          window.history.replaceState({}, '', '/');
+        }}
+      />
+    );
+  }
+
+  // Show auth pages when in API mode and not authenticated
+  if (isApiMode() && !authLoading && !isAuthenticated && !isPublicView) {
+    // Helper to go back to login and clear URL
+    const handleBackToLogin = () => {
+      setAuthPage('login');
+      setResetParams(null);
+      // Clear URL params
+      window.history.replaceState({}, '', '/');
+    };
+
+    if (authPage === 'reset-password' && resetParams) {
+      return (
+        <ResetPasswordPage
+          uid={resetParams.uid}
+          token={resetParams.token}
+          onBackToLogin={handleBackToLogin}
+        />
+      );
+    }
+    if (authPage === 'forgot-password') {
+      return <ForgotPasswordPage onBackToLogin={handleBackToLogin} />;
+    }
+    if (authPage === 'register') {
+      return <RegisterPage onSwitchToLogin={() => setAuthPage('login')} />;
+    }
+    return (
+      <LoginPage
+        onSwitchToRegister={() => setAuthPage('register')}
+        onForgotPassword={() => setAuthPage('forgot-password')}
+      />
+    );
+  }
+
+  // Render settings/profile page
+  if (mode === 'settings' && user) {
+    return (
+      <ProfilePage
+        user={user}
+        onBack={() => setMode('selector')}
+        onUserUpdate={handleUserUpdate}
+      />
+    );
+  }
+
   // Render division selector or creator
   if (mode === 'selector') {
     return (
@@ -432,16 +714,25 @@ function App() {
         onSelectDivision={handleSelectDivision}
         onCreateNew={() => setMode('creator')}
         onDeleteDivision={deleteDivision}
+        user={user}
+        onLogout={isApiMode() ? logout : undefined}
+        onOpenSettings={isApiMode() && user ? () => setMode('settings') : undefined}
       />
     );
   }
 
   if (mode === 'creator') {
+    // Only check names of divisions that have players (non-empty divisions)
+    // Empty divisions are not shown to users, so shouldn't block new creation
+    const existingNames = summaries
+      .filter(s => s.playerCount > 0)
+      .map(s => s.name);
+
     return (
       <DivisionCreator
         onCancel={() => setMode('selector')}
         onCreate={handleCreateDivision}
-        existingNames={summaries.map(s => s.name)}
+        existingNames={existingNames}
       />
     );
   }
@@ -491,21 +782,119 @@ function App() {
     <>
       {phase !== 'upload' && phase !== 'complete' && <DivisionHeader />}
 
-      <div className={phase !== 'upload' && phase !== 'complete' ? 'pt-12' : ''}>
+      {/* Saving Overlay (Issue #27 - loading state feedback) */}
+      {isSaving && (
+        <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl px-6 py-4 flex items-center gap-3">
+            <svg className="w-5 h-5 animate-spin text-blue-600" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+            </svg>
+            <span className="text-gray-700 dark:text-gray-200 font-medium">Saving...</span>
+          </div>
+        </div>
+      )}
+
+      {/* Save Error Banner (Issue #27 - show failures to user) */}
+      {saveError && (
+        <div className="fixed top-0 left-0 right-0 z-50 bg-red-600 text-white px-4 py-3 shadow-lg">
+          <div className="max-w-6xl mx-auto flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <svg className="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+              <span className="text-sm font-medium">{saveError}</span>
+            </div>
+            <button
+              onClick={() => setSaveError(null)}
+              className="text-white/80 hover:text-white transition-colors"
+            >
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className={`${phase !== 'upload' && phase !== 'complete' ? 'pt-12' : ''} ${saveError ? 'mt-12' : ''}`}>
         {phase === 'upload' && (
           <div>
-            {/* Back button - separate bar above content */}
-            <div className="bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-2">
-              <button
-                onClick={importMode ? () => setImportMode(null) : handleBackToSelector}
-                className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors text-sm flex items-center gap-1"
-              >
-                ← {importMode ? 'Back to Import Selection' : 'Back to Divisions'}
-              </button>
-            </div>
+            {/* Back button - separate bar above content (hidden for Excel import which has its own) */}
+            {importMode !== 'excel' && (
+              <div className="bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-2">
+                <button
+                  onClick={importMode ? () => setImportMode(null) : handleBackToSelector}
+                  className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors text-sm flex items-center gap-1"
+                >
+                  ← {importMode ? 'Back to Import Selection' : 'Back to Divisions'}
+                </button>
+              </div>
+            )}
 
-            {/* Import Type Selection */}
-            {!importMode && (
+            {/* Data Ready State - when returning with existing players */}
+            {!importMode && (activeDivision?.players.length ?? 0) > 0 && (
+              <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center p-4">
+                <div className="max-w-2xl w-full">
+                  <div className="text-center mb-8">
+                    <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-2">
+                      {activeDivision.name}
+                    </h1>
+                    <p className="text-gray-600 dark:text-gray-400">
+                      Your players are loaded and ready.
+                    </p>
+                  </div>
+
+                  <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-6 mb-6">
+                    <div className="flex items-center gap-3">
+                      <svg className="w-8 h-8 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <div className="flex-1">
+                        <h3 className="text-lg font-semibold text-green-800 dark:text-green-200">
+                          {activeDivision.players.length} Players Loaded
+                        </h3>
+                        <p className="text-sm text-green-700 dark:text-green-300">
+                          Continue to review and configure your draft, or import new data.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setPhase('review')}
+                      className="mt-4 w-full px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold flex items-center justify-center gap-2"
+                    >
+                      Continue to Review
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </button>
+                  </div>
+
+                  <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-4 text-center">
+                      Or start fresh with new player data:
+                    </p>
+                    <div className="grid grid-cols-2 gap-4">
+                      <button
+                        onClick={() => setImportMode('csv')}
+                        className="px-4 py-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg hover:border-blue-500 dark:hover:border-blue-500 transition-colors text-gray-700 dark:text-gray-300 font-medium"
+                      >
+                        Import CSV
+                      </button>
+                      <button
+                        onClick={() => setImportMode('excel')}
+                        className="px-4 py-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg hover:border-green-500 dark:hover:border-green-500 transition-colors text-gray-700 dark:text-gray-300 font-medium"
+                      >
+                        Import Excel
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Import Type Selection - only when no data exists */}
+            {!importMode && (activeDivision?.players.length ?? 0) === 0 && (
               <ImportTypeSelector
                 onSelectCSV={() => setImportMode('csv')}
                 onSelectExcel={() => setImportMode('excel')}
@@ -572,9 +961,11 @@ function App() {
             onReset={handleReset}
             enforceAgeLimit={activeDivision?.enforceAgeLimit ?? false}
             maxPerAge={activeDivision?.maxPerAge ?? 0}
+            ageRange={activeDivision?.ageRange}
             pendingComplete={pendingComplete}
             onFinalizeDraft={finalizeDraft}
             onCancelComplete={cancelPendingComplete}
+            isLoading={isLoading}
           />
         )}
 

@@ -1,0 +1,396 @@
+from django.db import transaction
+from django.utils import timezone
+from uuid import UUID
+
+from .models import Division, Team, Player, DraftState, DraftPick, Trade
+
+
+class DraftService:
+    """Service for draft operations."""
+
+    @classmethod
+    @transaction.atomic
+    def start_draft(
+        cls, division_id: UUID, draft_format: str, draft_order: list[UUID]
+    ) -> DraftState:
+        """Start a new draft for a division."""
+        # Check if draft already exists
+        if DraftState.objects.filter(division_id=division_id).exists():
+            raise ValueError("Draft already started for this division")
+
+        division = Division.objects.get(id=division_id)
+        current_team = Team.objects.get(id=draft_order[0])
+
+        # Convert UUIDs to strings for JSON storage
+        draft_order_str = [str(tid) for tid in draft_order]
+
+        # Create draft state
+        draft_state = DraftState.objects.create(
+            division=division,
+            draft_format=draft_format,
+            draft_order=draft_order_str,
+            current_round_order=draft_order_str,
+            current_round=1,
+            current_pick_in_round=1,
+            current_team=current_team,
+            is_draft_complete=False,
+        )
+
+        # Update division phase
+        division.phase = "draft"
+        division.save()
+
+        # Check for mandatory pick
+        cls._check_and_set_mandatory_pick(draft_state, current_team, 1)
+
+        return draft_state
+
+    @classmethod
+    @transaction.atomic
+    def draft_player(
+        cls, draft_state_id: UUID, player_id: UUID, team_id: UUID
+    ) -> DraftState:
+        """Draft a player."""
+        draft_state = DraftState.objects.select_for_update().get(id=draft_state_id)
+
+        if draft_state.is_draft_complete:
+            raise ValueError("Draft is already complete")
+
+        # Verify it's the correct team's turn
+        if str(draft_state.current_team_id) != str(team_id):
+            raise ValueError("Not this team's turn to pick")
+
+        # Check for mandatory pick
+        if (
+            draft_state.mandatory_player_id
+            and str(draft_state.mandatory_player_id) != str(player_id)
+        ):
+            raise ValueError("Must draft mandatory player first")
+
+        # Verify player is available
+        player = Player.objects.get(id=player_id)
+        if player.is_drafted:
+            raise ValueError("Player is not available")
+
+        team = Team.objects.get(id=team_id)
+        overall_pick = draft_state.picks.count() + 1
+
+        # Create the pick
+        DraftPick.objects.create(
+            draft_state=draft_state,
+            round=draft_state.current_round,
+            pick=overall_pick,
+            team_id=team_id,
+            player_id=player_id,
+        )
+
+        # Update player as drafted
+        player.is_drafted = True
+        player.drafted_by_team = team
+        player.drafted_in_round = draft_state.current_round
+        player.drafted_at_pick = overall_pick
+        player.save()
+
+        # Update team score
+        team.total_score = sum(p.total_score for p in team.roster.all())
+        age_breakdown = dict(team.age_breakdown)
+        age_key = str(player.little_league_age)
+        age_breakdown[age_key] = age_breakdown.get(age_key, 0) + 1
+        team.age_breakdown = age_breakdown
+        team.save()
+
+        # Handle sibling locking
+        if player.sibling_id:
+            Player.objects.filter(id=player.sibling_id).update(locked_to_team=team)
+
+        # Advance to next pick
+        cls._advance_to_next_pick(draft_state)
+
+        draft_state.refresh_from_db()
+        return draft_state
+
+    @classmethod
+    @transaction.atomic
+    def skip_pick(cls, draft_state_id: UUID, team_id: UUID) -> DraftState:
+        """Skip the current pick (team gets one fewer player)."""
+        draft_state = DraftState.objects.select_for_update().get(id=draft_state_id)
+
+        if draft_state.is_draft_complete:
+            raise ValueError("Draft is already complete")
+
+        # Verify it's the correct team's turn
+        if str(draft_state.current_team_id) != str(team_id):
+            raise ValueError("Not this team's turn to pick")
+
+        # Cannot skip if there's a mandatory pick
+        if draft_state.mandatory_player_id:
+            raise ValueError("Cannot skip - mandatory pick required")
+
+        overall_pick = draft_state.picks.count() + 1
+
+        # Create a skipped pick record (no player assigned)
+        DraftPick.objects.create(
+            draft_state=draft_state,
+            round=draft_state.current_round,
+            pick=overall_pick,
+            team_id=team_id,
+            player_id=None,
+            was_skipped=True,
+        )
+
+        # Advance to next pick
+        cls._advance_to_next_pick(draft_state)
+
+        draft_state.refresh_from_db()
+        return draft_state
+
+    @classmethod
+    @transaction.atomic
+    def undo_last_pick(cls, draft_state_id: UUID) -> DraftState:
+        """Undo the last pick (including skipped picks)."""
+        draft_state = DraftState.objects.select_for_update().get(id=draft_state_id)
+
+        last_pick = draft_state.picks.order_by("-pick").first()
+        if not last_pick:
+            raise ValueError("No pick to undo")
+
+        # Handle skipped picks (no player was drafted)
+        if last_pick.was_skipped or not last_pick.player_id:
+            # Just delete the pick and revert draft state
+            last_pick.delete()
+
+            # Revert draft state
+            draft_order = draft_state.draft_order
+            team_count = len(draft_order)
+            pick_in_round = ((last_pick.pick - 1) % team_count) + 1
+
+            draft_state.current_round = last_pick.round
+            draft_state.current_pick_in_round = pick_in_round
+            draft_state.current_team_id = last_pick.team_id
+            draft_state.is_draft_complete = False
+            draft_state.mandatory_player = None
+            draft_state.mandatory_reason = ""
+            draft_state.mandatory_sibling_name = ""
+            draft_state.save()
+
+            # Check for mandatory pick at reverted position
+            current_team = Team.objects.get(id=last_pick.team_id)
+            cls._check_and_set_mandatory_pick(draft_state, current_team, last_pick.round)
+
+            draft_state.refresh_from_db()
+            return draft_state
+
+        # Handle normal picks (player was drafted)
+        player = Player.objects.get(id=last_pick.player_id)
+        team = Team.objects.get(id=last_pick.team_id)
+
+        # Reset player draft status
+        player.is_drafted = False
+        player.drafted_by_team = None
+        player.drafted_in_round = None
+        player.drafted_at_pick = None
+        player.save()
+
+        # If player had a sibling, remove sibling lock
+        if player.sibling_id:
+            Player.objects.filter(id=player.sibling_id).update(locked_to_team=None)
+
+        # Update team score
+        team.total_score = sum(p.total_score for p in team.roster.all())
+        age_breakdown = dict(team.age_breakdown)
+        age_key = str(player.little_league_age)
+        if age_key in age_breakdown:
+            age_breakdown[age_key] -= 1
+            if age_breakdown[age_key] == 0:
+                del age_breakdown[age_key]
+        team.age_breakdown = age_breakdown
+        team.save()
+
+        # Delete the pick
+        last_pick.delete()
+
+        # Revert draft state
+        draft_order = draft_state.draft_order
+        team_count = len(draft_order)
+        pick_in_round = ((last_pick.pick - 1) % team_count) + 1
+
+        draft_state.current_round = last_pick.round
+        draft_state.current_pick_in_round = pick_in_round
+        draft_state.current_team_id = last_pick.team_id
+        draft_state.is_draft_complete = False
+        draft_state.mandatory_player = None
+        draft_state.mandatory_reason = ""
+        draft_state.mandatory_sibling_name = ""
+        draft_state.save()
+
+        # Check for mandatory pick at reverted position
+        current_team = Team.objects.get(id=last_pick.team_id)
+        cls._check_and_set_mandatory_pick(draft_state, current_team, last_pick.round)
+
+        draft_state.refresh_from_db()
+        return draft_state
+
+    @classmethod
+    @transaction.atomic
+    def create_trade(
+        cls,
+        draft_state_id: UUID,
+        team1_id: UUID,
+        team2_id: UUID,
+        player1_id: UUID,
+        player2_id: UUID,
+        reason: str,
+    ) -> DraftState:
+        """Create a trade."""
+        from datetime import timedelta
+        from django.utils import timezone
+
+        draft_state = DraftState.objects.get(id=draft_state_id)
+
+        # Idempotency check: prevent duplicate trades within 10 seconds
+        recent_trade = Trade.objects.filter(
+            draft_state=draft_state,
+            team1_id=team1_id,
+            team2_id=team2_id,
+            player1_id=player1_id,
+            player2_id=player2_id,
+            created_at__gte=timezone.now() - timedelta(seconds=10),
+        ).exists()
+        if recent_trade:
+            raise ValueError("This trade was already processed")
+
+        # Verify players belong to correct teams
+        player1 = Player.objects.get(id=player1_id)
+        player2 = Player.objects.get(id=player2_id)
+
+        if str(player1.drafted_by_team_id) != str(team1_id):
+            raise ValueError("Player 1 does not belong to team 1")
+        if str(player2.drafted_by_team_id) != str(team2_id):
+            raise ValueError("Player 2 does not belong to team 2")
+
+        team1 = Team.objects.get(id=team1_id)
+        team2 = Team.objects.get(id=team2_id)
+
+        # Create trade record
+        Trade.objects.create(
+            draft_state=draft_state,
+            team1_id=team1_id,
+            team2_id=team2_id,
+            player1_id=player1_id,
+            player2_id=player2_id,
+            reason=reason,
+        )
+
+        # Swap players
+        player1.drafted_by_team = team2
+        player1.save()
+        player2.drafted_by_team = team1
+        player2.save()
+
+        # Update team scores
+        team1.total_score = sum(p.total_score for p in team1.roster.all())
+        team1.save()
+        team2.total_score = sum(p.total_score for p in team2.roster.all())
+        team2.save()
+
+        draft_state.refresh_from_db()
+        return draft_state
+
+    @classmethod
+    def _advance_to_next_pick(cls, draft_state: DraftState) -> None:
+        """Advance to the next pick."""
+        division = draft_state.division
+        draft_order = draft_state.draft_order
+        team_count = len(draft_order)
+        roster_size = division.roster_size
+        total_picks = team_count * roster_size
+        current_picks = draft_state.picks.count()
+
+        if current_picks >= total_picks:
+            # Draft complete
+            draft_state.is_draft_complete = True
+            draft_state.current_team = None
+            draft_state.mandatory_player = None
+            draft_state.mandatory_reason = ""
+            draft_state.mandatory_sibling_name = ""
+            draft_state.save()
+
+            division.phase = "complete"
+            division.completed_at = timezone.now()
+            division.save()
+            return
+
+        # Calculate next position
+        next_round = (current_picks // team_count) + 1
+        next_pick_in_round = (current_picks % team_count) + 1
+
+        # Calculate round order based on draft format
+        if draft_state.draft_format == "snake":
+            # Reverse order on even rounds
+            if next_round % 2 == 0:
+                current_round_order = list(reversed(draft_order))
+            else:
+                current_round_order = draft_order
+        elif draft_state.draft_format == "recalculated":
+            # Sort teams by total score (ascending)
+            teams = Team.objects.filter(division=division).order_by("total_score")
+            current_round_order = [str(t.id) for t in teams]
+        else:
+            # Straight draft
+            current_round_order = draft_order
+
+        next_team_id = current_round_order[next_pick_in_round - 1]
+        next_team = Team.objects.get(id=next_team_id)
+
+        draft_state.current_round = next_round
+        draft_state.current_pick_in_round = next_pick_in_round
+        draft_state.current_team = next_team
+        draft_state.current_round_order = current_round_order
+        draft_state.mandatory_player = None
+        draft_state.mandatory_reason = ""
+        draft_state.mandatory_sibling_name = ""
+        draft_state.save()
+
+        # Check for mandatory pick
+        cls._check_and_set_mandatory_pick(draft_state, next_team, next_round)
+
+    @classmethod
+    def _check_and_set_mandatory_pick(
+        cls, draft_state: DraftState, team: Team, current_round: int
+    ) -> None:
+        """Check and set mandatory pick if applicable."""
+        from django.db.models import Q
+
+        division = draft_state.division
+
+        # Check for sibling locked to this team in their effective round
+        # Siblings should be drafted in their projectedRound (or lockedToRound if set)
+        locked_sibling = Player.objects.filter(
+            Q(locked_to_round=current_round)
+            | Q(projected_round=current_round, locked_to_round__isnull=True),
+            division=division,
+            locked_to_team=team,
+            is_drafted=False,
+        ).first()
+
+        if locked_sibling:
+            draft_state.mandatory_player = locked_sibling
+            draft_state.mandatory_reason = "sibling"
+            draft_state.mandatory_sibling_name = locked_sibling.sibling or ""
+            draft_state.save()
+            return
+
+        # Check for coach's kid in their projected round
+        coach_kid = Player.objects.filter(
+            Q(locked_to_round=current_round)
+            | Q(projected_round=current_round, locked_to_round__isnull=True),
+            division=division,
+            coach_team=team,
+            is_drafted=False,
+        ).first()
+
+        if coach_kid:
+            draft_state.mandatory_player = coach_kid
+            draft_state.mandatory_reason = "coach-kid"
+            draft_state.mandatory_sibling_name = ""
+            draft_state.save()

@@ -215,11 +215,11 @@ export function PlayerSummaryTable({
     <div className="space-y-4">
       {/* Team Configuration Panel */}
       <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-        <button
-          onClick={() => setTeamsExpanded(!teamsExpanded)}
-          className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-        >
-          <div className="flex items-center gap-4">
+        <div className="px-4 py-3 flex items-center justify-between">
+          <button
+            onClick={() => setTeamsExpanded(!teamsExpanded)}
+            className="flex items-center gap-4 hover:bg-gray-50 dark:hover:bg-gray-700 -ml-2 px-2 py-1 rounded-lg transition-colors"
+          >
             <span className="font-medium text-gray-900 dark:text-white flex items-center gap-2">
               {teamsExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
               Teams & Detection
@@ -227,14 +227,30 @@ export function PlayerSummaryTable({
             <div className="flex items-center gap-3 text-sm text-gray-600 dark:text-gray-400">
               <span>{teamCount} teams</span>
               {coachKidCount > 0 && (
-                <span className="text-blue-600 dark:text-blue-400">🔵 {coachKidCount} coach kids</span>
+                <span className="text-blue-600 dark:text-blue-400">
+                  <span className="inline-block w-2 h-2 rounded-full bg-blue-500 mr-1"></span>
+                  {coachKidCount} coach kids
+                </span>
               )}
               {siblingCount > 0 && (
-                <span className="text-green-600 dark:text-green-400">🟢 {siblingCount} siblings</span>
+                <span className="text-green-600 dark:text-green-400">
+                  <span className="inline-block w-2 h-2 rounded-full bg-green-500 mr-1"></span>
+                  {siblingCount} siblings
+                </span>
               )}
             </div>
-          </div>
-        </button>
+          </button>
+          {/* Detection Button - always visible in header */}
+          <button
+            onClick={onRunAutoDetection}
+            className="flex items-center gap-2 px-3 py-1.5 bg-purple-500 hover:bg-purple-600 text-white rounded-lg font-medium text-sm"
+            title="Auto-detect coach's kids and siblings by matching last names"
+          >
+            <Wand2 className="w-4 h-4" />
+            <span className="hidden sm:inline">Find Coach Kids & Siblings</span>
+            <span className="sm:hidden">Detect</span>
+          </button>
+        </div>
 
         {teamsExpanded && (
           <div className="px-4 pb-4 border-t border-gray-200 dark:border-gray-700">
@@ -294,38 +310,30 @@ export function PlayerSummaryTable({
                 })}
               </div>
 
-              {/* Detection Button */}
-              <div className="flex items-center gap-3 pt-2 border-t border-gray-200 dark:border-gray-700">
-                <button
-                  onClick={onRunAutoDetection}
-                  className="flex items-center gap-2 px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg font-medium"
-                  title="Auto-detect coach's kids and siblings by matching last names"
-                >
-                  <Wand2 className="w-4 h-4" />
-                  Find Coach Kids & Siblings
-                </button>
-                {(coachKidCount > 0 || siblingCount > 0) && (
-                  <>
+              {/* Clear buttons - only shown when expanded and there are items to clear */}
+              {(coachKidCount > 0 || siblingCount > 0) && (
+                <div className="flex items-center gap-3 pt-2 border-t border-gray-200 dark:border-gray-700">
+                  {coachKidCount > 0 && (
+                    <button
+                      onClick={onClearCoachKids}
+                      className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                    >
+                      Clear Coach Kids
+                    </button>
+                  )}
+                  {coachKidCount > 0 && siblingCount > 0 && (
                     <div className="h-4 border-l border-gray-300 dark:border-gray-600" />
-                    {coachKidCount > 0 && (
-                      <button
-                        onClick={onClearCoachKids}
-                        className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
-                      >
-                        Clear Coach Kids
-                      </button>
-                    )}
-                    {siblingCount > 0 && (
-                      <button
-                        onClick={onClearSiblings}
-                        className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
-                      >
-                        Clear Siblings
-                      </button>
-                    )}
-                  </>
-                )}
-              </div>
+                  )}
+                  {siblingCount > 0 && (
+                    <button
+                      onClick={onClearSiblings}
+                      className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                    >
+                      Clear Siblings
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -336,14 +344,14 @@ export function PlayerSummaryTable({
         {/* Collapsed Header */}
         <button
           onClick={() => setWeightsExpanded(!weightsExpanded)}
-          className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+          className="w-full px-4 py-3 flex flex-wrap items-center justify-between gap-2 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
         >
-          <div className="flex items-center gap-4">
-            <span className="font-medium text-gray-900 dark:text-white flex items-center gap-2">
-              {weightsExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          <div className="flex items-center gap-2 sm:gap-4 min-w-0">
+            <span className="font-medium text-gray-900 dark:text-white flex items-center gap-2 whitespace-nowrap">
+              {weightsExpanded ? <ChevronUp className="w-4 h-4 flex-shrink-0" /> : <ChevronDown className="w-4 h-4 flex-shrink-0" />}
               Weights
             </span>
-            <div className="flex items-center gap-3 text-sm text-gray-600 dark:text-gray-400">
+            <div className="hidden md:flex items-center gap-3 text-sm text-gray-600 dark:text-gray-400">
               {CATEGORY_GROUPS.map(({ category, shortName }) => (
                 <span key={category}>
                   {shortName} {getCategoryWeight(category)}%
@@ -351,12 +359,12 @@ export function PlayerSummaryTable({
               ))}
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-shrink-0">
             <span className={`text-sm font-medium ${isWeightsValid ? 'text-green-600' : 'text-red-600'}`}>
               Total: {totalWeight}%
             </span>
             {!isWeightsValid && (
-              <span className="text-xs text-red-500">(must be 100%)</span>
+              <span className="hidden sm:inline text-xs text-red-500">(must be 100%)</span>
             )}
           </div>
         </button>
@@ -364,7 +372,7 @@ export function PlayerSummaryTable({
         {/* Expanded Weight Sliders */}
         {weightsExpanded && (
           <div className="px-4 pb-4 border-t border-gray-200 dark:border-gray-700">
-            <div className="grid grid-cols-5 gap-4 mt-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4 mt-4">
               {CATEGORY_GROUPS.map(({ category }) => {
                 const categoryFields = fieldWeights.filter(w => w.category === category);
                 return (

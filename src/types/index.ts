@@ -1,5 +1,115 @@
+// -----------------------------------------------------------------------------
+// Auth Types
+// -----------------------------------------------------------------------------
+
+export type UserRole = 'master_admin' | 'user';
+
+export type LeagueMembershipRole = 'admin' | 'member';
+
+export interface LeagueMembership {
+  id: string;
+  leagueId: string;
+  leagueName: string;
+  leagueSlug: string;
+  role: LeagueMembershipRole;
+  createdAt: string;
+}
+
+export interface User {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  role: UserRole;
+  leagues: LeagueMembership[];
+}
+
+export interface League {
+  id: string;
+  name: string;
+  slug: string;
+  createdAt: string;
+}
+
+export interface LoginCredentials {
+  email: string;
+  password: string;
+}
+
+export interface RegisterData {
+  email: string;
+  password: string;
+  firstName?: string;
+  lastName?: string;
+  leagueName?: string;
+  leagueSlug?: string;
+}
+
+export interface ProfileUpdateData {
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+}
+
+export interface ChangePasswordData {
+  currentPassword: string;
+  newPassword: string;
+}
+
+// -----------------------------------------------------------------------------
+// League Member Types
+// -----------------------------------------------------------------------------
+
+export interface LeagueMember {
+  id: string;
+  userId: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  role: LeagueMembershipRole;
+  joinedAt: string;
+}
+
+export interface LeagueInvitation {
+  id: string;
+  email: string | null;
+  role: LeagueMembershipRole;
+  invitedByEmail: string;
+  isLinkInvite: boolean;
+  createdAt: string;
+  expiresAt: string;
+  acceptedAt: string | null;
+  isExpired: boolean;
+  isPending: boolean;
+}
+
+export interface JoinLinkStatus {
+  enabled: boolean;
+  token: string | null;
+  url: string | null;
+}
+
+export interface JoinLinkInfo {
+  leagueName: string;
+  leagueSlug: string;
+  type?: 'join_link' | 'email_invitation';
+  invitedBy?: string | null;
+  role?: LeagueMembershipRole;
+}
+
+export interface AcceptInvitationResult {
+  message: string;
+  leagueId: string;
+  leagueName: string;
+}
+
+// -----------------------------------------------------------------------------
+// Game Types
+// -----------------------------------------------------------------------------
+
 export interface Player {
   id: string;
+  divisionId?: string; // ID of the division this player belongs to (from API)
   bib: string; // Unique ID from evaluation day
   firstName: string;
   lastName: string;
@@ -53,13 +163,14 @@ export interface Player {
 
 export interface Team {
   id: string;
+  divisionId?: string; // ID of the division this team belongs to (from API)
   name: string;
   roster: Player[];
   totalScore: number;
   draftPosition: number; // 1-8
   coachKids: string[]; // player IDs
   assistantCoaches: string[]; // assistant coach last names
-  ageBreakdown: Record<number, number>; // { 10: 3, 11: 4, 12: 2 } - count per age
+  ageBreakdown: Record<string, number>; // { "10": 3, "11": 4, "12": 2 } - count per age (string keys from JSON)
 }
 
 export interface DraftPick {
@@ -80,6 +191,8 @@ export interface DraftConfig {
 }
 
 export interface DraftState {
+  id?: string; // Backend draft state ID (for API mode)
+  divisionId?: string; // ID of the division this draft belongs to (from API)
   players: Player[];
   teams: Team[];
   draftFormat: DraftFormat;
@@ -229,6 +342,7 @@ export interface Division {
   scoringMode: ScoringMode; // Whether CSV scores are raw or pre-weighted
   phase: AppPhase;
   createdAt: string; // ISO date string
+  updatedAt?: string; // ISO date string (from API)
   completedAt?: string; // ISO date string
 }
 

@@ -364,8 +364,8 @@ test.describe('Draft Flow E2E', () => {
       await page.waitForTimeout(300);
     }
 
-    // Click Back to Config
-    await page.getByRole('button', { name: /Back to Config/i }).click();
+    // Click Return to Draft Setup
+    await page.getByRole('button', { name: /Return to Draft Setup/i }).click();
 
     // Verify confirmation dialog appears and accept it
     // (dialog handler already set up above)

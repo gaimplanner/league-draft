@@ -134,9 +134,10 @@ export const DraftComplete = ({ draftState, division, onReset, onExecuteTrade }:
             <button
               onClick={onReset}
               className="px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg font-medium flex items-center gap-2"
+              title="Return to Draft Setup - this will delete all draft picks"
             >
               <ChevronLeft className="w-5 h-5" />
-              Back to Config
+              Return to Draft Setup
             </button>
           </div>
         </div>

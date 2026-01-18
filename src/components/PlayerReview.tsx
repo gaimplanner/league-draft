@@ -6,6 +6,19 @@ import { useScoringWeights } from '../hooks/useScoringWeights';
 import { recalculateAllScores } from '../utils/scoreCalculation';
 import { PlayerReviewTable } from './PlayerReviewTable';
 
+// Security: Team name validation constants
+const MAX_TEAM_NAME_LENGTH = 100;
+
+/**
+ * Sanitize team name to prevent XSS and enforce length limits.
+ */
+function sanitizeTeamName(name: string): string {
+  return name
+    .trim()
+    .slice(0, MAX_TEAM_NAME_LENGTH)
+    .replace(/[<>]/g, ''); // Remove HTML-like characters
+}
+
 interface PlayerReviewProps {
   players: Player[];
   teams: Team[];
@@ -29,12 +42,14 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
   const [selectedSiblingPairs, setSelectedSiblingPairs] = useState<Set<string>>(new Set());
   const { weights, updateWeight, resetToDefaults, validation } = useScoringWeights();
 
-  // Recalculate all player scores when weights change (only in raw mode)
+  // Recalculate all player scores when weights change (raw mode) or mode changes
   useEffect(() => {
-    // Skip recalculation in pre-weighted mode - CSV scores are already weighted
-    if (scoringMode === 'pre-weighted') return;
+    // In raw mode: weights affect calculation, so recalculate on weight changes
+    // When switching modes: always recalculate to restore correct values from raw scores
+    // Skip weight validation in pre-weighted mode since weights aren't used
+    if (scoringMode === 'raw' && !validation.isValid) return;
 
-    if (validation.isValid && players.length > 0) {
+    if (players.length > 0) {
       const recalculated = recalculateAllScores(players, weights, scoringMode);
       // Only update if scores actually changed to avoid infinite loops
       const hasChanges = recalculated.some((p, i) =>
@@ -58,16 +73,19 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
   }, [weights, scoringMode]);
 
   const handleTeamNameUpdate = (teamId: string, newName: string) => {
+    // Security: Sanitize team name input
+    const sanitizedName = sanitizeTeamName(newName);
     const updatedTeams = teams.map(t =>
-      t.id === teamId ? { ...t, name: newName } : t
+      t.id === teamId ? { ...t, name: sanitizedName } : t
     );
     onTeamsUpdate(updatedTeams);
   };
 
   const handleAssistantCoachesUpdate = (teamId: string, assistantCoachesText: string) => {
+    // Security: Sanitize each assistant coach name
     const assistantCoaches = assistantCoachesText
       .split(',')
-      .map(name => name.trim())
+      .map(name => sanitizeTeamName(name)) // Reuse sanitization function
       .filter(name => name.length > 0);
 
     const updatedTeams = teams.map(t =>
@@ -201,14 +219,41 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
       }
     }
 
+    // Start with current players, will be modified if repairs or assignments needed
+    let workingPlayers = [...players];
+
+    // Auto-repair broken sibling links by making them bidirectional
     if (brokenSiblingLinks.length > 0) {
-      alert(`Warning: Found broken sibling links. Please check: ${brokenSiblingLinks.map(p => p.name).join(', ')}`);
-      return;
+      brokenSiblingLinks.forEach(player => {
+        if (!player.siblingId) return;
+        const siblingIndex = workingPlayers.findIndex(p => p.id === player.siblingId);
+        if (siblingIndex !== -1) {
+          const sibling = workingPlayers[siblingIndex];
+          // If sibling exists but doesn't link back, create the reciprocal link
+          if (sibling.siblingId !== player.id) {
+            workingPlayers[siblingIndex] = {
+              ...sibling,
+              siblingId: player.id,
+              sibling: player.name,
+            };
+          }
+        } else {
+          // Sibling doesn't exist - clear the broken link
+          const playerIndex = workingPlayers.findIndex(p => p.id === player.id);
+          if (playerIndex !== -1) {
+            workingPlayers[playerIndex] = {
+              ...workingPlayers[playerIndex],
+              siblingId: undefined,
+              sibling: undefined,
+            };
+          }
+        }
+      });
     }
 
     // Resolve coach's kid round conflicts
     const coachKidsByTeam: Record<string, Player[]> = {};
-    players.filter(p => p.isCoachKid && p.coachTeamId).forEach(p => {
+    workingPlayers.filter(p => p.isCoachKid && p.coachTeamId).forEach(p => {
       const teamId = p.coachTeamId!;
       if (!coachKidsByTeam[teamId]) {
         coachKidsByTeam[teamId] = [];
@@ -276,20 +321,19 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
       }
     }
 
+    // Apply round assignments if any
     if (Object.keys(roundAssignments).length > 0) {
-      const updatedPlayers = players.map(player => {
+      workingPlayers = workingPlayers.map(player => {
         if (roundAssignments[player.id] !== undefined) {
           return { ...player, lockedToRound: roundAssignments[player.id] };
         }
         return player;
       });
-
-      onSetAllPlayers(updatedPlayers);
-      onNext(updatedPlayers);
-      return;
     }
 
-    onNext();
+    // Always pass workingPlayers (may have sibling repairs and/or round assignments)
+    onSetAllPlayers(workingPlayers);
+    onNext(workingPlayers);
   };
 
   return (

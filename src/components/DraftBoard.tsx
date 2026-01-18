@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Undo, ChevronLeft, AlertCircle, Search, ChevronRight } from 'lucide-react';
-import { DraftState, Team } from '../types';
+import { DraftState, Team, DivisionAgeRange } from '../types';
 import { TeamRosters } from './TeamRosters';
 import { getNextPick, calculateDraftOrder } from '../utils/draftOrder';
 import { useViewMode } from '../contexts/ViewContext';
@@ -14,9 +14,12 @@ interface DraftBoardProps {
   onReset: () => void;
   enforceAgeLimit: boolean;
   maxPerAge: number;
+  ageRange?: DivisionAgeRange;
   pendingComplete: boolean;
   onFinalizeDraft: () => void;
   onCancelComplete: () => void;
+  // Issue #20: isLoading prop to disable buttons during API calls
+  isLoading?: boolean;
 }
 
 export const DraftBoard = ({
@@ -27,9 +30,11 @@ export const DraftBoard = ({
   onReset,
   enforceAgeLimit,
   maxPerAge,
+  ageRange: _ageRange,
   pendingComplete,
   onFinalizeDraft,
   onCancelComplete,
+  isLoading = false,
 }: DraftBoardProps) => {
   const viewMode = useViewMode();
   const isPublicView = viewMode === 'public';
@@ -180,7 +185,7 @@ export const DraftBoard = ({
         <div className="bg-gradient-to-r from-blue-600 to-blue-500 rounded-lg p-6 sm:p-8 mb-4 text-white shadow-lg">
           {/* Header with centered content and absolute-positioned buttons */}
           <div className="relative">
-            {/* Centered content - full width */}
+            {/* Centered content */}
             {currentTeam && (
               <div className="text-center">
                 <div className="text-sm uppercase tracking-wide opacity-90 mb-1">
@@ -222,36 +227,36 @@ export const DraftBoard = ({
               </div>
             )}
 
-            {/* Admin controls - absolute positioned top-right */}
+            {/* Admin controls - absolute positioned top-right, smaller buttons */}
             {!isPublicView && (
-              <div className="absolute top-0 right-0 flex gap-2">
+              <div className="absolute top-0 right-0 flex gap-1">
                 {/* Skip Pick - only available in final round */}
                 {isFinalRound && (
                   <button
                     onClick={handleSkipPick}
-                    className="px-3 py-2 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg font-medium flex items-center gap-2 backdrop-blur-sm"
+                    className="px-2 py-1 bg-yellow-500 hover:bg-yellow-600 text-white rounded text-xs font-medium flex items-center gap-1 backdrop-blur-sm"
                     title="Skip this team's pick"
                   >
                     <span>⏭️</span>
-                    <span className="hidden sm:inline">Skip Pick</span>
+                    <span className="hidden sm:inline">Skip</span>
                   </button>
                 )}
                 <button
                   onClick={onUndo}
-                  disabled={draftState.picks.length === 0}
-                  className="px-3 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg font-medium flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed backdrop-blur-sm"
+                  disabled={draftState.picks.length === 0 || isLoading}
+                  className="px-2 py-1 bg-white/20 hover:bg-white/30 text-white rounded text-xs font-medium flex items-center gap-1 disabled:opacity-30 disabled:cursor-not-allowed backdrop-blur-sm"
                   title="Undo last pick"
                 >
-                  <Undo className="w-4 h-4" />
+                  <Undo className="w-3 h-3" />
                   <span className="hidden sm:inline">Undo</span>
                 </button>
                 <button
                   onClick={onReset}
-                  className="px-3 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg font-medium flex items-center gap-2 backdrop-blur-sm"
-                  title="Go back to configuration"
+                  className="px-2 py-1 bg-white/20 hover:bg-white/30 text-white rounded text-xs font-medium flex items-center gap-1 backdrop-blur-sm"
+                  title="Return to Draft Setup - this will delete all draft picks"
                 >
-                  <ChevronLeft className="w-4 h-4" />
-                  <span className="hidden sm:inline">Back to Config</span>
+                  <ChevronLeft className="w-3 h-3" />
+                  <span className="hidden sm:inline">Reset</span>
                 </button>
               </div>
             )}
@@ -293,9 +298,10 @@ export const DraftBoard = ({
                         onDraftPlayer(mandatoryPlayer.id);
                       }
                     }}
-                    className="px-4 py-3 bg-green-600 hover:bg-green-700 text-white font-bold text-lg rounded-lg inline-flex items-center justify-center gap-2 shadow-lg"
+                    disabled={isLoading}
+                    className="px-4 py-3 bg-green-600 hover:bg-green-700 text-white font-bold text-lg rounded-lg inline-flex items-center justify-center gap-2 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Draft {mandatoryPlayer?.name}
+                    {isLoading ? 'Drafting...' : `Draft ${mandatoryPlayer?.name}`}
                     <ChevronRight className="w-5 h-5" />
                   </button>
                 </div>
@@ -305,8 +311,8 @@ export const DraftBoard = ({
 
           {/* Best Available by Age - show when no mandatory pick */}
           {!draftState.mandatoryPick && !isPublicView && (() => {
-            // Get best available player for each age (only eligible players for current team)
-            const bestByAge: Record<number, typeof availablePlayers[0]> = {};
+            // Get top 2 available players for each age (only eligible players for current team)
+            const topByAge: Record<number, typeof availablePlayers> = {};
             availablePlayers.forEach(player => {
               // Skip players that current team cannot draft
               const isCoachKidForOtherTeam = player.isCoachKid && player.coachTeamId && player.coachTeamId !== draftState.currentTeamId;
@@ -314,11 +320,24 @@ export const DraftBoard = ({
               if (isCoachKidForOtherTeam || isSiblingLocked) return;
 
               const age = player.littleLeagueAge;
-              if (!bestByAge[age] || player.totalScore > bestByAge[age].totalScore) {
-                bestByAge[age] = player;
+              if (!topByAge[age]) {
+                topByAge[age] = [];
               }
+              topByAge[age].push(player);
             });
-            const ages = Object.keys(bestByAge).map(Number).sort((a, b) => a - b);
+
+            // Sort each age group by score and keep top 2
+            Object.keys(topByAge).forEach(age => {
+              topByAge[Number(age)] = topByAge[Number(age)]
+                .sort((a, b) => b.totalScore - a.totalScore)
+                .slice(0, 2);
+            });
+
+            // Only show ages that have available players
+            const ages = Object.keys(topByAge)
+              .map(Number)
+              .filter(age => topByAge[age] && topByAge[age].length > 0)
+              .sort((a, b) => a - b);
 
             if (ages.length === 0) return null;
 
@@ -330,25 +349,34 @@ export const DraftBoard = ({
                   </div>
                   <div className="inline-flex gap-3 flex-wrap justify-center">
                   {ages.map(age => {
-                    const player = bestByAge[age];
+                    const players = topByAge[age] || [];
                     return (
                       <div
                         key={age}
                         className="bg-white/10 rounded-lg p-3 flex flex-col items-center min-w-[120px]"
                       >
-                        <span className="text-xs text-white/60 mb-1">Age {age}</span>
-                        <span className="font-medium text-white text-sm text-center">
-                          {player.firstName} {player.lastName.charAt(0)}.
-                        </span>
-                        <span className="text-sm text-white/80 mb-2">
-                          {player.totalScore.toFixed(1)} pts
-                        </span>
-                        <button
-                          onClick={() => onDraftPlayer(player.id)}
-                          className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded text-sm font-medium w-full"
-                        >
-                          Draft
-                        </button>
+                        <span className="text-xs text-white/60 mb-2">Age {age}</span>
+                        {players.length === 0 ? (
+                          <span className="text-sm text-white/40 italic">None available</span>
+                        ) : (
+                          players.map((player, idx) => (
+                            <div key={player.id} className={`flex flex-col items-center w-full ${idx > 0 ? 'mt-2 pt-2 border-t border-white/20' : ''}`}>
+                              <span className="font-medium text-white text-sm text-center">
+                                {player.firstName} {player.lastName.charAt(0)}.
+                              </span>
+                              <span className="text-sm text-white/80 mb-1">
+                                {player.totalScore.toFixed(1)} pts
+                              </span>
+                              <button
+                                onClick={() => onDraftPlayer(player.id)}
+                                disabled={isLoading}
+                                className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-xs font-medium w-full disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                {isLoading ? '...' : 'Draft'}
+                              </button>
+                            </div>
+                          ))
+                        )}
                       </div>
                     );
                   })}
@@ -586,13 +614,14 @@ export const DraftBoard = ({
                                   }
                                   onDraftPlayer(player.id);
                                 }}
-                                className={`px-3 py-2 rounded-lg font-semibold text-sm transition-all ${
+                                disabled={isLoading}
+                                className={`px-3 py-2 rounded-lg font-semibold text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
                                   isMandatory
                                     ? 'bg-yellow-500 hover:bg-yellow-600 text-white'
                                     : 'bg-green-600 hover:bg-green-700 text-white'
                                 }`}
                               >
-                                Draft
+                                {isLoading ? 'Drafting...' : 'Draft'}
                               </button>
                             )}
                           </div>
@@ -633,15 +662,17 @@ export const DraftBoard = ({
             <div className="flex gap-4 justify-center">
               <button
                 onClick={onCancelComplete}
-                className="px-4 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-lg font-medium transition-colors"
+                disabled={isLoading}
+                className="px-4 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 ← Go Back & Review
               </button>
               <button
                 onClick={onFinalizeDraft}
-                className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors"
+                disabled={isLoading}
+                className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Finalize Draft →
+                {isLoading ? 'Finalizing...' : 'Finalize Draft →'}
               </button>
             </div>
           </div>

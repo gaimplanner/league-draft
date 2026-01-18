@@ -71,6 +71,20 @@ A comprehensive draft management system for Little League baseball divisions. St
 - Real-time sync via localStorage
 - Access public view: `?view=public`
 
+### League Management
+- **Multi-league support**: Users can belong to multiple leagues
+- **Role-based access**: Admin and member roles per league
+- **Member management**: View, invite, and remove league members
+- **Invite system**: Email invitations or shareable join links
+- **Profile management**: Update name, email, and password
+
+### Security
+- **Session-based authentication**: Secure Django sessions with CSRF protection
+- **Rate limiting**: Brute-force protection on login, registration, and password reset
+- **Session timeout**: Automatic 24-hour session expiration
+- **Role-based authorization**: Admin-only operations for trades, resets, and member management
+- **Multi-tenant isolation**: Users can only access their league's data
+
 ### Data Persistence
 - Automatic save after each action
 - Resume incomplete drafts
@@ -79,13 +93,35 @@ A comprehensive draft management system for Little League baseball divisions. St
 
 ## Getting Started
 
+### Prerequisites
+
+- Node.js 18+
+- Docker and Docker Compose (for backend)
+
 ### Installation
 
 ```bash
 npm install
 ```
 
-### Development
+### Backend Setup
+
+The application uses a Django REST Framework backend with PostgreSQL.
+
+```bash
+# Start backend services (API + PostgreSQL)
+docker compose up -d
+
+# Run database migrations
+docker compose exec api python manage.py migrate
+
+# Create a superuser (optional)
+docker compose exec api python manage.py createsuperuser
+```
+
+The API will be available at `http://localhost:3001`.
+
+### Frontend Development
 
 ```bash
 npm run dev
@@ -103,6 +139,12 @@ npm run build
 
 ```bash
 npm run preview
+```
+
+### Stop Backend Services
+
+```bash
+docker compose down
 ```
 
 ## Import Formats
@@ -144,9 +186,9 @@ Each tab should include:
 - Round bumping available for conflicts
 
 ### Siblings
-- If one sibling is drafted, the team must draft the other
-- Prevents siblings from being separated
-- Automatic locking when first sibling is picked
+- If one sibling is drafted, the team must draft the other in that sibling's projected round
+- Prevents siblings from being separated while respecting their skill-based draft position
+- Automatic locking when first sibling is picked (but mandatory pick only triggers in the sibling's projected round)
 
 ### Age Limits (Optional)
 - Enforce maximum players per age group
@@ -176,13 +218,18 @@ Each tab should include:
 | CSV Parsing | papaparse |
 | Excel Parsing | xlsx |
 | State | React Hooks + Context |
-| Storage | localStorage |
+| Backend | Django 5.2 + Django REST Framework |
+| Database | PostgreSQL 16 |
+| Auth | Session-based (Django sessions) |
+| Container | Docker + Docker Compose |
 
 ## Project Structure
 
 ```
 src/
 ├── App.tsx                    # Main app with phase routing
+├── api/
+│   └── client.ts              # API client with transformations
 ├── components/
 │   ├── DivisionSelector.tsx   # Division management
 │   ├── DivisionCreator.tsx    # New division setup
@@ -196,13 +243,26 @@ src/
 │   ├── SimulationModal.tsx    # Draft simulation
 │   ├── TradeModal.tsx         # Post-draft trades
 │   ├── CompleteRosters.tsx    # Roster display
+│   ├── LoginPage.tsx          # User login
+│   ├── RegisterPage.tsx       # User registration
+│   ├── ForgotPasswordPage.tsx # Password reset request
+│   ├── ResetPasswordPage.tsx  # Password reset form
+│   ├── JoinPage.tsx           # League invitation acceptance
+│   ├── profile/               # Profile & league management
+│   │   ├── ProfilePage.tsx    # Main profile page with tabs
+│   │   ├── MembersTab.tsx     # League member list
+│   │   ├── InviteModal.tsx    # Email invite form
+│   │   ├── JoinLinkSection.tsx# Shareable join link management
+│   │   ├── ProfileTab.tsx     # Edit user profile
+│   │   └── ChangePasswordModal.tsx
 │   └── evaluation/            # Excel import components
 ├── hooks/
-│   ├── useDivisions.ts        # Division state
-│   ├── useDraft.ts            # Draft logic
+│   ├── useDivisions.ts        # Division state (API mode)
+│   ├── useDraft.ts            # Draft logic (API mode)
 │   ├── useEvaluationImport.ts # Excel processing
 │   └── usePlayerScoring.ts    # Score calculations
 ├── contexts/
+│   ├── AuthContext.tsx        # Authentication state
 │   └── ViewContext.tsx        # Admin/Public mode
 ├── types/
 │   └── index.ts               # TypeScript interfaces
@@ -216,6 +276,22 @@ src/
 │   └── evaluationProcessor.ts # Excel processing
 └── e2e/
     └── draft-flow.spec.ts     # Playwright E2E tests
+
+server/
+├── draft/
+│   ├── models.py              # Django models (League, User, Division, Team, Player, etc.)
+│   ├── views.py               # DRF ViewSets and auth views
+│   ├── serializers.py         # DRF serializers
+│   ├── services.py            # Draft business logic
+│   ├── middleware.py          # Tenant middleware
+│   ├── throttling.py          # Rate limiting classes
+│   ├── validators.py          # Password validation
+│   └── migrations/            # Database migrations
+├── league_draft/
+│   ├── settings.py            # Django settings
+│   └── urls.py                # URL routing
+├── Dockerfile                 # API container
+└── docker-compose.yml         # Full stack setup
 ```
 
 ## Branching Strategy
