@@ -40,6 +40,7 @@ export const DraftBoard = ({
   const isPublicView = viewMode === 'public';
 
   const [searchTerm, setSearchTerm] = useState('');
+  const [expandedPlayerId, setExpandedPlayerId] = useState<string | null>(null);
   const [showRoundInterstitial, setShowRoundInterstitial] = useState(false);
   const [interstitialData, setInterstitialData] = useState<{
     completedRound: number;
@@ -425,9 +426,10 @@ export const DraftBoard = ({
                 />
               </div>
 
-              <div className="space-y-2 max-h-[600px] overflow-y-auto">
+              <div className="space-y-1 max-h-[600px] overflow-y-auto">
                 {availablePlayers.map((player) => {
                   const isMandatory = draftState.mandatoryPick?.playerId === player.id;
+                  const isExpanded = expandedPlayerId === player.id;
 
                   // Check if this is a coach's kid assigned to another team
                   const isCoachKidForOtherTeam = player.isCoachKid &&
@@ -444,140 +446,150 @@ export const DraftBoard = ({
                     ? draftState.teams.find(t => t.id === player.lockedToTeamId)
                     : null;
 
-                  // Check if player's age is at/over limit for current team (only if age limit is enforced)
-                  // This is now a WARNING, not a block
+                  // Check if player's age is at/over limit for current team
                   const playerAge = player.littleLeagueAge;
                   const currentTeamAgeCount = currentTeam?.ageBreakdown?.[playerAge] || 0;
-                  const isAgeWarning = enforceAgeLimit && maxPerAge > 0 && currentTeamAgeCount >= maxPerAge - 1;
                   const isAgeMaxed = enforceAgeLimit && maxPerAge > 0 && currentTeamAgeCount >= maxPerAge;
 
                   // Player is restricted ONLY if they're a coach's kid for another team or locked sibling
-                  // Age limit is a WARNING, not a restriction
                   const isRestricted = isCoachKidForOtherTeam || isSiblingLockedToOtherTeam;
+
                   return (
                     <div
                       key={player.id}
                       id={`player-${player.id}`}
                       className={`
-                        w-full text-left p-3 rounded-lg border-2 transition-all
-                        ${
-                          isRestricted && !isPublicView
-                            ? 'opacity-50 border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-900/10'
-                            : isMandatory && !isPublicView
-                            ? 'border-yellow-400 bg-yellow-50 dark:bg-yellow-900/20'
-                            : 'border-gray-200 dark:border-gray-700'
+                        rounded-lg border transition-all cursor-pointer
+                        ${isRestricted && !isPublicView
+                          ? 'opacity-60 border-red-400/50 dark:border-red-700/50 bg-red-50/50 dark:bg-red-900/10'
+                          : isMandatory && !isPublicView
+                          ? 'border-yellow-400 bg-yellow-50 dark:bg-yellow-900/20'
+                          : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
                         }
                       `}
+                      onClick={() => setExpandedPlayerId(isExpanded ? null : player.id)}
                     >
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1 min-w-0">
-                          <div className="font-medium text-gray-900 dark:text-white truncate">
-                            {player.name}
-                          </div>
-                          <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                            Rank #{player.rank} • Round {player.lockedToRound ?? player.projectedRound}
-                            {player.lockedToRound && player.lockedToRound !== player.projectedRound && (
-                              <span className="text-blue-600 dark:text-blue-400 font-bold">*</span>
-                            )}
-                            {' '}• Age {player.littleLeagueAge}
-                          </div>
+                      {/* Compact Row */}
+                      <div className="flex items-center gap-2 px-2 py-1.5">
+                        {/* Rank */}
+                        <span className="text-xs text-gray-400 dark:text-gray-500 w-6 text-right tabular-nums">
+                          #{player.rank}
+                        </span>
 
-                          {/* Restricted player warning */}
+                        {/* Name */}
+                        <span className={`flex-1 text-sm font-medium truncate ${
+                          isRestricted ? 'text-gray-500 dark:text-gray-500' : 'text-gray-900 dark:text-white'
+                        }`}>
+                          {player.name}
+                        </span>
+
+                        {/* Icon Badges */}
+                        <div className="flex items-center gap-0.5 flex-shrink-0">
+                          {player.isCoachKid && (
+                            <span className={`w-5 h-5 rounded flex items-center justify-center text-xs ${
+                              isRestricted ? 'bg-red-200 dark:bg-red-800' : 'bg-blue-200 dark:bg-blue-800'
+                            }`} title={`Coach's Kid${coachTeam ? ` (${getTeamDisplayName(coachTeam)})` : ''}`}>
+                              👨‍👧
+                            </span>
+                          )}
+                          {player.sibling && (
+                            <span className={`w-5 h-5 rounded flex items-center justify-center text-xs ${
+                              isSiblingLockedToOtherTeam ? 'bg-red-200 dark:bg-red-800' : 'bg-purple-200 dark:bg-purple-800'
+                            }`} title={`Sibling${player.lockedToTeamId ? ` (locked to ${(() => { const t = draftState.teams.find(t => t.id === player.lockedToTeamId); return t ? getTeamDisplayName(t) : 'team'; })()})` : ''}`}>
+                              👥
+                            </span>
+                          )}
+                          {player.isAllStar && (
+                            <span className="w-5 h-5 rounded bg-yellow-200 dark:bg-yellow-800 flex items-center justify-center text-xs" title="All-Star">
+                              ⭐
+                            </span>
+                          )}
+                          {player.isDNE && (
+                            <span className="w-5 h-5 rounded bg-orange-200 dark:bg-orange-800 flex items-center justify-center text-xs" title="DNE">
+                              🚫
+                            </span>
+                          )}
+                          {isAgeMaxed && !isRestricted && (
+                            <span className="w-5 h-5 rounded bg-orange-200 dark:bg-orange-800 flex items-center justify-center text-xs" title={`Age ${playerAge} at limit`}>
+                              ⚠️
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Age */}
+                        <span className="text-xs text-gray-500 dark:text-gray-400 w-4 text-center">
+                          {player.littleLeagueAge}
+                        </span>
+
+                        {/* Score */}
+                        {!isPublicView && (
+                          <span className={`text-sm font-bold w-10 text-right tabular-nums ${
+                            isRestricted ? 'text-gray-400' : 'text-gray-900 dark:text-white'
+                          }`}>
+                            {player.totalScore.toFixed(1)}
+                          </span>
+                        )}
+
+                        {/* Draft Button */}
+                        {!isPublicView && !isRestricted && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (enforceAgeLimit && maxPerAge > 0 && currentTeamAgeCount >= maxPerAge) {
+                                if (!window.confirm(`Warning: Team already has ${currentTeamAgeCount} players age ${playerAge} (limit: ${maxPerAge}). Continue anyway?`)) {
+                                  return;
+                                }
+                              }
+                              onDraftPlayer(player.id);
+                            }}
+                            disabled={isLoading}
+                            className={`px-2 py-1 rounded text-xs font-semibold transition-all disabled:opacity-50 ${
+                              isMandatory
+                                ? 'bg-yellow-500 hover:bg-yellow-600 text-white'
+                                : 'bg-green-600 hover:bg-green-700 text-white'
+                            }`}
+                          >
+                            Draft
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Expanded Details */}
+                      {isExpanded && (
+                        <div className="px-3 py-2 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 text-xs space-y-1">
+                          <div className="flex justify-between">
+                            <span className="text-gray-500">Round {player.lockedToRound ?? player.projectedRound}</span>
+                            <span className="text-gray-500">
+                              H:{player.hittingSubtotal.toFixed(1)} F:{player.fieldingSubtotal.toFixed(1)} P:{player.pitchingSubtotal.toFixed(1)}
+                            </span>
+                          </div>
                           {isCoachKidForOtherTeam && (
-                            <div className="text-xs text-red-600 dark:text-red-400 mt-2 font-semibold">
-                              ⚠ Coach's kid - Can only be drafted by {coachTeam ? getTeamDisplayName(coachTeam) : 'Unknown'}
+                            <div className="text-red-600 dark:text-red-400">
+                              Coach's kid → only {coachTeam ? getTeamDisplayName(coachTeam) : 'Unknown'} can draft
                             </div>
                           )}
                           {isSiblingLockedToOtherTeam && !isCoachKidForOtherTeam && (
-                            <div className="text-xs text-red-600 dark:text-red-400 mt-2 font-semibold">
-                              ⚠ Sibling locked - Must be drafted by {siblingLockedTeam ? getTeamDisplayName(siblingLockedTeam) : 'Unknown'}
+                            <div className="text-red-600 dark:text-red-400">
+                              Sibling locked → must go to {siblingLockedTeam ? getTeamDisplayName(siblingLockedTeam) : 'Unknown'}
                             </div>
                           )}
-                          {isAgeMaxed && !isCoachKidForOtherTeam && !isSiblingLockedToOtherTeam && (
-                            <div className="text-xs text-orange-600 dark:text-orange-400 mt-2 font-semibold">
-                              ⚠️ Warning: Team has {currentTeamAgeCount} players age {playerAge} (limit: {maxPerAge})
+                          {player.isCoachKid && !isCoachKidForOtherTeam && (
+                            <div className="text-blue-600 dark:text-blue-400">
+                              Coach's kid for this team
                             </div>
                           )}
-                          {isAgeWarning && !isAgeMaxed && !isCoachKidForOtherTeam && !isSiblingLockedToOtherTeam && (
-                            <div className="text-xs text-yellow-600 dark:text-yellow-400 mt-2">
-                              ⚠️ Team has {currentTeamAgeCount} players age {playerAge}
+                          {player.sibling && !isSiblingLockedToOtherTeam && (
+                            <div className="text-purple-600 dark:text-purple-400">
+                              Has sibling: {player.sibling}
                             </div>
                           )}
-
-                          <div className="flex gap-1 mt-1 flex-wrap">
-                            {player.isCoachKid && (
-                              <span className={`text-xs px-2 py-0.5 rounded ${
-                                isRestricted
-                                  ? 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200'
-                                  : 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200'
-                              }`}>
-                                Coach's Kid{coachTeam ? ` (${getTeamDisplayName(coachTeam)})` : ''}
-                              </span>
-                            )}
-                            {player.isDNE && (
-                              <span className="text-xs bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200 px-2 py-0.5 rounded">
-                                DNE
-                              </span>
-                            )}
-                            {player.isAllStar && (
-                              <span className="text-xs bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 px-2 py-0.5 rounded">
-                                All-Star
-                              </span>
-                            )}
-                            {player.sibling && (
-                              <span className={`text-xs px-2 py-0.5 rounded ${
-                                isSiblingLockedToOtherTeam
-                                  ? 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200'
-                                  : player.lockedToTeamId
-                                  ? 'bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200'
-                                  : 'bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200'
-                              }`}>
-                                Sibling{player.lockedToTeamId ? ` → ${(() => { const t = draftState.teams.find(t => t.id === player.lockedToTeamId); return t ? getTeamDisplayName(t) : 'Unknown'; })()}` : ''}
-                              </span>
-                            )}
-                          </div>
+                          {isAgeMaxed && !isRestricted && (
+                            <div className="text-orange-600 dark:text-orange-400">
+                              ⚠️ Team has {currentTeamAgeCount} players age {playerAge} (limit: {maxPerAge})
+                            </div>
+                          )}
                         </div>
-                        {/* Scores and Draft Button - hidden in public view */}
-                        {!isPublicView && (
-                          <div className="ml-2 flex items-center gap-3">
-                            <div className="text-right">
-                              <div className={`text-lg font-bold ${
-                                isRestricted
-                                  ? 'text-gray-400 dark:text-gray-600'
-                                  : 'text-gray-900 dark:text-white'
-                              }`}>
-                                {player.totalScore.toFixed(1)}
-                              </div>
-                              <div className="text-xs text-gray-500 dark:text-gray-500 mt-1">
-                                H:{player.hittingSubtotal.toFixed(0)} F:{player.fieldingSubtotal.toFixed(0)} P:{player.pitchingSubtotal.toFixed(0)}
-                              </div>
-                            </div>
-                            {/* Draft Button */}
-                            {!isRestricted && (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  // Check for age warning confirmation
-                                  if (enforceAgeLimit && maxPerAge > 0 && currentTeamAgeCount >= maxPerAge) {
-                                    if (!window.confirm(`Warning: Team already has ${currentTeamAgeCount} players age ${playerAge} (limit: ${maxPerAge}). Continue anyway?`)) {
-                                      return;
-                                    }
-                                  }
-                                  onDraftPlayer(player.id);
-                                }}
-                                disabled={isLoading}
-                                className={`px-3 py-2 rounded-lg font-semibold text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
-                                  isMandatory
-                                    ? 'bg-yellow-500 hover:bg-yellow-600 text-white'
-                                    : 'bg-green-600 hover:bg-green-700 text-white'
-                                }`}
-                              >
-                                {isLoading ? 'Drafting...' : 'Draft'}
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </div>
+                      )}
                     </div>
                   );
                 })}
