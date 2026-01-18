@@ -257,46 +257,80 @@ export function PlayerReviewTable({
 
         {teamsExpanded && (
           <div className="px-4 pb-4 border-t border-gray-200 dark:border-gray-700">
-            <div className="mt-4">
-              {/* Team Names & Coaches Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {teams.map(team => {
-                  const teamCoachKids = players.filter(p => p.coachTeamId === team.id);
-                  return (
-                    <div key={team.id} className="space-y-2">
-                      <div>
-                        <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
-                          Head Coach (Team Name)
-                        </label>
-                        <input
-                          type="text"
-                          value={team.name}
-                          onChange={(e) => onTeamNameUpdate(team.id, e.target.value)}
-                          placeholder={`Coach Name (e.g., Smith)`}
-                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
-                          Assistant Coaches (comma-separated)
-                        </label>
+            {/* Instructions */}
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-3 mb-3">
+              Enter head coach last name as the team name. Assistant coaches are optional.
+            </p>
+
+            {/* Team Cards Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+              {teams.map((team, index) => {
+                const teamCoachKids = players.filter(p => p.coachTeamId === team.id);
+                const hasCoachKids = teamCoachKids.length > 0;
+
+                return (
+                  <div
+                    key={team.id}
+                    className={`rounded-lg border overflow-hidden ${
+                      hasCoachKids
+                        ? 'border-yellow-400 dark:border-yellow-600 bg-yellow-50/50 dark:bg-yellow-900/10'
+                        : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50'
+                    }`}
+                  >
+                    {/* Team Header */}
+                    <div className={`px-3 py-2 flex items-center gap-2 ${
+                      hasCoachKids
+                        ? 'bg-yellow-100 dark:bg-yellow-900/30'
+                        : 'bg-gray-100 dark:bg-gray-700/50'
+                    }`}>
+                      <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                        hasCoachKids
+                          ? 'bg-yellow-500 text-white'
+                          : 'bg-gray-400 dark:bg-gray-600 text-white'
+                      }`}>
+                        {index + 1}
+                      </span>
+                      <input
+                        type="text"
+                        value={team.name}
+                        onChange={(e) => onTeamNameUpdate(team.id, e.target.value)}
+                        placeholder="Coach Name"
+                        className="flex-1 px-2 py-1 text-sm font-medium border-0 bg-transparent text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500 rounded"
+                      />
+                    </div>
+
+                    {/* Team Body */}
+                    <div className="px-3 py-2 space-y-2">
+                      {/* Assistant Coaches */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">Asst.</span>
                         <input
                           type="text"
                           value={team.assistantCoaches.join(', ')}
                           onChange={(e) => onAssistantCoachesUpdate(team.id, e.target.value)}
-                          placeholder="Smith, Jones"
-                          className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400"
+                          placeholder="Names..."
+                          className="flex-1 px-2 py-1 text-xs border border-gray-200 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 placeholder-gray-400"
                         />
                       </div>
-                      {teamCoachKids.length > 0 && (
-                        <p className="text-xs text-gray-500 dark:text-gray-400">
-                          Coach's Kids: {teamCoachKids.map(p => p.name).join(', ')}
-                        </p>
+
+                      {/* Coach's Kids */}
+                      {hasCoachKids && (
+                        <div className="flex flex-wrap gap-1">
+                          {teamCoachKids.map(kid => (
+                            <span
+                              key={kid.id}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-yellow-200 dark:bg-yellow-800/50 text-yellow-800 dark:text-yellow-200"
+                            >
+                              <span className="w-1.5 h-1.5 rounded-full bg-yellow-500" />
+                              {kid.firstName} {kid.lastName?.charAt(0)}.
+                            </span>
+                          ))}
+                        </div>
                       )}
                     </div>
-                  );
-                })}
-              </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
