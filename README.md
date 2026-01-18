@@ -78,6 +78,13 @@ A comprehensive draft management system for Little League baseball divisions. St
 - **Invite system**: Email invitations or shareable join links
 - **Profile management**: Update name, email, and password
 
+### Security
+- **Session-based authentication**: Secure Django sessions with CSRF protection
+- **Rate limiting**: Brute-force protection on login, registration, and password reset
+- **Session timeout**: Automatic 24-hour session expiration
+- **Role-based authorization**: Admin-only operations for trades, resets, and member management
+- **Multi-tenant isolation**: Users can only access their league's data
+
 ### Data Persistence
 - Automatic save after each action
 - Resume incomplete drafts
@@ -277,6 +284,8 @@ server/
 │   ├── serializers.py         # DRF serializers
 │   ├── services.py            # Draft business logic
 │   ├── middleware.py          # Tenant middleware
+│   ├── throttling.py          # Rate limiting classes
+│   ├── validators.py          # Password validation
 │   └── migrations/            # Database migrations
 ├── league_draft/
 │   ├── settings.py            # Django settings

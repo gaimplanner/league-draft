@@ -36,6 +36,8 @@ Has name, roster (drafted players), totalScore, draftPosition, coachKids array, 
 - **LeagueMembership**: Users can belong to multiple leagues with roles (admin/member)
 - **TenantMiddleware**: Injects `request.league` based on user's membership or X-League-ID header
 - **Session-based auth**: Django sessions with CSRF protection
+- **Rate limiting**: AuthRateThrottle (5/min) and PasswordResetRateThrottle (3/hr)
+- **Session timeout**: 24-hour expiration (SESSION_COOKIE_AGE)
 
 ### State Management
 - `useDivisions` hook: Division CRUD via API
@@ -65,6 +67,9 @@ Has name, roster (drafted players), totalScore, draftPosition, coachKids array, 
 | `server/draft/serializers.py` | DRF serializers with snake_case/camelCase handling |
 | `server/draft/services.py` | Draft business logic (start, pick, undo, trade) |
 | `server/draft/middleware.py` | TenantMiddleware for multi-tenancy |
+| `server/draft/throttling.py` | Rate limiting classes (AuthRateThrottle, PasswordResetRateThrottle) |
+| `server/draft/validators.py` | Custom password validators (StrongPasswordValidator) |
+| `src/utils/passwordValidation.ts` | Client-side password validation matching Django validators |
 | `src/components/profile/*.tsx` | Profile page, member management, invitations |
 | `src/components/JoinPage.tsx` | League invitation acceptance flow |
 
@@ -169,14 +174,22 @@ docker compose exec api python manage.py migrate
 - DivisionViewSet filters by `request.league`
 
 **Auth Flow:**
+- GET `/api/auth/csrf/` - Initialize CSRF token cookie (call on app load)
 - POST `/api/auth/register/` - Creates user + optional league + membership
 - POST `/api/auth/login/` - Session login
 - POST `/api/auth/logout/` - End session
 - GET `/api/auth/me/` - Current user with leagues array
-- PATCH `/api/auth/me/` - Update profile (name, email)
+- PATCH `/api/auth/me/` - Update profile (name only; email is read-only)
 - POST `/api/auth/change-password/` - Change password
-- POST `/api/auth/password-reset/` - Request password reset email
-- POST `/api/auth/password-reset-confirm/` - Confirm password reset
+- POST `/api/auth/password-reset/` - Request password reset email (rate limited: 3/hr)
+- POST `/api/auth/password-reset/confirm/` - Confirm password reset
+
+**Security Features:**
+- Rate limiting on auth endpoints (5/min for login/register, 3/hr for password reset)
+- Session timeout after 24 hours (SESSION_COOKIE_AGE = 86400)
+- CSRF protection with cookie-based tokens
+- Password validation: min 8 chars, not entirely numeric, not common passwords
+- Email changes disabled (read-only field) to prevent account takeover
 
 **League Member Management:**
 - GET `/api/leagues/{id}/members/` - List league members
