@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { Player } from '../types';
 import { updatePlayerScore, recalculateRankings } from '../utils/scoring';
 
@@ -6,6 +6,13 @@ export const usePlayerScoring = (initialPlayers: Player[], teamCount: number = 8
   const [players, setPlayers] = useState<Player[]>(initialPlayers);
   const teamCountRef = useRef(teamCount);
   teamCountRef.current = teamCount;
+
+  // Sync players when initialPlayers changes (e.g., when division is loaded from API)
+  useEffect(() => {
+    if (initialPlayers.length > 0) {
+      setPlayers(initialPlayers);
+    }
+  }, [initialPlayers]);
 
   const updatePlayer = useCallback((playerId: string, field: keyof Pick<Player, 'fieldingSubtotal' | 'hittingSubtotal' | 'pitchingSubtotal' | 'catchScore' | 'runningScore' | 'officialAdjust'>, value: number) => {
     setPlayers((currentPlayers) => {
