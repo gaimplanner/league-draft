@@ -220,7 +220,7 @@ function App() {
   }, [selectDivision]);
 
   // Handle creating a new division
-  const handleCreateDivision = useCallback((config: {
+  const handleCreateDivision = useCallback(async (config: {
     name: string;
     preset: DivisionPreset;
     teamCount: number;
@@ -228,8 +228,10 @@ function App() {
     enforceAgeLimit: boolean;
     maxPerAge: number;
   }) => {
-    createDivision(config);
-    setMode('draft');
+    const division = await createDivision(config);
+    if (division) {
+      setMode('draft');
+    }
   }, [createDivision]);
 
   // Handle CSV parsing
