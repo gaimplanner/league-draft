@@ -119,6 +119,8 @@ function transformPlayerFromApi(data: Record<string, unknown>): Player {
 function transformPlayerToApi(player: Partial<Player>): Record<string, unknown> {
   const result: Record<string, unknown> = {};
 
+  // Include id for sibling reference mapping during bulk create
+  if (player.id !== undefined) result.id = player.id;
   if (player.bib !== undefined) result.bib = player.bib;
   if (player.firstName !== undefined) result.first_name = player.firstName;
   if (player.lastName !== undefined) result.last_name = player.lastName;

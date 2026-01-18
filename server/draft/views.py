@@ -471,7 +471,15 @@ class PlayerViewSet(viewsets.ModelViewSet):
 
         import uuid as uuid_module
 
+        # Track old_id -> new_id mapping for sibling references
+        # and store sibling_id values to fix after all players are created
+        old_to_new_id = {}
+        sibling_refs = {}  # new_player_id -> old_sibling_id
+
         for player_data in players_data:
+            # Extract the original ID if present (for sibling mapping)
+            original_id = player_data.pop("id", None)
+
             coach_team_id = player_data.pop("coach_team_id", None)
             coach_team = None
             if coach_team_id:
@@ -481,8 +489,11 @@ class PlayerViewSet(viewsets.ModelViewSet):
                     # Invalid UUID or team not found - skip coach assignment
                     pass
 
-            # Sanitize UUID fields - clear invalid values
-            for uuid_field in ["sibling_id", "locked_to_team_id", "drafted_by_team_id"]:
+            # Store sibling_id for later remapping, then clear it
+            old_sibling_id = player_data.pop("sibling_id", None)
+
+            # Sanitize remaining UUID fields - clear invalid values
+            for uuid_field in ["locked_to_team_id", "drafted_by_team_id"]:
                 if uuid_field in player_data and player_data[uuid_field]:
                     try:
                         uuid_module.UUID(str(player_data[uuid_field]))
@@ -494,6 +505,25 @@ class PlayerViewSet(viewsets.ModelViewSet):
                 division=division, coach_team=coach_team, **player_data
             )
             created_players.append(player)
+
+            # Track ID mapping
+            if original_id:
+                old_to_new_id[str(original_id)] = player.id
+
+            # Track sibling reference to fix later
+            if old_sibling_id:
+                sibling_refs[player.id] = str(old_sibling_id)
+
+        # Second pass: Fix sibling_id references using the mapping
+        for player_id, old_sibling_id in sibling_refs.items():
+            new_sibling_id = old_to_new_id.get(old_sibling_id)
+            if new_sibling_id:
+                Player.objects.filter(id=player_id).update(sibling_id=new_sibling_id)
+                # Update the player object in our list too
+                for p in created_players:
+                    if p.id == player_id:
+                        p.sibling_id = new_sibling_id
+                        break
 
         # Update roster size
         total_players = division.players.count()
