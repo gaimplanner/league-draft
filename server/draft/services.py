@@ -298,11 +298,18 @@ class DraftService:
         cls, draft_state: DraftState, team: Team, current_round: int
     ) -> None:
         """Check and set mandatory pick if applicable."""
+        from django.db.models import Q
+
         division = draft_state.division
 
-        # Check for sibling locked to this team (highest priority)
+        # Check for sibling locked to this team in their effective round
+        # Siblings should be drafted in their projectedRound (or lockedToRound if set)
         locked_sibling = Player.objects.filter(
-            division=division, locked_to_team=team, is_drafted=False
+            Q(locked_to_round=current_round)
+            | Q(projected_round=current_round, locked_to_round__isnull=True),
+            division=division,
+            locked_to_team=team,
+            is_drafted=False,
         ).first()
 
         if locked_sibling:
@@ -313,8 +320,6 @@ class DraftService:
             return
 
         # Check for coach's kid in their projected round
-        from django.db.models import Q
-
         coach_kid = Player.objects.filter(
             Q(locked_to_round=current_round)
             | Q(projected_round=current_round, locked_to_round__isnull=True),
