@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { X, Key, Loader2, AlertCircle, Check, Eye, EyeOff } from 'lucide-react';
 import { api, ApiError } from '../../api/client';
+import { validatePassword, getPasswordRequirements } from '../../utils/passwordValidation';
 
 interface ChangePasswordModalProps {
   onClose: () => void;
@@ -30,8 +31,9 @@ export function ChangePasswordModal({ onClose }: ChangePasswordModalProps) {
       return;
     }
 
-    if (newPassword.length < 8) {
-      setError('New password must be at least 8 characters');
+    const passwordValidation = validatePassword(newPassword);
+    if (!passwordValidation.isValid) {
+      setError(passwordValidation.errors[0]);
       return;
     }
 
@@ -169,7 +171,7 @@ export function ChangePasswordModal({ onClose }: ChangePasswordModalProps) {
               </button>
             </div>
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              Must be at least 8 characters
+              {getPasswordRequirements().join(' • ')}
             </p>
           </div>
 

@@ -504,11 +504,61 @@ class CreateTradeSerializer(serializers.Serializer):
     reason = serializers.CharField()
 
 
+class PlayerBulkItemSerializer(serializers.Serializer):
+    """Serializer for a single player in bulk create - validates all fields."""
+
+    # Optional ID for sibling mapping
+    id = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+
+    # Required fields
+    bib = serializers.CharField(max_length=50)
+    first_name = serializers.CharField(max_length=100)
+    last_name = serializers.CharField(max_length=100)
+    little_league_age = serializers.IntegerField(min_value=4, max_value=18)
+
+    # Score fields - validated with reasonable bounds
+    field_score = serializers.DecimalField(max_digits=6, decimal_places=2, default=0, min_value=0, max_value=1000)
+    throw_score = serializers.DecimalField(max_digits=6, decimal_places=2, default=0, min_value=0, max_value=1000)
+    hit_power = serializers.DecimalField(max_digits=6, decimal_places=2, default=0, min_value=0, max_value=1000)
+    hit_form = serializers.DecimalField(max_digits=6, decimal_places=2, default=0, min_value=0, max_value=1000)
+    hit_contact = serializers.DecimalField(max_digits=6, decimal_places=2, default=0, min_value=0, max_value=1000)
+    pitching_strength = serializers.DecimalField(max_digits=6, decimal_places=2, default=0, min_value=0, max_value=1000)
+    pitching_form = serializers.DecimalField(max_digits=6, decimal_places=2, default=0, min_value=0, max_value=1000)
+    catch_score = serializers.DecimalField(max_digits=6, decimal_places=2, default=0, min_value=0, max_value=1000)
+    running_score = serializers.DecimalField(max_digits=6, decimal_places=2, default=0, min_value=0, max_value=1000)
+    fielding_subtotal = serializers.DecimalField(max_digits=6, decimal_places=2, default=0, min_value=0, max_value=1000)
+    hitting_subtotal = serializers.DecimalField(max_digits=6, decimal_places=2, default=0, min_value=0, max_value=1000)
+    pitching_subtotal = serializers.DecimalField(max_digits=6, decimal_places=2, default=0, min_value=0, max_value=1000)
+    subjective_total = serializers.DecimalField(max_digits=6, decimal_places=2, default=0, min_value=0, max_value=1000)
+    objective_total = serializers.DecimalField(max_digits=6, decimal_places=2, default=0, min_value=0, max_value=1000)
+    official_adjust = serializers.DecimalField(max_digits=6, decimal_places=2, default=0, min_value=-500, max_value=500)
+    total_score = serializers.DecimalField(max_digits=6, decimal_places=2, default=0, min_value=0, max_value=2000)
+    rank = serializers.IntegerField(default=0, min_value=0)
+    projected_round = serializers.IntegerField(default=0, min_value=0)
+
+    # Optional fields
+    birthday = serializers.CharField(max_length=50, required=False, allow_blank=True, default="")
+    is_all_star = serializers.BooleanField(default=False)
+    is_dne = serializers.BooleanField(default=False)
+    is_coach_kid = serializers.BooleanField(default=False)
+    coach_team_id = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    sibling = serializers.CharField(max_length=200, required=False, allow_blank=True, default="")
+    sibling_id = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    locked_to_round = serializers.IntegerField(required=False, allow_null=True)
+    locked_to_team_id = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+
+    # Draft status fields (usually false on import)
+    is_drafted = serializers.BooleanField(default=False)
+    drafted_by_team_id = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    drafted_in_round = serializers.IntegerField(required=False, allow_null=True)
+    drafted_at_pick = serializers.IntegerField(required=False, allow_null=True)
+
+
 class BulkCreatePlayersSerializer(serializers.Serializer):
     """Serializer for bulk creating players."""
 
     division_id = serializers.UUIDField()
-    players = serializers.ListField(child=serializers.DictField())
+    players = serializers.ListField(child=PlayerBulkItemSerializer())
 
 
 # -----------------------------------------------------------------------------

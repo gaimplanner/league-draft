@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { UserPlus, AlertCircle, Loader2, Info } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { validatePassword, getPasswordRequirements } from '../utils/passwordValidation';
 
 interface RegisterPageProps {
   onSwitchToLogin: () => void;
@@ -30,8 +31,9 @@ export function RegisterPage({ onSwitchToLogin }: RegisterPageProps) {
       return;
     }
 
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters');
+    const passwordValidation = validatePassword(password);
+    if (!passwordValidation.isValid) {
+      setError(passwordValidation.errors[0]);
       return;
     }
 
@@ -120,9 +122,9 @@ export function RegisterPage({ onSwitchToLogin }: RegisterPageProps) {
                   <span className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 px-3 py-2 bg-gray-900 text-gray-300 text-xs rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none w-56 z-10 border border-gray-700">
                     <span className="font-medium text-white">Password requirements:</span>
                     <ul className="mt-1 space-y-0.5 list-disc list-inside">
-                      <li>At least 8 characters</li>
-                      <li>Can't be too common</li>
-                      <li>Can't be entirely numeric</li>
+                      {getPasswordRequirements().map((req, i) => (
+                        <li key={i}>{req}</li>
+                      ))}
                     </ul>
                     <span className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-700"></span>
                   </span>

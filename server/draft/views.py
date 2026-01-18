@@ -310,6 +310,9 @@ class DivisionViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         """Set league when creating a division."""
         league = getattr(self.request, "league", None)
+        if not league:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("You must belong to a league to create divisions")
         serializer.save(league=league)
 
     def get_serializer_class(self):

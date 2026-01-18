@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Key, AlertCircle, Loader2, CheckCircle } from 'lucide-react';
 import { api, ApiError } from '../api/client';
+import { validatePassword } from '../utils/passwordValidation';
 
 interface ResetPasswordPageProps {
   uid: string;
@@ -29,8 +30,9 @@ export function ResetPasswordPage({ uid, token, onBackToLogin }: ResetPasswordPa
       return;
     }
 
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters');
+    const passwordValidation = validatePassword(password);
+    if (!passwordValidation.isValid) {
+      setError(passwordValidation.errors[0]);
       return;
     }
 

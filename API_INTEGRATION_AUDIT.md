@@ -249,9 +249,9 @@ For each screen/flow:
 
 | # | Phase | Issue | Severity | Component | Fixed? |
 |---|-------|-------|----------|-----------|--------|
-| 1 | 1 | Demo credentials exposed in LoginPage | Critical | LoginPage.tsx | ⬜ |
-| 2 | 1 | Password validation mismatch client/server | Critical | RegisterPage/views.py | ⬜ |
-| 3 | 1 | Missing email re-verification on email change | Critical | ProfileTab/views.py | ⬜ |
+| 1 | 1 | Demo credentials exposed in LoginPage | Critical | LoginPage.tsx | ✅ |
+| 2 | 1 | Password validation mismatch client/server | Critical | RegisterPage/views.py | ✅ |
+| 3 | 1 | Missing email re-verification on email change | Critical | ProfileTab/views.py | ✅ |
 | 4 | 1 | CSRF token extraction issues | High | api/client.ts | ⬜ |
 | 5 | 1 | Session timeout not implemented | High | settings.py | ⬜ |
 | 6 | 1 | Rate limiting missing on auth endpoints | High | views.py | ⬜ |
@@ -259,13 +259,13 @@ For each screen/flow:
 | 8 | 2 | Audit logging not implemented | Medium | views.py | ⬜ |
 | 9 | 3 | **NO AUTHENTICATION on DivisionViewSet** | **CRITICAL** | views.py | ✅ |
 | 10 | 3 | Unauthenticated access returns ALL divisions | **CRITICAL** | views.py | ✅ |
-| 11 | 3 | Division can be created with league=NULL | **CRITICAL** | serializers.py | ⬜ |
+| 11 | 3 | Division can be created with league=NULL | **CRITICAL** | views.py | ✅ |
 | 12 | 3 | localStorage fallback still present | Medium | useDivisions.ts | ⬜ |
 | 13 | 4 | No file size limit on CSV upload | Medium | FileUpload.tsx | ⬜ |
 | 14 | 4 | No MIME type validation | Medium | FileUpload.tsx | ⬜ |
 | 15 | 4 | No input validation on score edits | Medium | PlayerReviewTable.tsx | ⬜ |
 | 16 | 4 | No team name sanitization | Medium | PlayerReview.tsx | ⬜ |
-| 17 | 4 | Bulk create uses unvalidated DictField | Critical | serializers.py | ⬜ |
+| 17 | 4 | Bulk create uses unvalidated DictField | Critical | serializers.py | ✅ |
 | 18 | 4 | Delete-then-create not atomic | Medium | api/index.ts | ⬜ |
 | 19 | 5-6 | **NO AUTHENTICATION on DraftViewSet** | **CRITICAL** | views.py | ✅ |
 | 20 | 5-6 | No tenant verification in draft service | **CRITICAL** | views.py | ✅ |
@@ -273,7 +273,7 @@ For each screen/flow:
 | 22 | 5-6 | No authorization on undo operations | **CRITICAL** | views.py | ✅ |
 | 23 | 5-6 | Skip pick not implemented in API | Medium | services.py | ⬜ |
 | 24 | 7 | **NO AUTHORIZATION on trade endpoint** | **CRITICAL** | views.py | ✅ |
-| 25 | 7 | No idempotency protection on trades | **CRITICAL** | services.py | ⬜ |
+| 25 | 7 | No idempotency protection on trades | **CRITICAL** | services.py | ✅ |
 | 26 | 7 | **NO AUTHORIZATION on reset endpoint** | **CRITICAL** | views.py | ✅ |
 | 27 | 7 | Potential XSS in print window exports | Medium | exports.ts | ⬜ |
 | 28 | 8 | No role check on phase update | Medium | views.py | ⬜ |

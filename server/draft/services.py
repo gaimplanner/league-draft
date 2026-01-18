@@ -181,7 +181,22 @@ class DraftService:
         reason: str,
     ) -> DraftState:
         """Create a trade."""
+        from datetime import timedelta
+        from django.utils import timezone
+
         draft_state = DraftState.objects.get(id=draft_state_id)
+
+        # Idempotency check: prevent duplicate trades within 10 seconds
+        recent_trade = Trade.objects.filter(
+            draft_state=draft_state,
+            team1_id=team1_id,
+            team2_id=team2_id,
+            player1_id=player1_id,
+            player2_id=player2_id,
+            created_at__gte=timezone.now() - timedelta(seconds=10),
+        ).exists()
+        if recent_trade:
+            raise ValueError("This trade was already processed")
 
         # Verify players belong to correct teams
         player1 = Player.objects.get(id=player1_id)

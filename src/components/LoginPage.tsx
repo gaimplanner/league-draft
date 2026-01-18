@@ -112,9 +112,6 @@ export function LoginPage({ onSwitchToRegister, onForgotPassword }: LoginPagePro
           </div>
         </div>
 
-        <div className="mt-4 text-center text-sm text-gray-500">
-          <p>Demo credentials: demo@example.com / Demo1234!</p>
-        </div>
       </div>
     </div>
   );
