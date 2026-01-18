@@ -267,7 +267,8 @@ export type AppField =
   | 'sibling'
   | 'managerTeam'
   | 'assistantTeam'
-  | 'teamColumn'; // "Manager, Assistant" format for auto team creation
+  | 'teamColumn' // "Manager, Assistant" format for auto team creation
+  | 'totalScore'; // Overall/total score (alternative to component scores)
 
 export interface ColumnMapping {
   [csvColumn: string]: AppField | null;

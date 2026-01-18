@@ -8,17 +8,20 @@ interface ColumnMapperProps {
 }
 
 const REQUIRED_FIELDS: { field: AppField; label: string }[] = [
+  { field: 'bib', label: 'Bib Number' },
   { field: 'firstName', label: 'First Name' },
   { field: 'lastName', label: 'Last Name' },
-  { field: 'littleLeagueAge', label: 'Little League Age' },
-  { field: 'isAllStar', label: 'All-Star' },
+  { field: 'totalScore', label: 'Overall Score' },
 ];
 
 const OPTIONAL_FIELDS: { field: AppField; label: string }[] = [
-  { field: 'bib', label: 'Bib Number' },
+  // Player info
+  { field: 'littleLeagueAge', label: 'Little League Age' },
   { field: 'birthday', label: 'Birthday' },
+  // Evaluation flags
+  { field: 'isAllStar', label: 'All-Star' },
   { field: 'isDNE', label: 'DNE (Did Not Evaluate)' },
-  // Raw component scores (preferred)
+  // Raw component scores
   { field: 'fieldScore', label: 'Field Score' },
   { field: 'throwScore', label: 'Throw Score' },
   { field: 'hitPower', label: 'Hit Power' },
@@ -26,7 +29,7 @@ const OPTIONAL_FIELDS: { field: AppField; label: string }[] = [
   { field: 'hitContact', label: 'Hit Contact' },
   { field: 'pitchingStrength', label: 'Pitching Strength' },
   { field: 'pitchingForm', label: 'Pitching Form' },
-  // Pre-calculated subtotals (for validation or legacy data)
+  // Pre-calculated subtotals
   { field: 'fieldingSubtotal', label: 'Fielding Subtotal' },
   { field: 'hittingSubtotal', label: 'Hitting Subtotal' },
   { field: 'pitchingSubtotal', label: 'Pitching Subtotal' },
@@ -55,8 +58,18 @@ export const ColumnMapper = ({ csvData, onMappingComplete }: ColumnMapperProps) 
       const lowerHeader = header.toLowerCase().trim();
 
       // Try to match common variations
-      if (lowerHeader === 'bib' || lowerHeader.includes('bib number')) {
+      if (lowerHeader === 'bib' || lowerHeader.includes('bib number') || lowerHeader === 'bib #') {
         autoMapping[header] = 'bib';
+      } else if (
+        lowerHeader === 'total' ||
+        lowerHeader === 'total score' ||
+        lowerHeader === 'overall' ||
+        lowerHeader === 'overall score' ||
+        lowerHeader === 'score' ||
+        (lowerHeader.includes('total') && lowerHeader.includes('score')) ||
+        (lowerHeader.includes('overall') && lowerHeader.includes('score'))
+      ) {
+        autoMapping[header] = 'totalScore';
       } else if (lowerHeader.includes('first') && lowerHeader.includes('name')) {
         autoMapping[header] = 'firstName';
       } else if (lowerHeader.includes('last') && lowerHeader.includes('name')) {
@@ -134,27 +147,11 @@ export const ColumnMapper = ({ csvData, onMappingComplete }: ColumnMapperProps) 
     isFieldMapped(field.field)
   );
 
-  // Check if we have scoring data (either raw scores OR subtotals)
-  const hasRawScores =
-    isFieldMapped('fieldScore') || isFieldMapped('throwScore') ||
-    isFieldMapped('hitPower') || isFieldMapped('hitForm') || isFieldMapped('hitContact') ||
-    isFieldMapped('pitchingStrength') || isFieldMapped('pitchingForm');
-
-  const hasSubtotals =
-    isFieldMapped('fieldingSubtotal') || isFieldMapped('hittingSubtotal') ||
-    isFieldMapped('pitchingSubtotal');
-
-  const hasScoringData = hasRawScores || hasSubtotals;
-
-  const canContinue = allRequiredFieldsMapped && hasScoringData;
+  const canContinue = allRequiredFieldsMapped;
 
   const handleContinue = () => {
     if (!allRequiredFieldsMapped) {
       alert('Please map all required fields before continuing.');
-      return;
-    }
-    if (!hasScoringData) {
-      alert('Please map at least one scoring field.\n\nYou need either:\n- Raw component scores (Field Score, Throw Score, Hit Power, etc.)\nOR\n- Pre-calculated subtotals (Fielding Subtotal, Hitting Subtotal, Pitching Subtotal)');
       return;
     }
     onMappingComplete(mapping);
@@ -173,7 +170,7 @@ export const ColumnMapper = ({ csvData, onMappingComplete }: ColumnMapperProps) 
         </div>
 
         <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700 mb-6">
-          <div className="space-y-2 mb-4">
+          <div className="mb-4">
             <div className="flex items-center gap-2">
               {allRequiredFieldsMapped ? (
                 <>
@@ -188,23 +185,6 @@ export const ColumnMapper = ({ csvData, onMappingComplete }: ColumnMapperProps) 
                   <span className="text-orange-600 dark:text-orange-400 font-medium">
                     {REQUIRED_FIELDS.filter((f) => !isFieldMapped(f.field)).length} required fields
                     remaining
-                  </span>
-                </>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              {hasScoringData ? (
-                <>
-                  <CheckCircle className="w-5 h-5 text-green-600" />
-                  <span className="text-green-600 dark:text-green-400 font-medium">
-                    Scoring data mapped {hasRawScores ? '(raw scores)' : '(subtotals)'}
-                  </span>
-                </>
-              ) : (
-                <>
-                  <AlertCircle className="w-5 h-5 text-orange-600" />
-                  <span className="text-orange-600 dark:text-orange-400 font-medium">
-                    No scoring data mapped - need raw scores OR subtotals
                   </span>
                 </>
               )}
