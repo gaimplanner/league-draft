@@ -109,8 +109,8 @@ export const useDraft = (divisionId?: string) => {
     if (division.draftState) {
       setDraftState(division.draftState);
       // Store draft state ID for API mode
-      if (USE_API && (division.draftState as DraftState & { id?: string }).id) {
-        draftStateId.current = (division.draftState as DraftState & { id?: string }).id!;
+      if (USE_API && division.draftState.id) {
+        draftStateId.current = division.draftState.id;
       }
     } else {
       // Otherwise, initialize from division's players and teams
@@ -219,7 +219,7 @@ export const useDraft = (divisionId?: string) => {
         });
 
         // Store the draft state ID for future operations
-        draftStateId.current = (result.draftState as DraftState & { id?: string }).id || null;
+        draftStateId.current = result.draftState.id || null;
 
         setDraftState(result.draftState);
         setError(null);

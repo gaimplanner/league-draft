@@ -231,6 +231,7 @@ function transformDraftStateFromApi(
   }
 
   return {
+    id: data.id as string | undefined,
     players,
     teams,
     draftFormat: data.draft_format as DraftFormat,

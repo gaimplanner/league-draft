@@ -189,6 +189,7 @@ export interface DraftConfig {
 }
 
 export interface DraftState {
+  id?: string; // Backend draft state ID (for API mode)
   players: Player[];
   teams: Team[];
   draftFormat: DraftFormat;
