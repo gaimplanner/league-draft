@@ -514,7 +514,8 @@ class PlayerBulkItemSerializer(serializers.Serializer):
     bib = serializers.CharField(max_length=50)
     first_name = serializers.CharField(max_length=100)
     last_name = serializers.CharField(max_length=100)
-    little_league_age = serializers.IntegerField(min_value=4, max_value=18)
+    # Allow 0 for unknown age - some imports don't have age data
+    little_league_age = serializers.IntegerField(min_value=0, max_value=18)
 
     # Score fields - validated with reasonable bounds
     field_score = serializers.DecimalField(max_digits=6, decimal_places=2, default=0, min_value=0, max_value=1000)

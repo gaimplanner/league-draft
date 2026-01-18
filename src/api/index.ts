@@ -5,8 +5,22 @@
 export { api, ApiError } from './client';
 export type { } from './client';
 
-import { api } from './client';
+import { api, ApiError } from './client';
 import type { Player, Team } from '../types';
+
+/**
+ * Extract error message from ApiError including details
+ */
+function getErrorMessage(err: unknown): string {
+  if (err instanceof ApiError) {
+    const details = err.details ? JSON.stringify(err.details) : '';
+    return `${err.message}${details ? ` - ${details}` : ''}`;
+  }
+  if (err instanceof Error) {
+    return err.message;
+  }
+  return 'Unknown error';
+}
 
 /**
  * Save players to the API (bulk create/replace).
@@ -43,16 +57,16 @@ export async function savePlayersToApi(divisionId: string, players: Partial<Play
         await api.bulkCreatePlayers(divisionId, backup);
         console.log('Backup restored successfully');
         // Re-throw with context that backup was restored
-        throw new Error(`Failed to save players (backup restored): ${err instanceof Error ? err.message : 'Unknown error'}`);
+        throw new Error(`Failed to save players (backup restored): ${getErrorMessage(err)}`);
       } catch (restoreErr) {
         console.error('Failed to restore backup:', restoreErr);
         // Critical: both save and restore failed
-        throw new Error(`Critical: Failed to save players AND restore backup. Data may be lost. Original error: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        throw new Error(`Critical: Failed to save players AND restore backup. Data may be lost. Original error: ${getErrorMessage(err)}`);
       }
     }
 
     // No backup available, just re-throw original error
-    throw new Error(`Failed to save players: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    throw new Error(`Failed to save players: ${getErrorMessage(err)}`);
   }
 }
 
