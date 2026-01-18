@@ -18,6 +18,8 @@ interface DraftBoardProps {
   pendingComplete: boolean;
   onFinalizeDraft: () => void;
   onCancelComplete: () => void;
+  // Issue #20: isLoading prop to disable buttons during API calls
+  isLoading?: boolean;
 }
 
 export const DraftBoard = ({
@@ -32,6 +34,7 @@ export const DraftBoard = ({
   pendingComplete,
   onFinalizeDraft,
   onCancelComplete,
+  isLoading = false,
 }: DraftBoardProps) => {
   const viewMode = useViewMode();
   const isPublicView = viewMode === 'public';
@@ -240,7 +243,7 @@ export const DraftBoard = ({
                 )}
                 <button
                   onClick={onUndo}
-                  disabled={draftState.picks.length === 0}
+                  disabled={draftState.picks.length === 0 || isLoading}
                   className="px-2 py-1 bg-white/20 hover:bg-white/30 text-white rounded text-xs font-medium flex items-center gap-1 disabled:opacity-30 disabled:cursor-not-allowed backdrop-blur-sm"
                   title="Undo last pick"
                 >
@@ -295,9 +298,10 @@ export const DraftBoard = ({
                         onDraftPlayer(mandatoryPlayer.id);
                       }
                     }}
-                    className="px-4 py-3 bg-green-600 hover:bg-green-700 text-white font-bold text-lg rounded-lg inline-flex items-center justify-center gap-2 shadow-lg"
+                    disabled={isLoading}
+                    className="px-4 py-3 bg-green-600 hover:bg-green-700 text-white font-bold text-lg rounded-lg inline-flex items-center justify-center gap-2 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Draft {mandatoryPlayer?.name}
+                    {isLoading ? 'Drafting...' : `Draft ${mandatoryPlayer?.name}`}
                     <ChevronRight className="w-5 h-5" />
                   </button>
                 </div>
@@ -365,9 +369,10 @@ export const DraftBoard = ({
                               </span>
                               <button
                                 onClick={() => onDraftPlayer(player.id)}
-                                className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-xs font-medium w-full"
+                                disabled={isLoading}
+                                className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-xs font-medium w-full disabled:opacity-50 disabled:cursor-not-allowed"
                               >
-                                Draft
+                                {isLoading ? '...' : 'Draft'}
                               </button>
                             </div>
                           ))
@@ -609,13 +614,14 @@ export const DraftBoard = ({
                                   }
                                   onDraftPlayer(player.id);
                                 }}
-                                className={`px-3 py-2 rounded-lg font-semibold text-sm transition-all ${
+                                disabled={isLoading}
+                                className={`px-3 py-2 rounded-lg font-semibold text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
                                   isMandatory
                                     ? 'bg-yellow-500 hover:bg-yellow-600 text-white'
                                     : 'bg-green-600 hover:bg-green-700 text-white'
                                 }`}
                               >
-                                Draft
+                                {isLoading ? 'Drafting...' : 'Draft'}
                               </button>
                             )}
                           </div>

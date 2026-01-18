@@ -11,15 +11,22 @@ import type { Player, Team } from '../types';
 /**
  * Save players to the API (bulk create/replace).
  *
- * This operation deletes existing players then creates new ones.
- * The backend handles this in separate transactions - true atomicity
- * would require a dedicated endpoint with database transactions.
+ * This operation fetches existing players as backup, deletes them, then creates new ones.
+ * If creation fails, attempts to restore the backup to prevent data loss (Issue #2).
  *
- * Error handling: If the delete succeeds but create fails, the division
- * will have no players. The caller should handle this by retrying or
- * notifying the user to re-import.
+ * @throws Error if save fails and restore also fails (data loss scenario)
  */
 export async function savePlayersToApi(divisionId: string, players: Partial<Player>[]): Promise<Player[]> {
+  // Fetch existing players as backup before delete (Issue #2)
+  let backup: Player[] = [];
+  try {
+    const division = await api.getDivision(divisionId);
+    backup = division.players || [];
+  } catch {
+    // If we can't fetch backup, continue anyway - better to try than fail completely
+    console.warn('Could not fetch backup players before save');
+  }
+
   try {
     // Delete existing players first
     await api.deleteAllPlayers(divisionId);
@@ -28,7 +35,23 @@ export async function savePlayersToApi(divisionId: string, players: Partial<Play
     return await api.bulkCreatePlayers(divisionId, players);
   } catch (err) {
     console.error('Failed to save players to API:', err);
-    // Re-throw with more context for caller to handle
+
+    // Attempt to restore backup if we have one (Issue #2)
+    if (backup.length > 0) {
+      console.warn('Attempting to restore backup players...');
+      try {
+        await api.bulkCreatePlayers(divisionId, backup);
+        console.log('Backup restored successfully');
+        // Re-throw with context that backup was restored
+        throw new Error(`Failed to save players (backup restored): ${err instanceof Error ? err.message : 'Unknown error'}`);
+      } catch (restoreErr) {
+        console.error('Failed to restore backup:', restoreErr);
+        // Critical: both save and restore failed
+        throw new Error(`Critical: Failed to save players AND restore backup. Data may be lost. Original error: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      }
+    }
+
+    // No backup available, just re-throw original error
     throw new Error(`Failed to save players: ${err instanceof Error ? err.message : 'Unknown error'}`);
   }
 }

@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { api, ApiError } from '../api/client';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { api, ApiError, setSessionExpiredCallback } from '../api/client';
 import type { User, LoginCredentials, RegisterData } from '../types';
 
 interface AuthState {
@@ -36,6 +36,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
     isLoading: true,
   });
 
+  // Track if we've already handled session expiry to avoid loops (Issue #4)
+  const sessionExpiredHandled = useRef(false);
+
   const checkAuth = useCallback(async () => {
     try {
       const user = await api.getCurrentUser();
@@ -55,6 +58,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, []);
 
   const login = useCallback(async (credentials: LoginCredentials) => {
+    // Reset session expired flag on new login attempt (Issue #21)
+    sessionExpiredHandled.current = false;
     setState(prev => ({ ...prev, isLoading: true }));
     try {
       const user = await api.login(credentials);
@@ -111,11 +116,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
     } catch {
       // Ignore errors on logout
     }
+    // Clear session expired flag (Issue #22)
+    sessionExpiredHandled.current = false;
     setState({
       user: null,
       isAuthenticated: false,
       isLoading: false,
     });
+    // Note: Draft state is stored in useDraft hook which is re-initialized on re-mount
+    // after logout/login cycle. No explicit cleanup needed here.
   }, []);
 
   // Initialize CSRF token and check authentication on mount
@@ -127,6 +136,25 @@ export function AuthProvider({ children }: AuthProviderProps) {
       await checkAuth();
     };
     init();
+
+    // Register session expiry callback (Issue #4)
+    setSessionExpiredCallback(() => {
+      if (!sessionExpiredHandled.current) {
+        sessionExpiredHandled.current = true;
+        console.log('Session expired, logging out user');
+        // Clear state immediately without calling API (session is already invalid)
+        setState({
+          user: null,
+          isAuthenticated: false,
+          isLoading: false,
+        });
+      }
+    });
+
+    // Cleanup callback on unmount
+    return () => {
+      setSessionExpiredCallback(null);
+    };
   }, [checkAuth]);
 
   const value: AuthContextType = {

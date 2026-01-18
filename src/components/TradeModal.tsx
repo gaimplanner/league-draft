@@ -22,6 +22,8 @@ export const TradeModal = ({ teams, players, onExecuteTrade, onClose }: TradeMod
   const [player1Id, setPlayer1Id] = useState<string>('');
   const [player2Id, setPlayer2Id] = useState<string>('');
   const [reason, setReason] = useState<string>('');
+  // Prevent double-submit (Issue #11)
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Get rosters for selected teams
   const team1 = teams.find(t => t.id === team1Id);
@@ -65,12 +67,19 @@ export const TradeModal = ({ teams, players, onExecuteTrade, onClose }: TradeMod
     };
   }, [player1, player2, team1, team2]);
 
-  const canTrade = team1Id && team2Id && player1Id && player2Id && reason.trim();
+  const canTrade = team1Id && team2Id && player1Id && player2Id && reason.trim() && !isSubmitting;
 
-  const handleTrade = () => {
+  const handleTrade = async () => {
     if (!canTrade) return;
-    onExecuteTrade(team1Id, team2Id, player1Id, player2Id, reason.trim());
-    onClose();
+    // Prevent double-submit (Issue #11)
+    setIsSubmitting(true);
+    try {
+      await onExecuteTrade(team1Id, team2Id, player1Id, player2Id, reason.trim());
+      onClose();
+    } catch {
+      // Allow retry if trade fails
+      setIsSubmitting(false);
+    }
   };
 
   // When team selection changes, clear player selection
@@ -349,7 +358,7 @@ export const TradeModal = ({ teams, players, onExecuteTrade, onClose }: TradeMod
             }`}
           >
             <ArrowLeftRight className="w-4 h-4" />
-            Execute Trade
+            {isSubmitting ? 'Executing...' : 'Execute Trade'}
           </button>
         </div>
       </div>

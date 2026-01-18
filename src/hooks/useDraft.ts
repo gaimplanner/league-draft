@@ -134,6 +134,11 @@ export const useDraft = (_divisionId?: string) => {
   }, []);
 
   const startDraft = useCallback(async (format?: DraftFormat, order?: string[], _resolvedPlayers?: Player[]) => {
+    // Guard against concurrent operations (Issue #1, #25)
+    if (isLoading) {
+      return;
+    }
+
     const divisionId = currentDivisionId.current;
     if (!divisionId) {
       setError('No division selected');
@@ -167,10 +172,15 @@ export const useDraft = (_divisionId?: string) => {
     } finally {
       setIsLoading(false);
     }
-  }, [draftState.draftFormat, draftState.draftOrder]);
+  }, [draftState.draftFormat, draftState.draftOrder, isLoading]);
 
   const draftPlayer = useCallback(
     async (playerId: string) => {
+      // Guard against double-submit during API call (Issue #1)
+      if (isLoading) {
+        return;
+      }
+
       if (!draftStateId.current) {
         setError('Draft not started');
         return;
@@ -209,10 +219,15 @@ export const useDraft = (_divisionId?: string) => {
         setIsLoading(false);
       }
     },
-    [draftState]
+    [draftState, isLoading]
   );
 
   const undoLastPick = useCallback(async () => {
+    // Guard against concurrent operations (Issue #1)
+    if (isLoading) {
+      return;
+    }
+
     if (!draftStateId.current) {
       setError('Draft not started');
       return;
@@ -234,7 +249,7 @@ export const useDraft = (_divisionId?: string) => {
     } finally {
       setIsLoading(false);
     }
-  }, [phase]);
+  }, [phase, isLoading]);
 
   // Skip the current pick (only allowed in final round)
   // TODO: Implement skip pick in API (issue #23)
@@ -251,6 +266,11 @@ export const useDraft = (_divisionId?: string) => {
     player2Id: string,
     reason: string
   ) => {
+    // Guard against concurrent operations (Issue #1)
+    if (isLoading) {
+      return;
+    }
+
     if (!draftStateId.current) {
       setError('Draft not started');
       return;
@@ -274,7 +294,7 @@ export const useDraft = (_divisionId?: string) => {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [isLoading]);
 
   // Finalize draft and navigate to complete phase
   const finalizeDraft = useCallback(() => {

@@ -44,6 +44,37 @@ function getCSRFToken(): string | null {
   return null;
 }
 
+// Default timeout for fetch requests (Issue #23)
+const DEFAULT_TIMEOUT_MS = 30000; // 30 seconds
+
+/**
+ * Fetch with timeout (Issue #23)
+ * Prevents requests from hanging indefinitely
+ */
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit,
+  timeoutMs: number = DEFAULT_TIMEOUT_MS
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    return response;
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new ApiError('Request timed out', 408, { timeout: true });
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 // Default fetch options for session-based auth
 function getDefaultOptions(method: string = 'GET'): RequestInit {
   const options: RequestInit = {
@@ -69,6 +100,34 @@ function getDefaultOptions(method: string = 'GET'): RequestInit {
 // -----------------------------------------------------------------------------
 
 /**
+ * Safely parse a numeric value that may come as string from Django DecimalField (Issue #3)
+ * Returns 0 if the value is null, undefined, or cannot be parsed.
+ */
+function safeParseNumber(value: unknown): number {
+  if (value === null || value === undefined) return 0;
+  if (typeof value === 'number') return value;
+  if (typeof value === 'string') {
+    const parsed = parseFloat(value);
+    return isNaN(parsed) ? 0 : parsed;
+  }
+  return 0;
+}
+
+/**
+ * Safely parse an optional numeric value (Issue #3)
+ * Returns undefined if the value is null, undefined, or cannot be parsed.
+ */
+function safeParseOptionalNumber(value: unknown): number | undefined {
+  if (value === null || value === undefined) return undefined;
+  if (typeof value === 'number') return value;
+  if (typeof value === 'string') {
+    const parsed = parseFloat(value);
+    return isNaN(parsed) ? undefined : parsed;
+  }
+  return undefined;
+}
+
+/**
  * Transform player data from API (snake_case) to frontend (camelCase)
  */
 function transformPlayerFromApi(data: Record<string, unknown>): Player {
@@ -78,38 +137,40 @@ function transformPlayerFromApi(data: Record<string, unknown>): Player {
     firstName: data.first_name as string,
     lastName: data.last_name as string,
     name: data.name as string,
-    fieldScore: data.field_score as number,
-    throwScore: data.throw_score as number,
-    hitPower: data.hit_power as number,
-    hitForm: data.hit_form as number,
-    hitContact: data.hit_contact as number,
-    pitchingStrength: data.pitching_strength as number,
-    pitchingForm: data.pitching_form as number,
-    catchScore: data.catch_score as number,
-    runningScore: data.running_score as number,
-    fieldingSubtotal: data.fielding_subtotal as number,
-    hittingSubtotal: data.hitting_subtotal as number,
-    pitchingSubtotal: data.pitching_subtotal as number,
-    subjectiveTotal: data.subjective_total as number,
-    objectiveTotal: data.objective_total as number,
-    officialAdjust: data.official_adjust as number,
-    totalScore: data.total_score as number,
-    rank: data.rank as number,
-    projectedRound: data.projected_round as number,
-    littleLeagueAge: data.little_league_age as number,
+    // Use safe parsing for all numeric fields (Issue #3 - DecimalField may serialize to strings)
+    fieldScore: safeParseNumber(data.field_score),
+    throwScore: safeParseNumber(data.throw_score),
+    hitPower: safeParseNumber(data.hit_power),
+    hitForm: safeParseNumber(data.hit_form),
+    hitContact: safeParseNumber(data.hit_contact),
+    pitchingStrength: safeParseNumber(data.pitching_strength),
+    pitchingForm: safeParseNumber(data.pitching_form),
+    catchScore: safeParseNumber(data.catch_score),
+    runningScore: safeParseNumber(data.running_score),
+    fieldingSubtotal: safeParseNumber(data.fielding_subtotal),
+    hittingSubtotal: safeParseNumber(data.hitting_subtotal),
+    pitchingSubtotal: safeParseNumber(data.pitching_subtotal),
+    subjectiveTotal: safeParseNumber(data.subjective_total),
+    objectiveTotal: safeParseNumber(data.objective_total),
+    officialAdjust: safeParseNumber(data.official_adjust),
+    totalScore: safeParseNumber(data.total_score),
+    rank: safeParseNumber(data.rank),
+    projectedRound: safeParseNumber(data.projected_round),
+    littleLeagueAge: safeParseNumber(data.little_league_age),
     birthday: data.birthday as string,
     isAllStar: data.is_all_star as boolean,
     isDNE: data.is_dne as boolean,
     isCoachKid: data.is_coach_kid as boolean,
-    coachTeamId: data.coach_team_id as string | undefined,
-    sibling: data.sibling as string | undefined,
-    siblingId: data.sibling_id as string | undefined,
-    lockedToRound: data.locked_to_round as number | undefined,
-    lockedToTeamId: data.locked_to_team_id as string | undefined,
+    // Convert null to undefined for optional fields (Issue #8)
+    coachTeamId: (data.coach_team_id as string | null) ?? undefined,
+    sibling: (data.sibling as string | null) ?? undefined,
+    siblingId: (data.sibling_id as string | null) ?? undefined,
+    lockedToRound: safeParseOptionalNumber(data.locked_to_round),
+    lockedToTeamId: (data.locked_to_team_id as string | null) ?? undefined,
     isDrafted: data.is_drafted as boolean,
-    draftedByTeamId: data.drafted_by_team_id as string | undefined,
-    draftedInRound: data.drafted_in_round as number | undefined,
-    draftedAtPick: data.drafted_at_pick as number | undefined,
+    draftedByTeamId: (data.drafted_by_team_id as string | null) ?? undefined,
+    draftedInRound: safeParseOptionalNumber(data.drafted_in_round),
+    draftedAtPick: safeParseOptionalNumber(data.drafted_at_pick),
   };
 }
 
@@ -166,14 +227,18 @@ function transformPlayerToApi(player: Partial<Player>): Record<string, unknown> 
 function transformTeamFromApi(data: Record<string, unknown>): Team {
   const roster = (data.roster as Record<string, unknown>[] || []).map(transformPlayerFromApi);
   const coachKidsData = data.coach_kids as Record<string, unknown>[] || [];
-  const coachKids = coachKidsData.map((p) => p.id as string);
+  // Validate coach_kids array has valid player objects with id field (Issue #18)
+  const coachKids = coachKidsData
+    .filter((p) => p && typeof p.id === 'string')
+    .map((p) => p.id as string);
 
   return {
     id: data.id as string,
     name: data.name as string,
     roster,
-    totalScore: data.total_score as number,
-    draftPosition: data.draft_position as number,
+    // Use safe parsing for numeric fields (Issue #3)
+    totalScore: safeParseNumber(data.total_score),
+    draftPosition: safeParseNumber(data.draft_position),
     coachKids,
     assistantCoaches: data.assistant_coaches as string[] || [],
     ageBreakdown: data.age_breakdown as Record<number, number> || {},
@@ -185,10 +250,12 @@ function transformTeamFromApi(data: Record<string, unknown>): Team {
  */
 function transformDraftPickFromApi(data: Record<string, unknown>): DraftPick {
   return {
-    round: data.round as number,
-    pick: data.pick as number,
+    round: safeParseNumber(data.round),
+    pick: safeParseNumber(data.pick),
     teamId: data.team_id as string,
-    playerId: data.player_id as string | undefined,
+    // Convert null to undefined (Issue #8)
+    playerId: (data.player_id as string | null) ?? undefined,
+    // Safe timestamp parsing (Issue #15)
     timestamp: data.timestamp ? new Date(data.timestamp as string).getTime() : undefined,
     wasSkipped: data.was_skipped as boolean,
   };
@@ -226,21 +293,24 @@ function transformDraftStateFromApi(
     mandatoryPick = {
       playerId: mandatoryPickData.player_id as string,
       reason: mandatoryPickData.reason as 'coach-kid' | 'sibling',
-      siblingName: mandatoryPickData.sibling_name as string | undefined,
+      // Convert null to undefined (Issue #8)
+      siblingName: (mandatoryPickData.sibling_name as string | null) ?? undefined,
     };
   }
 
   return {
-    id: data.id as string | undefined,
+    // Convert null to undefined (Issue #8)
+    id: (data.id as string | null) ?? undefined,
     players,
     teams,
     draftFormat: data.draft_format as DraftFormat,
-    draftOrder: data.draft_order as string[],
-    currentRoundOrder: data.current_round_order as string[],
+    draftOrder: data.draft_order as string[] || [],
+    currentRoundOrder: data.current_round_order as string[] || [],
     picks,
-    currentRound: data.current_round as number,
-    currentPickInRound: data.current_pick_in_round as number,
-    currentTeamId: data.current_team_id as string | null,
+    // Use safe parsing for numeric fields (Issue #3)
+    currentRound: safeParseNumber(data.current_round),
+    currentPickInRound: safeParseNumber(data.current_pick_in_round),
+    currentTeamId: (data.current_team_id as string | null) ?? null,
     isDraftComplete: data.is_draft_complete as boolean,
     mandatoryPick,
     trades,
@@ -267,9 +337,10 @@ function transformDivisionFromApi(data: Record<string, unknown>): Division {
     preset: data.preset as DivisionPreset,
     ageRange: ageRange,
     enforceAgeLimit: data.enforce_age_limit as boolean,
-    maxPerAge: data.max_per_age as number,
-    teamCount: data.team_count as number,
-    rosterSize: data.roster_size as number,
+    // Use safe parsing for numeric fields (Issue #3)
+    maxPerAge: safeParseNumber(data.max_per_age),
+    teamCount: safeParseNumber(data.team_count),
+    rosterSize: safeParseNumber(data.roster_size),
     teams,
     players,
     draftState,
@@ -277,7 +348,8 @@ function transformDivisionFromApi(data: Record<string, unknown>): Division {
     scoringMode: data.scoring_mode as ScoringMode,
     phase: data.phase as Division['phase'],
     createdAt: data.created_at as string,
-    completedAt: data.completed_at as string | undefined,
+    // Convert null to undefined (Issue #8)
+    completedAt: (data.completed_at as string | null) ?? undefined,
   };
 }
 
@@ -318,11 +390,13 @@ function transformDivisionSummaryFromApi(data: Record<string, unknown>): Divisio
     id: data.id as string,
     name: data.name as string,
     preset: data.preset as DivisionPreset,
-    teamCount: data.team_count as number,
-    playerCount: data.player_count as number,
+    // Use safe parsing for numeric fields (Issue #3)
+    teamCount: safeParseNumber(data.team_count),
+    playerCount: safeParseNumber(data.player_count),
     phase: data.phase as DivisionSummary['phase'],
     createdAt: data.created_at as string,
-    completedAt: data.completed_at as string | undefined,
+    // Convert null to undefined (Issue #8)
+    completedAt: (data.completed_at as string | null) ?? undefined,
   };
 }
 
@@ -341,14 +415,62 @@ export class ApiError extends Error {
   }
 }
 
+// Global callback for session expiry - set by AuthContext (Issue #4)
+let onSessionExpired: (() => void) | null = null;
+
+/**
+ * Register a callback to be called when the session expires (401 error).
+ * This is used by AuthContext to trigger logout and redirect to login.
+ */
+export function setSessionExpiredCallback(callback: (() => void) | null): void {
+  onSessionExpired = callback;
+}
+
+// Track if we're currently refreshing CSRF token to avoid loops (Issue #9)
+let isRefreshingCSRF = false;
+
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     let details: Record<string, unknown> | undefined;
-    try {
-      details = await response.json();
-    } catch {
-      // Response body might not be JSON
+
+    // Try to parse JSON error details, handle non-JSON responses gracefully (Issue #24)
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      try {
+        details = await response.json();
+      } catch {
+        // Response body might not be valid JSON
+      }
+    } else {
+      // Non-JSON response (e.g., HTML from nginx 5xx error)
+      try {
+        const text = await response.text();
+        details = { rawResponse: text.substring(0, 500) }; // Truncate to avoid huge error messages
+      } catch {
+        // Couldn't read response
+      }
     }
+
+    // Handle 401 Unauthorized - session expired (Issue #4)
+    if (response.status === 401 && onSessionExpired) {
+      // Don't trigger logout for auth endpoints (login/register) - those expect 401 for invalid credentials
+      const isAuthEndpoint = response.url.includes('/auth/login') || response.url.includes('/auth/register');
+      if (!isAuthEndpoint) {
+        console.warn('Session expired (401), triggering logout');
+        onSessionExpired();
+      }
+    }
+
+    // Handle 403 Forbidden - might be CSRF token issue (Issue #9)
+    if (response.status === 403 && !isRefreshingCSRF) {
+      const csrfError = details?.detail === 'CSRF Failed: CSRF token missing or incorrect.';
+      if (csrfError) {
+        console.warn('CSRF token expired, will refresh on next request');
+        // The next request will get a fresh CSRF token
+        // We could try to auto-retry here, but that's complex and error-prone
+      }
+    }
+
     throw new ApiError(
       `API request failed: ${response.statusText}`,
       response.status,
@@ -361,7 +483,16 @@ async function handleResponse<T>(response: Response): Promise<T> {
     return undefined as T;
   }
 
-  return response.json();
+  // Handle JSON parsing errors gracefully (Issue #24)
+  try {
+    return await response.json();
+  } catch {
+    throw new ApiError(
+      'Failed to parse API response as JSON',
+      response.status,
+      { parseError: true }
+    );
+  }
 }
 
 // -----------------------------------------------------------------------------
@@ -584,7 +715,7 @@ export const api = {
   },
 
   async bulkCreatePlayers(divisionId: string, players: Partial<Player>[]): Promise<Player[]> {
-    const response = await fetch(`${API_BASE_URL}/players/bulk/`, {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/players/bulk/`, {
       ...getDefaultOptions('POST'),
       method: 'POST',
       body: JSON.stringify({
@@ -655,7 +786,7 @@ export const api = {
     draftFormat: DraftFormat;
     draftOrder: string[];
   }): Promise<{ draftState: DraftState; players: Player[]; teams: Team[] }> {
-    const response = await fetch(`${API_BASE_URL}/draft/start/`, {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/draft/start/`, {
       ...getDefaultOptions('POST'),
       method: 'POST',
       body: JSON.stringify({
@@ -682,7 +813,7 @@ export const api = {
     playerId: string;
     teamId: string;
   }): Promise<{ draftState: DraftState; players: Player[]; teams: Team[] }> {
-    const response = await fetch(`${API_BASE_URL}/draft/pick/`, {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/draft/pick/`, {
       ...getDefaultOptions('POST'),
       method: 'POST',
       body: JSON.stringify({
@@ -705,7 +836,7 @@ export const api = {
   },
 
   async undoLastPick(draftStateId: string): Promise<{ draftState: DraftState; players: Player[]; teams: Team[] }> {
-    const response = await fetch(`${API_BASE_URL}/draft/undo/`, {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/draft/undo/`, {
       ...getDefaultOptions('POST'),
       method: 'POST',
       body: JSON.stringify({
@@ -733,7 +864,7 @@ export const api = {
     player2Id: string;
     reason: string;
   }): Promise<{ draftState: DraftState; players: Player[]; teams: Team[] }> {
-    const response = await fetch(`${API_BASE_URL}/draft/trade/`, {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/draft/trade/`, {
       ...getDefaultOptions('POST'),
       method: 'POST',
       body: JSON.stringify({

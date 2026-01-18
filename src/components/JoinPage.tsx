@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Users, Loader2, AlertCircle, Check, LogIn, UserPlus, ArrowLeft } from 'lucide-react';
 import { api, ApiError } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
@@ -32,13 +32,18 @@ export function JoinPage({ token, onJoinComplete, onCancel }: JoinPageProps) {
   const [authLoading2, setAuthLoading2] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
 
+  // Track if we've already attempted to join to prevent duplicates (Issue #13)
+  const hasAttemptedJoin = useRef(false);
+
   useEffect(() => {
     loadLinkInfo();
   }, [token]);
 
   // Auto-join after authentication
   useEffect(() => {
-    if (isAuthenticated && linkInfo && !success && !joining) {
+    // Prevent multiple join attempts (Issue #13)
+    if (isAuthenticated && linkInfo && !success && !joining && !hasAttemptedJoin.current) {
+      hasAttemptedJoin.current = true;
       handleJoin();
     }
   }, [isAuthenticated, linkInfo]);
@@ -73,6 +78,8 @@ export function JoinPage({ token, onJoinComplete, onCancel }: JoinPageProps) {
         onJoinComplete();
       }, 2000);
     } catch (err) {
+      // Reset the flag so user can retry (Issue #13)
+      hasAttemptedJoin.current = false;
       if (err instanceof Error && err.name === 'ApiError') {
         const apiError = err as ApiError;
         setError(apiError.details?.error as string || 'Failed to join league');

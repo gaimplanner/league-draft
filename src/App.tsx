@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useDivisions } from './hooks/useDivisions';
 import { useDraft } from './hooks/useDraft';
 import { usePlayerScoring } from './hooks/usePlayerScoring';
@@ -114,6 +114,7 @@ function App() {
     executeTrade,
     finalizeDraft,
     cancelPendingComplete,
+    isLoading,
   } = useDraft(activeDivision?.id);
 
   const { players, updatePlayer, updatePlayerField, linkSiblings, unlinkSibling, setAllPlayers } = usePlayerScoring(
@@ -162,9 +163,13 @@ function App() {
   // Track if division state has been loaded (to avoid overwriting API phase with default 'upload')
   const [divisionStateLoaded, setDivisionStateLoaded] = useState(false);
 
+  // Track if we're currently updating to prevent race conditions (Issue #6)
+  const isUpdatingPhase = useRef(false);
+
   // Reset divisionStateLoaded when division changes
   useEffect(() => {
     setDivisionStateLoaded(false);
+    isUpdatingPhase.current = false;
   }, [activeDivision?.id]);
 
   // Mark division state as loaded after loadDivisionState runs
@@ -180,7 +185,9 @@ function App() {
   useEffect(() => {
     // Only sync phase changes AFTER the division state has been loaded
     // This prevents the default 'upload' phase from overwriting the API-loaded phase
-    if (divisionStateLoaded && activeDivision && phase !== activeDivision.phase) {
+    // Also prevent concurrent updates (Issue #6)
+    if (divisionStateLoaded && activeDivision && phase !== activeDivision.phase && !isUpdatingPhase.current) {
+      isUpdatingPhase.current = true;
       // When draft completes, also save the completion timestamp and final state
       if (phase === 'complete') {
         updateActiveDivision({
@@ -189,9 +196,17 @@ function App() {
           draftState,
           teams: draftState.teams,
           players: draftState.players,
+        }).catch((err) => {
+          console.error('Failed to save phase change:', err);
+        }).finally(() => {
+          isUpdatingPhase.current = false;
         });
       } else {
-        updateActiveDivision({ phase });
+        updateActiveDivision({ phase }).catch((err) => {
+          console.error('Failed to save phase change:', err);
+        }).finally(() => {
+          isUpdatingPhase.current = false;
+        });
       }
     }
   }, [phase, activeDivision?.id, divisionStateLoaded]);
@@ -344,8 +359,11 @@ function App() {
         const savedPlayers = await savePlayersToApi(activeDivision.id, updatedPlayers);
         updatedPlayers = savedPlayers;
       } catch (err) {
+        // Issue #5: Show error and return early on save failures
         console.error('Failed to save to API:', err);
-        // Continue with local state anyway
+        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+        alert(`Failed to save player data: ${errorMessage}\n\nPlease try again or check your network connection.`);
+        return; // Don't continue with corrupted state
       }
     }
 
@@ -404,8 +422,11 @@ function App() {
         const savedPlayers = await savePlayersToApi(activeDivision.id, fixedPlayers);
         fixedPlayers = savedPlayers;
       } catch (err) {
+        // Issue #5: Show error and return early on save failures
         console.error('Failed to save to API:', err);
-        // Continue with local state anyway
+        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+        alert(`Failed to save player data: ${errorMessage}\n\nPlease try again or check your network connection.`);
+        return; // Don't continue with corrupted state
       }
     }
 
@@ -458,8 +479,11 @@ function App() {
           const savedPlayers = await savePlayersToApi(activeDivision.id, playersToSave);
           setPlayers(savedPlayers);
         } catch (err) {
+          // Issue #5: Show error and return early on save failures
           console.error('Failed to save players to API:', err);
-          // Continue anyway - local state is updated
+          const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+          alert(`Failed to save player data: ${errorMessage}\n\nPlease try again or check your network connection.`);
+          return; // Don't continue with corrupted state
         }
       }
 
@@ -482,8 +506,11 @@ function App() {
       try {
         await savePlayersToApi(activeDivision.id, resolvedPlayers);
       } catch (err) {
+        // Issue #5: Show error and return early on save failures
         console.error('Failed to save resolved players to API:', err);
-        // Continue anyway - the draft will still work with local state
+        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+        alert(`Failed to save player data: ${errorMessage}\n\nPlease try again or check your network connection.`);
+        return; // Don't continue with corrupted state
       }
     }
 
@@ -818,6 +845,7 @@ function App() {
             pendingComplete={pendingComplete}
             onFinalizeDraft={finalizeDraft}
             onCancelComplete={cancelPendingComplete}
+            isLoading={isLoading}
           />
         )}
 

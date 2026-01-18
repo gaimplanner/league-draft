@@ -124,6 +124,7 @@ export function useDivisions() {
   }, []);
 
   // Update the active division
+  // Returns a Promise that resolves when the update is complete (Issue #6, #10)
   const updateActiveDivision = useCallback(async (updates: Partial<Division>): Promise<void> => {
     if (!activeDivision) return;
 
@@ -169,6 +170,7 @@ export function useDivisions() {
     } catch (err) {
       console.error('Failed to update division:', err);
       setError('Failed to update division');
+      throw err; // Re-throw so callers can handle (Issue #6)
     }
   }, [activeDivision]);
 
