@@ -315,16 +315,16 @@ export const DraftBoard = ({
                     return (
                       <div key={age} className="flex items-center gap-2 flex-shrink-0">
                         <span className="text-xs text-white/50 w-6">{age}:</span>
-                        {players.map((player, idx) => (
+                        {players.map((player) => (
                           <button
                             key={player.id}
-                            onClick={() => onDraftPlayer(player.id)}
+                            onClick={() => {
+                              if (window.confirm(`Draft ${player.firstName} ${player.lastName} (${player.totalScore.toFixed(1)} pts)?`)) {
+                                onDraftPlayer(player.id);
+                              }
+                            }}
                             disabled={isLoading}
-                            className={`px-2 py-1 rounded text-xs font-medium transition-colors disabled:opacity-50 ${
-                              idx === 0
-                                ? 'bg-green-600 hover:bg-green-700 text-white'
-                                : 'bg-white/10 hover:bg-white/20 text-white/90'
-                            }`}
+                            className="px-2 py-1 rounded text-xs font-medium transition-colors disabled:opacity-50 bg-white/10 hover:bg-white/20 text-white"
                             title={`Draft ${player.firstName} ${player.lastName} (${player.totalScore.toFixed(1)} pts)`}
                           >
                             {player.firstName} {player.lastName.charAt(0)}. <span className="opacity-70">{player.totalScore.toFixed(1)}</span>
