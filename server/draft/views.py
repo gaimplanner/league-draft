@@ -293,19 +293,19 @@ class PasswordResetConfirmView(APIView):
 class DivisionViewSet(viewsets.ModelViewSet):
     """ViewSet for Division CRUD operations."""
 
+    permission_classes = [IsAuthenticated]
     queryset = Division.objects.all()
 
     def get_queryset(self):
         """Filter divisions by tenant (league)."""
         # Master admin can see all divisions
-        if hasattr(self.request, "user") and self.request.user.is_authenticated:
-            if self.request.user.role == "master_admin":
-                return Division.objects.all()
+        if self.request.user.role == "master_admin":
+            return Division.objects.all()
         # Regular users see only their league's divisions
         if hasattr(self.request, "league") and self.request.league:
             return Division.objects.for_league(self.request.league)
-        # Unauthenticated or no league - return all for now (backward compatibility)
-        return Division.objects.all()
+        # No league context - return empty queryset (user has no league memberships)
+        return Division.objects.none()
 
     def perform_create(self, serializer):
         """Set league when creating a division."""
@@ -351,8 +351,15 @@ class DivisionViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def reset(self, request, pk=None):
-        """Reset a division's draft state."""
+        """Reset a division's draft state - admin only."""
         division = self.get_object()
+
+        # Verify user is admin of the league
+        if request.user.role != "master_admin" and not request.user.is_league_admin(division.league):
+            return Response(
+                {"error": "Only league admins can reset drafts"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         # Delete draft state if exists
         if hasattr(division, "draft_state"):
@@ -382,6 +389,7 @@ class DivisionViewSet(viewsets.ModelViewSet):
 class TeamViewSet(viewsets.ModelViewSet):
     """ViewSet for Team operations."""
 
+    permission_classes = [IsAuthenticated]
     queryset = Team.objects.all()
     serializer_class = TeamSerializer
 
@@ -443,6 +451,7 @@ class TeamViewSet(viewsets.ModelViewSet):
 class PlayerViewSet(viewsets.ModelViewSet):
     """ViewSet for Player operations."""
 
+    permission_classes = [IsAuthenticated]
     queryset = Player.objects.all()
 
     def get_serializer_class(self):
@@ -556,10 +565,38 @@ class PlayerViewSet(viewsets.ModelViewSet):
 class DraftViewSet(viewsets.ViewSet):
     """ViewSet for draft operations."""
 
+    permission_classes = [IsAuthenticated]
+
+    def _verify_division_access(self, request, division):
+        """Verify user has access to the division's league."""
+        if request.user.role == "master_admin":
+            return None
+        if not hasattr(request, "league") or request.league != division.league:
+            return Response(
+                {"error": "You do not have access to this division"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return None
+
+    def _require_league_admin(self, request, division):
+        """Verify user is admin of the division's league."""
+        if request.user.role == "master_admin":
+            return None
+        if not request.user.is_league_admin(division.league):
+            return Response(
+                {"error": "Only league admins can perform this action"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return None
+
     def retrieve(self, request, pk=None):
         """Get draft state for a division."""
         try:
             draft_state = DraftState.objects.get(division_id=pk)
+            # Verify access
+            error = self._verify_division_access(request, draft_state.division)
+            if error:
+                return error
             return Response(DraftStateSerializer(draft_state).data)
         except DraftState.DoesNotExist:
             return Response(
@@ -571,6 +608,18 @@ class DraftViewSet(viewsets.ViewSet):
         """Start a draft."""
         serializer = StartDraftSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+
+        # Verify access to division
+        try:
+            division = Division.objects.get(id=serializer.validated_data["division_id"])
+        except Division.DoesNotExist:
+            return Response(
+                {"error": "Division not found"}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        error = self._require_league_admin(request, division)
+        if error:
+            return error
 
         try:
             draft_state = DraftService.start_draft(
@@ -591,6 +640,18 @@ class DraftViewSet(viewsets.ViewSet):
         serializer = DraftPlayerSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
+        # Verify access to draft
+        try:
+            draft_state = DraftState.objects.get(id=serializer.validated_data["draft_state_id"])
+        except DraftState.DoesNotExist:
+            return Response(
+                {"error": "Draft not found"}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        error = self._verify_division_access(request, draft_state.division)
+        if error:
+            return error
+
         try:
             draft_state = DraftService.draft_player(
                 draft_state_id=serializer.validated_data["draft_state_id"],
@@ -603,9 +664,21 @@ class DraftViewSet(viewsets.ViewSet):
 
     @action(detail=False, methods=["post"])
     def undo(self, request):
-        """Undo last pick."""
+        """Undo last pick - admin only."""
         serializer = UndoPickSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+
+        # Verify admin access
+        try:
+            draft_state = DraftState.objects.get(id=serializer.validated_data["draft_state_id"])
+        except DraftState.DoesNotExist:
+            return Response(
+                {"error": "Draft not found"}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        error = self._require_league_admin(request, draft_state.division)
+        if error:
+            return error
 
         try:
             draft_state = DraftService.undo_last_pick(
@@ -617,9 +690,21 @@ class DraftViewSet(viewsets.ViewSet):
 
     @action(detail=False, methods=["post"])
     def trade(self, request):
-        """Create a trade."""
+        """Create a trade - admin only."""
         serializer = CreateTradeSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+
+        # Verify admin access
+        try:
+            draft_state = DraftState.objects.get(id=serializer.validated_data["draft_state_id"])
+        except DraftState.DoesNotExist:
+            return Response(
+                {"error": "Draft not found"}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        error = self._require_league_admin(request, draft_state.division)
+        if error:
+            return error
 
         try:
             draft_state = DraftService.create_trade(
