@@ -71,6 +71,13 @@ A comprehensive draft management system for Little League baseball divisions. St
 - Real-time sync via localStorage
 - Access public view: `?view=public`
 
+### League Management
+- **Multi-league support**: Users can belong to multiple leagues
+- **Role-based access**: Admin and member roles per league
+- **Member management**: View, invite, and remove league members
+- **Invite system**: Email invitations or shareable join links
+- **Profile management**: Update name, email, and password
+
 ### Data Persistence
 - Automatic save after each action
 - Resume incomplete drafts
@@ -231,6 +238,16 @@ src/
 │   ├── CompleteRosters.tsx    # Roster display
 │   ├── LoginPage.tsx          # User login
 │   ├── RegisterPage.tsx       # User registration
+│   ├── ForgotPasswordPage.tsx # Password reset request
+│   ├── ResetPasswordPage.tsx  # Password reset form
+│   ├── JoinPage.tsx           # League invitation acceptance
+│   ├── profile/               # Profile & league management
+│   │   ├── ProfilePage.tsx    # Main profile page with tabs
+│   │   ├── MembersTab.tsx     # League member list
+│   │   ├── InviteModal.tsx    # Email invite form
+│   │   ├── JoinLinkSection.tsx# Shareable join link management
+│   │   ├── ProfileTab.tsx     # Edit user profile
+│   │   └── ChangePasswordModal.tsx
 │   └── evaluation/            # Excel import components
 ├── hooks/
 │   ├── useDivisions.ts        # Division state (API mode)

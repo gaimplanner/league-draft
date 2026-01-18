@@ -60,15 +60,25 @@ Has name, roster (drafted players), totalScore, draftPosition, coachKids array, 
 | `src/utils/teamUtils.ts` | Team display name helpers |
 | `src/types/index.ts` | All TypeScript interfaces (Player, Team, Division, DraftState, etc.) |
 | `src/components/PlayerReviewTable.tsx` | Spreadsheet-style table for CSV player review |
-| `server/draft/models.py` | Django models: League, User, LeagueMembership, Division, Team, Player, DraftState |
-| `server/draft/views.py` | DRF ViewSets and auth endpoints |
+| `server/draft/models.py` | Django models: League, User, LeagueMembership, LeagueInvitation, Division, Team, Player, DraftState |
+| `server/draft/views.py` | DRF ViewSets, auth endpoints, member management, invitations |
+| `server/draft/serializers.py` | DRF serializers with snake_case/camelCase handling |
 | `server/draft/services.py` | Draft business logic (start, pick, undo, trade) |
 | `server/draft/middleware.py` | TenantMiddleware for multi-tenancy |
+| `src/components/profile/*.tsx` | Profile page, member management, invitations |
+| `src/components/JoinPage.tsx` | League invitation acceptance flow |
 
 ### Component Hierarchy
 ```
 App
 ├── LoginPage / RegisterPage (if not authenticated)
+├── ForgotPasswordPage / ResetPasswordPage (password reset flow)
+├── JoinPage (league invitation acceptance)
+├── ProfilePage (settings mode)
+│   ├── MembersTab (league member management)
+│   ├── InviteModal / JoinLinkSection (invitations)
+│   ├── ProfileTab (edit profile)
+│   └── ChangePasswordModal
 ├── DivisionSelector / DivisionCreator
 ├── FileUpload → ColumnMapper (CSV flow)
 ├── EvaluationImport (Excel flow)
@@ -163,6 +173,23 @@ docker compose exec api python manage.py migrate
 - POST `/api/auth/login/` - Session login
 - POST `/api/auth/logout/` - End session
 - GET `/api/auth/me/` - Current user with leagues array
+- PATCH `/api/auth/me/` - Update profile (name, email)
+- POST `/api/auth/change-password/` - Change password
+- POST `/api/auth/password-reset/` - Request password reset email
+- POST `/api/auth/password-reset-confirm/` - Confirm password reset
+
+**League Member Management:**
+- GET `/api/leagues/{id}/members/` - List league members
+- DELETE `/api/leagues/{id}/members/{user_id}/` - Remove member
+- PATCH `/api/leagues/{id}/members/{user_id}/role/` - Change member role
+
+**Invitations:**
+- GET/POST `/api/leagues/{id}/invitations/` - List/create email invitations
+- DELETE `/api/leagues/{id}/invitations/{id}/` - Cancel invitation
+- POST `/api/invitations/accept/` - Accept email invitation
+- GET/POST/DELETE `/api/leagues/{id}/join-link/` - Manage join link
+- GET `/api/leagues/join/{token}/` - Get league info from join token (public)
+- POST `/api/leagues/join/{token}/` - Join via link
 
 ## Testing Approach
 
@@ -184,6 +211,31 @@ Tests cover:
 4. Test all phases: import → review → config → draft → complete
 5. Verify coach's kid and sibling rules work
 6. Test simulation and exports
+
+## Important Implementation Notes
+
+### API Mode vs localStorage Mode
+- Controlled by `VITE_USE_API` env var
+- API mode: All data persisted to PostgreSQL via Django REST API
+- localStorage mode: Data stored in browser (legacy, for offline use)
+- `useDraft.ts` and `useDivisions.ts` handle both modes
+
+### Draft State ID
+- `DraftState.id` must be captured from API responses
+- Stored in `draftStateId.current` ref in `useDraft.ts`
+- Required for all draft operations (pick, undo, trade)
+- Without it, draft falls back to localStorage mode
+
+### Player Data Persistence
+- Players must be saved to API when exiting Review phase
+- `savePlayersToApi()` called in `handleReviewComplete`
+- Includes coach kid assignments (`coachTeamId`) and sibling links (`siblingId`)
+- Sibling IDs remapped during bulk create (old frontend IDs → new DB UUIDs)
+
+### Browser History
+- Back button handled via popstate listener
+- Re-pushes state to prevent navigation (keeps user in app)
+- Prevents data loss from accidental back navigation
 
 ## Branching
 
