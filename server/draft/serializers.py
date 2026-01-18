@@ -493,6 +493,13 @@ class UndoPickSerializer(serializers.Serializer):
     draft_state_id = serializers.UUIDField()
 
 
+class SkipPickSerializer(serializers.Serializer):
+    """Serializer for skipping a pick."""
+
+    draft_state_id = serializers.UUIDField()
+    team_id = serializers.UUIDField()
+
+
 class CreateTradeSerializer(serializers.Serializer):
     """Serializer for creating a trade."""
 

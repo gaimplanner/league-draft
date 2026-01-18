@@ -278,12 +278,38 @@ export const useDraft = (_divisionId?: string) => {
     }
   }, [phase, isLoading]);
 
-  // Skip the current pick (only allowed in final round)
-  // TODO: Implement skip pick in API (issue #23)
-  const skipPick = useCallback(() => {
-    console.warn('Skip pick is not yet implemented in API mode');
-    setError('Skip pick is not available');
-  }, []);
+  // Skip the current pick (team gets one fewer player)
+  const skipPick = useCallback(async () => {
+    // Guard against concurrent operations (Issue #1)
+    if (isLoading) {
+      return;
+    }
+
+    if (!draftStateId.current) {
+      setError('Draft not started');
+      return;
+    }
+
+    if (!draftState?.currentTeamId) {
+      setError('No current team to skip');
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      const result = await api.skipPick({
+        draftStateId: draftStateId.current,
+        teamId: draftState.currentTeamId,
+      });
+      setDraftState(result.draftState);
+      setError(null);
+    } catch (err) {
+      console.error('Failed to skip pick:', err);
+      setError(getErrorMessage(err, 'Failed to skip pick. Please try again.'));
+    } finally {
+      setIsLoading(false);
+    }
+  }, [draftState?.currentTeamId, isLoading]);
 
   // Execute a trade between two teams
   const executeTrade = useCallback(async (

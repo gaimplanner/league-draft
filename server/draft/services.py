@@ -111,15 +111,76 @@ class DraftService:
 
     @classmethod
     @transaction.atomic
+    def skip_pick(cls, draft_state_id: UUID, team_id: UUID) -> DraftState:
+        """Skip the current pick (team gets one fewer player)."""
+        draft_state = DraftState.objects.select_for_update().get(id=draft_state_id)
+
+        if draft_state.is_draft_complete:
+            raise ValueError("Draft is already complete")
+
+        # Verify it's the correct team's turn
+        if str(draft_state.current_team_id) != str(team_id):
+            raise ValueError("Not this team's turn to pick")
+
+        # Cannot skip if there's a mandatory pick
+        if draft_state.mandatory_player_id:
+            raise ValueError("Cannot skip - mandatory pick required")
+
+        overall_pick = draft_state.picks.count() + 1
+
+        # Create a skipped pick record (no player assigned)
+        DraftPick.objects.create(
+            draft_state=draft_state,
+            round=draft_state.current_round,
+            pick=overall_pick,
+            team_id=team_id,
+            player_id=None,
+            was_skipped=True,
+        )
+
+        # Advance to next pick
+        cls._advance_to_next_pick(draft_state)
+
+        draft_state.refresh_from_db()
+        return draft_state
+
+    @classmethod
+    @transaction.atomic
     def undo_last_pick(cls, draft_state_id: UUID) -> DraftState:
-        """Undo the last pick."""
+        """Undo the last pick (including skipped picks)."""
         draft_state = DraftState.objects.select_for_update().get(id=draft_state_id)
 
         last_pick = draft_state.picks.order_by("-pick").first()
-        if not last_pick or not last_pick.player_id:
+        if not last_pick:
             raise ValueError("No pick to undo")
 
-        # Get the player
+        # Handle skipped picks (no player was drafted)
+        if last_pick.was_skipped or not last_pick.player_id:
+            # Just delete the pick and revert draft state
+            last_pick.delete()
+
+            # Revert draft state
+            draft_order = draft_state.draft_order
+            team_count = len(draft_order)
+            pick_in_round = ((last_pick.pick - 1) % team_count) + 1
+
+            draft_state.current_round = last_pick.round
+            draft_state.current_pick_in_round = pick_in_round
+            draft_state.current_team_id = last_pick.team_id
+            draft_state.is_draft_complete = False
+            draft_state.mandatory_player = None
+            draft_state.mandatory_reason = ""
+            draft_state.mandatory_sibling_name = ""
+            draft_state.save()
+
+            # Check for mandatory pick at reverted position
+            current_team = Team.objects.get(id=last_pick.team_id)
+            cls._check_and_set_mandatory_pick(draft_state, current_team, last_pick.round)
+
+            draft_state.refresh_from_db()
+            return draft_state
+
+        # Handle normal picks (player was drafted)
         player = Player.objects.get(id=last_pick.player_id)
         team = Team.objects.get(id=last_pick.team_id)
 

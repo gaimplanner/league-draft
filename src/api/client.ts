@@ -927,6 +927,31 @@ export const api = {
     return { draftState, players, teams };
   },
 
+  async skipPick(params: {
+    draftStateId: string;
+    teamId: string;
+  }): Promise<{ draftState: DraftState; players: Player[]; teams: Team[] }> {
+    const response = await fetchWithCSRFRetry(`${API_BASE_URL}/draft/skip/`, {
+      ...getDefaultOptions('POST'),
+      method: 'POST',
+      body: JSON.stringify({
+        draft_state_id: params.draftStateId,
+        team_id: params.teamId,
+      }),
+    }, true); // Use timeout for draft operations
+    const data = await handleResponse<Record<string, unknown>>(response);
+
+    const players = (data.players as Record<string, unknown>[]).map(transformPlayerFromApi);
+    const teams = (data.teams as Record<string, unknown>[]).map(transformTeamFromApi);
+    const draftState = transformDraftStateFromApi(
+      data.draft_state as Record<string, unknown>,
+      players,
+      teams
+    );
+
+    return { draftState, players, teams };
+  },
+
   async createTrade(params: {
     draftStateId: string;
     team1Id: string;

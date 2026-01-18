@@ -35,6 +35,7 @@ from .serializers import (
     StartDraftSerializer,
     DraftPlayerSerializer,
     UndoPickSerializer,
+    SkipPickSerializer,
     CreateTradeSerializer,
     BulkCreatePlayersSerializer,
     RegisterSerializer,
@@ -722,6 +723,33 @@ class DraftViewSet(viewsets.ViewSet):
         try:
             draft_state = DraftService.undo_last_pick(
                 draft_state_id=serializer.validated_data["draft_state_id"]
+            )
+            return Response(self._get_full_draft_response(draft_state))
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=["post"])
+    def skip(self, request):
+        """Skip current pick - admin only. Team gets one fewer player."""
+        serializer = SkipPickSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        # Verify admin access
+        try:
+            draft_state = DraftState.objects.get(id=serializer.validated_data["draft_state_id"])
+        except DraftState.DoesNotExist:
+            return Response(
+                {"error": "Draft not found"}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        error = self._require_league_admin(request, draft_state.division)
+        if error:
+            return error
+
+        try:
+            draft_state = DraftService.skip_pick(
+                draft_state_id=serializer.validated_data["draft_state_id"],
+                team_id=serializer.validated_data["team_id"],
             )
             return Response(self._get_full_draft_response(draft_state))
         except Exception as e:
