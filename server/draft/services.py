@@ -355,16 +355,58 @@ class DraftService:
         cls._check_and_set_mandatory_pick(draft_state, next_team, next_round)
 
     @classmethod
+    def _get_remaining_picks_for_team(
+        cls, draft_state: DraftState, team: Team, current_round: int
+    ) -> int:
+        """Calculate how many picks a team has remaining (including current pick)."""
+        division = draft_state.division
+        team_count = len(draft_state.draft_order)
+        roster_size = division.roster_size
+        total_rounds = roster_size
+
+        # Count picks already made by this team
+        picks_made = draft_state.picks.filter(team=team).count()
+
+        # Remaining picks = total rounds - picks already made
+        return total_rounds - picks_made
+
+    @classmethod
     def _check_and_set_mandatory_pick(
         cls, draft_state: DraftState, team: Team, current_round: int
     ) -> None:
-        """Check and set mandatory pick if applicable."""
+        """Check and set mandatory pick if applicable.
+
+        Logic:
+        1. First check if there's a mandatory pick due THIS round (projected/locked round matches)
+        2. If not, check if we need to force a mandatory pick early because there aren't
+           enough remaining picks to draft all required players at their projected rounds
+        """
         from django.db.models import Q
 
         division = draft_state.division
 
-        # Check for sibling locked to this team in their effective round
-        # Siblings should be drafted in their projectedRound (or lockedToRound if set)
+        # Get all undrafted mandatory players for this team (coach's kids + locked siblings)
+        coach_kids = list(Player.objects.filter(
+            division=division,
+            coach_team=team,
+            is_drafted=False,
+        ).order_by('projected_round', 'locked_to_round'))
+
+        locked_siblings = list(Player.objects.filter(
+            division=division,
+            locked_to_team=team,
+            is_drafted=False,
+        ).exclude(
+            # Exclude coach's kids that are already in coach_kids list
+            coach_team=team
+        ).order_by('projected_round', 'locked_to_round'))
+
+        all_mandatory = coach_kids + locked_siblings
+
+        if not all_mandatory:
+            return
+
+        # Check for sibling locked to this team in their effective round (immediate requirement)
         locked_sibling = Player.objects.filter(
             Q(locked_to_round=current_round)
             | Q(projected_round=current_round, locked_to_round__isnull=True),
@@ -380,7 +422,7 @@ class DraftService:
             draft_state.save()
             return
 
-        # Check for coach's kid in their projected round
+        # Check for coach's kid in their projected round (immediate requirement)
         coach_kid = Player.objects.filter(
             Q(locked_to_round=current_round)
             | Q(projected_round=current_round, locked_to_round__isnull=True),
@@ -393,4 +435,30 @@ class DraftService:
             draft_state.mandatory_player = coach_kid
             draft_state.mandatory_reason = "coach-kid"
             draft_state.mandatory_sibling_name = ""
+            draft_state.save()
+            return
+
+        # Check if we need to force a mandatory pick early due to insufficient remaining picks
+        remaining_picks = cls._get_remaining_picks_for_team(draft_state, team, current_round)
+        mandatory_count = len(all_mandatory)
+
+        if mandatory_count >= remaining_picks:
+            # Must draft a mandatory player now - not enough picks left to wait
+            # Pick the one with the earliest effective round
+            def get_effective_round(p):
+                return p.locked_to_round if p.locked_to_round is not None else (p.projected_round or 999)
+
+            all_mandatory.sort(key=get_effective_round)
+            forced_player = all_mandatory[0]
+
+            # Determine reason
+            if forced_player.coach_team_id == team.id:
+                draft_state.mandatory_player = forced_player
+                draft_state.mandatory_reason = "coach-kid"
+                draft_state.mandatory_sibling_name = ""
+            else:
+                draft_state.mandatory_player = forced_player
+                draft_state.mandatory_reason = "sibling"
+                draft_state.mandatory_sibling_name = forced_player.sibling or ""
+
             draft_state.save()

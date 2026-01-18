@@ -47,6 +47,10 @@ export function runSimulation(
   const totalRounds = Math.ceil(simPlayers.length / simTeams.length);
   let overallPick = 0;
 
+  // Track picks made by each team
+  const teamPicksMade: Record<string, number> = {};
+  simTeams.forEach(t => { teamPicksMade[t.id] = 0; });
+
   for (let round = 1; round <= totalRounds; round++) {
     // USE THE SAME calculateDraftOrder function as real draft
     const roundOrder = calculateDraftOrder(simTeams, round, draftFormat, draftOrder);
@@ -62,7 +66,12 @@ export function runSimulation(
       let playerToDraft: Player | null = null;
 
       // USE THE SAME getMandatoryPick function as real draft
-      const mandatoryResult = getMandatoryPick(simPlayers, teamId, round, options);
+      // Pass totalRounds and teamPicksMade to enable "not enough picks" logic
+      const mandatoryResult = getMandatoryPick(simPlayers, teamId, round, {
+        ...options,
+        totalRounds,
+        teamPicksMade: teamPicksMade[teamId],
+      });
 
       if (mandatoryResult) {
         playerToDraft = mandatoryResult.player;
@@ -73,6 +82,7 @@ export function runSimulation(
 
       if (playerToDraft) {
         overallPick++;
+        teamPicksMade[teamId]++;
 
         // Execute simulated draft
         playerToDraft.isDrafted = true;

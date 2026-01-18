@@ -7,15 +7,27 @@ export interface MandatoryPickResult {
 }
 
 /**
+ * Get the effective round for a player (locked round takes precedence over projected)
+ */
+function getEffectiveRound(player: Player): number {
+  return player.lockedToRound ?? player.projectedRound ?? 999;
+}
+
+/**
  * Get mandatory pick for a team in a given round.
  * This is the SINGLE SOURCE OF TRUTH for mandatory pick logic.
  * Used by both the real draft (useDraft.ts) and simulation (simulation.ts).
+ *
+ * Logic:
+ * 1. First check if there's a mandatory pick due THIS round (projected/locked round matches)
+ * 2. If not, check if we need to force a mandatory pick early because there aren't
+ *    enough remaining picks to draft all required players at their projected rounds
  */
 export function getMandatoryPick(
   players: Player[],
   teamId: string,
   round: number,
-  options: { includeCoachKids: boolean; includeSiblings: boolean } = { includeCoachKids: true, includeSiblings: true }
+  options: { includeCoachKids: boolean; includeSiblings: boolean; totalRounds?: number; teamPicksMade?: number } = { includeCoachKids: true, includeSiblings: true }
 ): MandatoryPickResult | null {
   // Check for coach's kids that must be drafted this round
   if (options.includeCoachKids) {
@@ -65,6 +77,54 @@ export function getMandatoryPick(
         player: siblingToDraft,
         reason: 'sibling',
         siblingName: siblingPlayer?.name || siblingToDraft.sibling,
+      };
+    }
+  }
+
+  // Check if we need to force a mandatory pick early due to insufficient remaining picks
+  // Only if totalRounds is provided (simulation passes this)
+  if (options.totalRounds !== undefined && options.teamPicksMade !== undefined) {
+    const remainingPicks = options.totalRounds - options.teamPicksMade;
+
+    // Get all undrafted mandatory players for this team
+    const allMandatory: { player: Player; reason: 'coach-kid' | 'sibling' }[] = [];
+
+    if (options.includeCoachKids) {
+      const coachKids = players.filter(
+        (p) => !p.isDrafted && p.isCoachKid && p.coachTeamId === teamId
+      );
+      coachKids.forEach(p => allMandatory.push({ player: p, reason: 'coach-kid' }));
+    }
+
+    if (options.includeSiblings) {
+      const lockedSiblings = players.filter(
+        (p) =>
+          !p.isDrafted &&
+          p.lockedToTeamId === teamId &&
+          // Exclude coach's kids already counted
+          !(p.isCoachKid && p.coachTeamId === teamId)
+      );
+      lockedSiblings.forEach(p => allMandatory.push({ player: p, reason: 'sibling' }));
+    }
+
+    if (allMandatory.length > 0 && allMandatory.length >= remainingPicks) {
+      // Must draft a mandatory player now - not enough picks left to wait
+      // Pick the one with the earliest effective round
+      allMandatory.sort((a, b) => getEffectiveRound(a.player) - getEffectiveRound(b.player));
+      const forced = allMandatory[0];
+
+      if (forced.reason === 'sibling') {
+        const siblingPlayer = players.find(p => p.id === forced.player.siblingId);
+        return {
+          player: forced.player,
+          reason: 'sibling',
+          siblingName: siblingPlayer?.name || forced.player.sibling,
+        };
+      }
+
+      return {
+        player: forced.player,
+        reason: 'coach-kid',
       };
     }
   }
