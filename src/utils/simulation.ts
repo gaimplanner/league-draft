@@ -116,9 +116,22 @@ export function runSimulation(
 
 /**
  * Calculate simulation statistics
+ * Only includes players from complete rounds to ensure fair comparison
+ * (avoids skewing when some teams get an extra player in incomplete final round)
  */
 export function getSimulationStats(result: SimulationResult) {
-  const teamScores = result.teams.map(t => t.totalScore);
+  const teamCount = result.teams.length;
+  const totalPlayers = result.players.filter(p => p.isDrafted).length;
+  const completeRounds = Math.floor(totalPlayers / teamCount);
+
+  // Calculate scores using only players from complete rounds
+  const teamScores = result.teams.map(team => {
+    const completeRoundPlayers = team.roster.filter(
+      p => p.draftedInRound !== undefined && p.draftedInRound <= completeRounds
+    );
+    return completeRoundPlayers.reduce((sum, p) => sum + p.totalScore, 0);
+  });
+
   const highest = Math.max(...teamScores);
   const lowest = Math.min(...teamScores);
   const spread = highest - lowest;
