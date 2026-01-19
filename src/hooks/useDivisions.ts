@@ -123,9 +123,16 @@ export function useDivisions() {
       setActiveDivision(division);
       setError(null);
       return division;
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Failed to load division:', err);
-      setError('Failed to load division');
+      // If division not found (404), remove it from the summaries list
+      if (err instanceof ApiError && err.message.includes('Not Found')) {
+        setSummaries(prev => prev.filter(s => s.id !== divisionId));
+        setDivisionIds(prev => prev.filter(id => id !== divisionId));
+        setError('Division not found - it may have been deleted');
+      } else {
+        setError('Failed to load division');
+      }
       return null;
     } finally {
       setIsLoading(false);
