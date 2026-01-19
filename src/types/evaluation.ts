@@ -20,6 +20,33 @@ export interface FieldConfig {
 
 export type EvaluationCategory = 'fielding' | 'pitching' | 'hitting' | 'flyBalls' | 'baserunning';
 
+// Special "Summary" tab configuration that contains all scores in one sheet
+// This is a combined format where all evaluation data is in a single tab
+export const SUMMARY_TAB_CONFIG: EvaluationTabConfig = {
+  name: 'Summary',
+  category: 'fielding', // Placeholder - Summary contains all categories
+  expectedColumns: ['BIB#', 'Field Score', 'Throw Score', 'Form', '# Catches', 'Time'],
+  fields: [
+    // Fielding
+    { name: 'field', columnPatterns: ['field score', 'field'], scoreType: 'scale', inputMin: 0, inputMax: 5, lowerIsBetter: false, weight: 50 },
+    { name: 'throw', columnPatterns: ['throw score', 'throw'], scoreType: 'scale', inputMin: 0, inputMax: 5, lowerIsBetter: false, weight: 50 },
+    // Fly Balls - first "Form" and "# Catches" columns after fielding
+    { name: 'flyBallForm', columnPatterns: ['form'], scoreType: 'scale', inputMin: 0, inputMax: 4, lowerIsBetter: false, weight: 40 },
+    { name: 'catches', columnPatterns: ['# catches', 'catches'], scoreType: 'count', inputMin: 0, inputMax: 3, lowerIsBetter: false, weight: 60 },
+    // Baserunning - Form and Time columns
+    { name: 'baserunningForm', columnPatterns: ['form'], scoreType: 'scale', inputMin: 0, inputMax: 4, lowerIsBetter: false, weight: 40 },
+    { name: 'time1', columnPatterns: ['time 1', 'time1', 'time'], scoreType: 'time', inputMin: 3.5, inputMax: 7.0, lowerIsBetter: true, weight: 30 },
+    { name: 'time2', columnPatterns: ['time 2', 'time2'], scoreType: 'time', inputMin: 3.5, inputMax: 7.0, lowerIsBetter: true, weight: 30 },
+    // Hitting
+    { name: 'hittingForm', columnPatterns: ['form'], scoreType: 'scale', inputMin: 0, inputMax: 4, lowerIsBetter: false, weight: 30 },
+    { name: 'contactPower', columnPatterns: ['contact/power', 'contact', 'power'], scoreType: 'scale', inputMin: 0, inputMax: 4, lowerIsBetter: false, weight: 40 },
+    { name: 'hits', columnPatterns: ['# hits', 'hits'], scoreType: 'count', inputMin: 0, inputMax: 5, lowerIsBetter: false, weight: 30 },
+    // Pitching
+    { name: 'pitchingForm', columnPatterns: ['form'], scoreType: 'scale', inputMin: 0, inputMax: 4, lowerIsBetter: false, weight: 40 },
+    { name: 'armStrength', columnPatterns: ['arm strength', 'arm', 'strength'], scoreType: 'scale', inputMin: 0, inputMax: 4, lowerIsBetter: false, weight: 60 },
+  ],
+};
+
 // Default tab configurations for AAA evaluation spreadsheet
 export const EVALUATION_TAB_CONFIGS: EvaluationTabConfig[] = [
   {
@@ -230,6 +257,7 @@ export interface ImportedTab {
   bibColumn: string; // Name of the BIB column found
   matchedConfig: EvaluationTabConfig | null;
   playerCount: number;
+  isCombinedTab?: boolean; // True if this is a Summary tab with all categories
 }
 
 // Row data from a tab

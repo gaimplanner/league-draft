@@ -62,6 +62,11 @@ export async function parseExcelFile(file: File): Promise<ImportedWorkbook> {
  * Parse a single worksheet
  */
 function parseSheet(sheet: XLSX.WorkSheet, sheetName: string): ImportedTab | null {
+  // Special handling for Summary tab which has all scores in one sheet
+  if (sheetName.toLowerCase() === 'summary') {
+    return parseSummarySheet(sheet, sheetName);
+  }
+
   // Find header row by looking for "BIB#" or "BIB"
   const headerRow = detectHeaderRow(sheet);
   if (headerRow === -1) {
@@ -91,6 +96,187 @@ function parseSheet(sheet: XLSX.WorkSheet, sheetName: string): ImportedTab | nul
     matchedConfig,
     playerCount: rows.length,
   };
+}
+
+/**
+ * Special parser for Summary tab which contains all evaluation data in one sheet.
+ * The Summary tab has a 2-row header:
+ * - Row 0: Category groups (Fielding, Fly Balls, Baserunning, Pitching, Hitting)
+ * - Row 1: Column names (BIB#, First Name, Last Name, Field Score, Throw Score, etc.)
+ */
+function parseSummarySheet(sheet: XLSX.WorkSheet, sheetName: string): ImportedTab | null {
+  const range = XLSX.utils.decode_range(sheet['!ref'] || 'A1:Z1');
+
+  // Read both header rows
+  const categoryRow: string[] = [];
+  const columnRow: string[] = [];
+
+  for (let col = 0; col <= range.e.c; col++) {
+    const catCell = sheet[XLSX.utils.encode_cell({ r: 0, c: col })];
+    const colCell = sheet[XLSX.utils.encode_cell({ r: 1, c: col })];
+    categoryRow.push(catCell?.v ? String(catCell.v).trim() : '');
+    columnRow.push(colCell?.v ? String(colCell.v).trim() : '');
+  }
+
+  // Find BIB column
+  const bibIndex = columnRow.findIndex(
+    h => h.toLowerCase() === 'bib#' || h.toLowerCase() === 'bib'
+  );
+  if (bibIndex === -1) {
+    console.warn('No BIB column found in Summary sheet');
+    return null;
+  }
+
+  // Build column mapping based on category groups
+  // This maps: category -> { columnName -> columnIndex }
+  interface ColumnMapping {
+    fielding: Record<string, number>;
+    flyBalls: Record<string, number>;
+    baserunning: Record<string, number>;
+    pitching: Record<string, number>;
+    hitting: Record<string, number>;
+  }
+
+  const columnMapping: ColumnMapping = {
+    fielding: {},
+    flyBalls: {},
+    baserunning: {},
+    pitching: {},
+    hitting: {},
+  };
+
+  // Track current category as we iterate through columns
+  let currentCategory: keyof ColumnMapping | null = null;
+
+  for (let col = 0; col <= range.e.c; col++) {
+    const category = categoryRow[col].toLowerCase();
+    const columnName = columnRow[col].toLowerCase();
+
+    // Update current category when we see a category header
+    if (category === 'fielding') currentCategory = 'fielding';
+    else if (category === 'fly balls') currentCategory = 'flyBalls';
+    else if (category === 'baserunning') currentCategory = 'baserunning';
+    else if (category === 'pitching') currentCategory = 'pitching';
+    else if (category === 'hitting') currentCategory = 'hitting';
+
+    // Map column to current category
+    if (currentCategory && columnName) {
+      columnMapping[currentCategory][columnName] = col;
+    }
+  }
+
+  // Extract data rows
+  const rows: TabRow[] = [];
+
+  for (let row = 2; row <= range.e.r; row++) {
+    const bibCell = sheet[XLSX.utils.encode_cell({ r: row, c: bibIndex })];
+    const bibValue = bibCell?.v !== undefined ? String(bibCell.v).trim() : '';
+
+    // Skip empty rows
+    if (!bibValue || bibValue.toLowerCase() === 'bib#') continue;
+
+    const rowData: TabRow = {
+      bib: bibValue,
+      scores: {},
+    };
+
+    // Extract name
+    for (let col = 0; col < columnRow.length; col++) {
+      const header = columnRow[col].toLowerCase();
+      const cell = sheet[XLSX.utils.encode_cell({ r: row, c: col })];
+      const value = cell?.v;
+
+      if (header.includes('first') && header.includes('name')) {
+        rowData.firstName = value ? String(value).trim() : undefined;
+      } else if (header.includes('last') && header.includes('name')) {
+        rowData.lastName = value ? String(value).trim() : undefined;
+      }
+    }
+
+    // Skip rows without names
+    if (!rowData.firstName && !rowData.lastName) continue;
+
+    // Extract scores using column mapping
+    // Fielding
+    if (columnMapping.fielding['field score'] !== undefined) {
+      const cell = sheet[XLSX.utils.encode_cell({ r: row, c: columnMapping.fielding['field score'] })];
+      rowData.scores['field'] = cell?.v !== undefined ? Number(cell.v) : null;
+    }
+    if (columnMapping.fielding['throw score'] !== undefined) {
+      const cell = sheet[XLSX.utils.encode_cell({ r: row, c: columnMapping.fielding['throw score'] })];
+      rowData.scores['throw'] = cell?.v !== undefined ? Number(cell.v) : null;
+    }
+
+    // Fly Balls
+    if (columnMapping.flyBalls['form'] !== undefined) {
+      const cell = sheet[XLSX.utils.encode_cell({ r: row, c: columnMapping.flyBalls['form'] })];
+      rowData.scores['flyBallForm'] = cell?.v !== undefined ? Number(cell.v) : null;
+    }
+    if (columnMapping.flyBalls['# catches'] !== undefined) {
+      const cell = sheet[XLSX.utils.encode_cell({ r: row, c: columnMapping.flyBalls['# catches'] })];
+      rowData.scores['catches'] = cell?.v !== undefined ? Number(cell.v) : null;
+    }
+
+    // Baserunning
+    if (columnMapping.baserunning['form'] !== undefined) {
+      const cell = sheet[XLSX.utils.encode_cell({ r: row, c: columnMapping.baserunning['form'] })];
+      rowData.scores['baserunningForm'] = cell?.v !== undefined ? Number(cell.v) : null;
+    }
+    if (columnMapping.baserunning['time 1'] !== undefined) {
+      const cell = sheet[XLSX.utils.encode_cell({ r: row, c: columnMapping.baserunning['time 1'] })];
+      rowData.scores['time1'] = cell?.v !== undefined ? Number(cell.v) : null;
+    }
+    if (columnMapping.baserunning['time 2'] !== undefined) {
+      const cell = sheet[XLSX.utils.encode_cell({ r: row, c: columnMapping.baserunning['time 2'] })];
+      rowData.scores['time2'] = cell?.v !== undefined ? Number(cell.v) : null;
+    }
+
+    // Pitching
+    if (columnMapping.pitching['form'] !== undefined) {
+      const cell = sheet[XLSX.utils.encode_cell({ r: row, c: columnMapping.pitching['form'] })];
+      rowData.scores['pitchingForm'] = cell?.v !== undefined ? Number(cell.v) : null;
+    }
+    if (columnMapping.pitching['arm strength'] !== undefined) {
+      const cell = sheet[XLSX.utils.encode_cell({ r: row, c: columnMapping.pitching['arm strength'] })];
+      rowData.scores['armStrength'] = cell?.v !== undefined ? Number(cell.v) : null;
+    }
+
+    // Hitting
+    if (columnMapping.hitting['form'] !== undefined) {
+      const cell = sheet[XLSX.utils.encode_cell({ r: row, c: columnMapping.hitting['form'] })];
+      rowData.scores['hittingForm'] = cell?.v !== undefined ? Number(cell.v) : null;
+    }
+    if (columnMapping.hitting['contact/power'] !== undefined) {
+      const cell = sheet[XLSX.utils.encode_cell({ r: row, c: columnMapping.hitting['contact/power'] })];
+      rowData.scores['contactPower'] = cell?.v !== undefined ? Number(cell.v) : null;
+    }
+    if (columnMapping.hitting['# hits'] !== undefined) {
+      const cell = sheet[XLSX.utils.encode_cell({ r: row, c: columnMapping.hitting['# hits'] })];
+      rowData.scores['hits'] = cell?.v !== undefined ? Number(cell.v) : null;
+    }
+
+    rows.push(rowData);
+  }
+
+  // Create a special "combined" config that marks this as a Summary tab
+  const summaryConfig: EvaluationTabConfig = {
+    name: 'Summary',
+    category: 'fielding', // Placeholder - we'll handle this specially in processing
+    expectedColumns: [],
+    fields: [],
+  };
+
+  return {
+    name: sheetName,
+    headerRow: 1,
+    headers: columnRow,
+    rows,
+    bibColumn: 'BIB#',
+    matchedConfig: summaryConfig,
+    playerCount: rows.length,
+    // Mark this as a combined tab that has all categories
+    isCombinedTab: true,
+  } as ImportedTab & { isCombinedTab: boolean };
 }
 
 /**
@@ -284,6 +470,16 @@ export function validateWorkbook(workbook: ImportedWorkbook): {
 } {
   const expectedTabs = ['Fielding', 'Pitching', 'Hitting', 'Fly Balls', 'Baserunning'];
   const foundTabs = workbook.tabs.map((t) => t.name);
+
+  // Check if we have a combined Summary tab - this counts as having all tabs
+  const hasCombinedTab = workbook.tabs.some((t) => t.isCombinedTab);
+  if (hasCombinedTab) {
+    return {
+      isValid: true,
+      missingTabs: [],
+      extraTabs: foundTabs.filter(t => t.toLowerCase() !== 'summary'),
+    };
+  }
 
   const missingTabs = expectedTabs.filter(
     (expected) =>

@@ -1,5 +1,6 @@
 import {
   ImportedWorkbook,
+  ImportedTab,
   EvaluationPlayer,
   EvaluationCategory,
   FieldWeight,
@@ -47,6 +48,12 @@ export function processWorkbook(
 
   // Process each tab and merge data into players
   for (const tab of workbook.tabs) {
+    // Special handling for combined Summary tab
+    if (tab.isCombinedTab) {
+      processCombinedTab(tab, playerMap, timeRange, warnings);
+      continue;
+    }
+
     if (!tab.matchedConfig) {
       warnings.push({
         type: 'partial_data',
@@ -187,6 +194,100 @@ export function processWorkbook(
   });
 
   return { players, warnings };
+}
+
+/**
+ * Process a combined Summary tab that contains all evaluation categories
+ */
+function processCombinedTab(
+  tab: ImportedTab,
+  playerMap: Map<string, EvaluationPlayer>,
+  timeRange: { min: number; max: number },
+  _warnings: ImportWarning[]
+): void {
+  for (const row of tab.rows) {
+    const player = playerMap.get(row.bib);
+    if (!player) continue;
+
+    // Update player info
+    if (row.firstName && !player.firstName) {
+      player.firstName = row.firstName;
+    }
+    if (row.lastName && !player.lastName) {
+      player.lastName = row.lastName;
+    }
+
+    // Track tab
+    if (!player.tabsFound.includes(tab.name)) {
+      player.tabsFound.push(tab.name);
+    }
+
+    // Store raw scores by category
+    // Fielding
+    player.rawScores.fielding = {
+      field: row.scores['field'] ?? null,
+      throw: row.scores['throw'] ?? null,
+    };
+    // Fly Balls
+    player.rawScores.flyBalls = {
+      form: row.scores['flyBallForm'] ?? null,
+      catches: row.scores['catches'] ?? null,
+    };
+    // Baserunning
+    player.rawScores.baserunning = {
+      form: row.scores['baserunningForm'] ?? null,
+      time1: row.scores['time1'] ?? null,
+      time2: row.scores['time2'] ?? null,
+    };
+    // Pitching
+    player.rawScores.pitching = {
+      form: row.scores['pitchingForm'] ?? null,
+      armStrength: row.scores['armStrength'] ?? null,
+    };
+    // Hitting
+    player.rawScores.hitting = {
+      form: row.scores['hittingForm'] ?? null,
+      contactPower: row.scores['contactPower'] ?? null,
+      hits: row.scores['hits'] ?? null,
+    };
+
+    // Normalize scores
+    // Fielding (0-5 scale based on your data)
+    const fieldNorm = normalizeScore(row.scores['field'], 0, 5, false);
+    const throwNorm = normalizeScore(row.scores['throw'], 0, 5, false);
+    if (fieldNorm !== null) player.normalizedScores.fielding['field'] = fieldNorm;
+    if (throwNorm !== null) player.normalizedScores.fielding['throw'] = throwNorm;
+
+    // Fly Balls
+    const flyBallFormNorm = normalizeScore(row.scores['flyBallForm'], 0, 4, false);
+    const catchesNorm = normalizeScore(row.scores['catches'], 0, 3, false);
+    if (flyBallFormNorm !== null) player.normalizedScores.flyBalls['form'] = flyBallFormNorm;
+    if (catchesNorm !== null) player.normalizedScores.flyBalls['catches'] = catchesNorm;
+
+    // Baserunning
+    const baserunningFormNorm = normalizeScore(row.scores['baserunningForm'], 0, 4, false);
+    if (baserunningFormNorm !== null) player.normalizedScores.baserunning['form'] = baserunningFormNorm;
+    // Handle best time
+    const bestTime = getBestTime(row.scores['time1'], row.scores['time2']);
+    if (bestTime !== null) {
+      const timeNorm = normalizeScore(bestTime, timeRange.min, timeRange.max, true);
+      if (timeNorm !== null) player.normalizedScores.baserunning['bestTime'] = timeNorm;
+    }
+
+    // Pitching
+    const pitchingFormNorm = normalizeScore(row.scores['pitchingForm'], 0, 4, false);
+    const armStrengthNorm = normalizeScore(row.scores['armStrength'], 0, 4, false);
+    if (pitchingFormNorm !== null) player.normalizedScores.pitching['form'] = pitchingFormNorm;
+    if (armStrengthNorm !== null) player.normalizedScores.pitching['armStrength'] = armStrengthNorm;
+
+    // Hitting
+    const hittingFormNorm = normalizeScore(row.scores['hittingForm'], 0, 4, false);
+    const contactPowerNorm = normalizeScore(row.scores['contactPower'], 0, 4, false);
+    const hitsNorm = normalizeScore(row.scores['hits'], 0, 5, false);
+    if (hittingFormNorm !== null) player.normalizedScores.hitting['form'] = hittingFormNorm;
+    if (contactPowerNorm !== null) player.normalizedScores.hitting['contactPower'] = contactPowerNorm;
+    if (hitsNorm !== null) player.normalizedScores.hitting['hits'] = hitsNorm;
+  }
 }
 
 /**
