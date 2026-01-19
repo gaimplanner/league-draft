@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { Undo, ChevronLeft, AlertCircle, Search, ChevronRight } from 'lucide-react';
-import { DraftState, Team, DivisionAgeRange } from '../types';
+import { Undo, ChevronLeft, AlertCircle, Search, ChevronRight, X } from 'lucide-react';
+import { DraftState, Team, DivisionAgeRange, Player } from '../types';
 import { TeamRosters } from './TeamRosters';
 import { getNextPick, calculateDraftOrder } from '../utils/draftOrder';
 import { useViewMode } from '../contexts/ViewContext';
@@ -42,6 +42,8 @@ export const DraftBoard = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedPlayerId, setExpandedPlayerId] = useState<string | null>(null);
   const [showRoundInterstitial, setShowRoundInterstitial] = useState(false);
+  // Pending draft confirmation (replaces browser confirm dialog)
+  const [pendingDraftPlayer, setPendingDraftPlayer] = useState<Player | null>(null);
   const [interstitialData, setInterstitialData] = useState<{
     completedRound: number;
     nextRound: number;
@@ -118,6 +120,19 @@ export const DraftBoard = ({
       onSkipPick();
     }
   };
+
+  // Handle confirming a pending draft pick
+  const handleConfirmDraft = () => {
+    if (pendingDraftPlayer) {
+      onDraftPlayer(pendingDraftPlayer.id);
+      setPendingDraftPlayer(null);
+    }
+  };
+
+  // Clear pending draft when team changes or draft completes
+  useEffect(() => {
+    setPendingDraftPlayer(null);
+  }, [draftState.currentTeamId, draftState.isDraftComplete]);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
@@ -281,8 +296,31 @@ export const DraftBoard = ({
             );
           })()}
 
+          {/* Pending Draft Confirmation Banner */}
+          {pendingDraftPlayer && !draftState.mandatoryPick && !isPublicView && (
+            <div className="mt-3 flex items-center justify-center gap-3 bg-blue-500/20 border border-blue-400/50 rounded-lg px-4 py-2">
+              <span className="text-sm text-blue-100">
+                <strong>Confirm:</strong> Draft {pendingDraftPlayer.name} ({pendingDraftPlayer.totalScore.toFixed(1)} pts)?
+              </span>
+              <button
+                onClick={handleConfirmDraft}
+                disabled={isLoading}
+                className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white font-medium text-sm rounded flex items-center gap-1 disabled:opacity-50"
+              >
+                {isLoading ? '...' : 'Draft'} <ChevronRight className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setPendingDraftPlayer(null)}
+                disabled={isLoading}
+                className="px-2 py-1 bg-white/10 hover:bg-white/20 text-white font-medium text-sm rounded flex items-center gap-1 disabled:opacity-50"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
           {/* Best Available by Age - compact horizontal layout */}
-          {!draftState.mandatoryPick && !isPublicView && (() => {
+          {!draftState.mandatoryPick && !pendingDraftPlayer && !isPublicView && (() => {
             const topByAge: Record<number, typeof availablePlayers> = {};
             availablePlayers.forEach(player => {
               const isCoachKidForOtherTeam = player.isCoachKid && player.coachTeamId && player.coachTeamId !== draftState.currentTeamId;
@@ -318,11 +356,7 @@ export const DraftBoard = ({
                         {players.map((player) => (
                           <button
                             key={player.id}
-                            onClick={() => {
-                              if (window.confirm(`Draft ${player.firstName} ${player.lastName} (${player.totalScore.toFixed(1)} pts)?`)) {
-                                onDraftPlayer(player.id);
-                              }
-                            }}
+                            onClick={() => setPendingDraftPlayer(player)}
                             disabled={isLoading}
                             className="px-2 py-1 rounded text-xs font-medium transition-colors disabled:opacity-50 bg-white/10 hover:bg-white/20 text-white"
                             title={`Draft ${player.firstName} ${player.lastName} (${player.totalScore.toFixed(1)} pts)`}
