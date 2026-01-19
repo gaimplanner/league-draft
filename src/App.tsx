@@ -13,6 +13,7 @@ import { PlayerReview } from './components/PlayerReview';
 import { DraftConfig } from './components/DraftConfig';
 import { DraftBoard } from './components/DraftBoard';
 import { DraftComplete } from './components/DraftComplete';
+import { TeamBuilderFlow } from './components/TeamBuilderFlow';
 import { LoginPage } from './components/LoginPage';
 import { RegisterPage } from './components/RegisterPage';
 import { ForgotPasswordPage } from './components/ForgotPasswordPage';
@@ -760,6 +761,16 @@ function App() {
           </button>
         </div>
       </div>
+    );
+  }
+
+  // Route to Team Builder for league-generated mode
+  if (activeDivision.mode === 'league-generated') {
+    return (
+      <TeamBuilderFlow
+        division={activeDivision}
+        onBack={handleBackToSelector}
+      />
     );
   }
 
