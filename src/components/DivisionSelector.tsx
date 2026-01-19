@@ -64,9 +64,11 @@ export const DivisionSelector = ({
     }
   };
 
-  // Filter out incomplete divisions (no players imported yet)
-  // These shouldn't exist with the new logic, but handle legacy data
-  const validDivisions = divisions.filter(d => d.playerCount > 0);
+  // Filter out incomplete live-draft divisions (no players imported yet)
+  // But always show league-generated divisions since they need setup before import
+  const validDivisions = divisions.filter(d =>
+    d.playerCount > 0 || d.mode === 'league-generated'
+  );
 
   const sortedDivisions = [...validDivisions].sort((a, b) => {
     // In-progress first, then by creation date (newest first)
