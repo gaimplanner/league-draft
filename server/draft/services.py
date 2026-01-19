@@ -324,19 +324,24 @@ class DraftService:
         next_pick_in_round = (current_picks % team_count) + 1
 
         # Calculate round order based on draft format
-        if draft_state.draft_format == "snake":
-            # Reverse order on even rounds
-            if next_round % 2 == 0:
-                current_round_order = list(reversed(draft_order))
+        # Only recalculate order at the START of a new round (pick 1 of round)
+        if next_pick_in_round == 1:
+            if draft_state.draft_format == "snake":
+                # Reverse order on even rounds
+                if next_round % 2 == 0:
+                    current_round_order = list(reversed(draft_order))
+                else:
+                    current_round_order = draft_order
+            elif draft_state.draft_format == "recalculated":
+                # Sort teams by total score (ascending) - lowest picks first
+                teams = Team.objects.filter(division=division).order_by("total_score")
+                current_round_order = [str(t.id) for t in teams]
             else:
+                # Straight draft
                 current_round_order = draft_order
-        elif draft_state.draft_format == "recalculated":
-            # Sort teams by total score (ascending)
-            teams = Team.objects.filter(division=division).order_by("total_score")
-            current_round_order = [str(t.id) for t in teams]
         else:
-            # Straight draft
-            current_round_order = draft_order
+            # Mid-round: keep the existing round order
+            current_round_order = draft_state.current_round_order
 
         next_team_id = current_round_order[next_pick_in_round - 1]
         next_team = Team.objects.get(id=next_team_id)
