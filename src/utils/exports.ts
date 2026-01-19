@@ -429,3 +429,115 @@ export function exportPlayersForReimport(players: Player[], teams: Team[]): stri
 
   return csvContent;
 }
+
+/**
+ * Types for Team Builder happiness report
+ */
+export interface HappinessReportPlayer {
+  playerId: string;
+  playerName: string;
+  teamName: string;
+  totalScore: number;
+  school?: string;
+  grade?: number;
+  happinessScore: 'all' | 'some' | 'none' | 'no-requests';
+  coachRequest?: string;
+  coachRequestStatus: 'honored' | 'not-honored' | 'not-participating' | 'none';
+  teammateRequests: Array<{
+    requestedName: string;
+    isTwoWay: boolean;
+    honored: boolean;
+  }>;
+}
+
+/**
+ * Generate happiness report CSV for Team Builder.
+ * Includes per-player request fulfillment details.
+ */
+export function generateHappinessReportCSV(players: HappinessReportPlayer[]): string {
+  // Find max teammate requests for column count
+  const maxTeammateRequests = Math.max(
+    ...players.map(p => p.teammateRequests.length),
+    0
+  );
+
+  // Build headers
+  const headers = [
+    'Player Name',
+    'Team',
+    'Total Score',
+    'School',
+    'Grade',
+    'Happiness',
+    'Coach Request',
+    'Coach Status',
+  ];
+
+  // Add teammate request columns
+  for (let i = 1; i <= maxTeammateRequests; i++) {
+    headers.push(`Teammate ${i}`);
+    headers.push(`Type ${i}`);
+    headers.push(`Status ${i}`);
+  }
+
+  // Build rows
+  const rows = players.map(player => {
+    const row = [
+      player.playerName,
+      player.teamName,
+      player.totalScore.toFixed(1),
+      player.school || '',
+      player.grade?.toString() || '',
+      getHappinessDisplayValue(player.happinessScore),
+      player.coachRequest || '',
+      getCoachStatusDisplayValue(player.coachRequestStatus),
+    ];
+
+    // Add teammate columns
+    for (let i = 0; i < maxTeammateRequests; i++) {
+      const req = player.teammateRequests[i];
+      if (req) {
+        row.push(req.requestedName);
+        row.push(req.isTwoWay ? '2-way' : '1-way');
+        row.push(req.honored ? 'Honored' : 'Not Honored');
+      } else {
+        row.push('', '', '');
+      }
+    }
+
+    return row;
+  });
+
+  // CSV escape function
+  const escapeCSV = (value: string): string => {
+    if (value.includes(',') || value.includes('"') || value.includes('\n')) {
+      return `"${value.replace(/"/g, '""')}"`;
+    }
+    return value;
+  };
+
+  const csvContent = [
+    headers.map(escapeCSV).join(','),
+    ...rows.map(row => row.map(escapeCSV).join(','))
+  ].join('\n');
+
+  return csvContent;
+}
+
+function getHappinessDisplayValue(score: 'all' | 'some' | 'none' | 'no-requests'): string {
+  switch (score) {
+    case 'all': return 'All Honored';
+    case 'some': return 'Partial';
+    case 'none': return 'None Honored';
+    case 'no-requests': return 'No Requests';
+  }
+}
+
+function getCoachStatusDisplayValue(status: 'honored' | 'not-honored' | 'not-participating' | 'none'): string {
+  switch (status) {
+    case 'honored': return 'Honored';
+    case 'not-honored': return 'Not Honored';
+    case 'not-participating': return 'Coach Not Participating';
+    case 'none': return '';
+  }
+}

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
   Check,
   AlertTriangle,
@@ -8,14 +8,17 @@ import {
   BarChart3,
   Heart,
   RefreshCw,
+  Download,
 } from 'lucide-react';
 import {
   TeamBuilderResult,
   PlayerHappiness,
   HappinessScore,
   AssignmentResult,
+  TeamBuilderPlayer,
 } from '../../utils/teamBuilderAlgorithm';
 import { Player } from '../../types';
+import { generateHappinessReportCSV, downloadCSV, HappinessReportPlayer } from '../../utils/exports';
 
 interface TeamBuilderResultsProps {
   result: TeamBuilderResult;
@@ -90,6 +93,69 @@ export const TeamBuilderResults = ({
       .sort((a, b) => a.assignment.round - b.assignment.round || a.assignment.pick - b.assignment.pick);
   };
 
+  // Build happiness report data for export
+  const happinessReportData = useMemo((): HappinessReportPlayer[] => {
+    return result.playerHappiness.map(happiness => {
+      const player = playerMap.get(happiness.playerId);
+      const assignment = result.assignments.find(a => a.playerId === happiness.playerId);
+      const team = result.teamSummaries.find(t => t.teamId === assignment?.teamId);
+
+      // Get the TeamBuilderPlayer to access request info
+      const tbPlayer = players.find(p => p.id === happiness.playerId) as TeamBuilderPlayer | undefined;
+
+      // Determine coach request status
+      let coachRequestStatus: HappinessReportPlayer['coachRequestStatus'] = 'none';
+      if (happiness.coachRequestHonored === true) {
+        coachRequestStatus = 'honored';
+      } else if (happiness.coachRequestHonored === false) {
+        coachRequestStatus = 'not-honored';
+      }
+
+      // Build teammate request info
+      const teammateRequests: HappinessReportPlayer['teammateRequests'] = [];
+      if (tbPlayer?.teammateRequests) {
+        const twoWaySet = new Set(tbPlayer.twoWayTeammateIds || []);
+        const resolvedIds = tbPlayer.resolvedTeammateIds || [];
+
+        tbPlayer.teammateRequests.forEach((reqName, idx) => {
+          const resolvedId = resolvedIds[idx];
+          const isTwoWay = resolvedId ? twoWaySet.has(resolvedId) : false;
+
+          // Check if this teammate is on the same team
+          const teammateAssignment = resolvedId
+            ? result.assignments.find(a => a.playerId === resolvedId)
+            : null;
+          const honored = teammateAssignment?.teamId === assignment?.teamId;
+
+          teammateRequests.push({
+            requestedName: reqName,
+            isTwoWay,
+            honored,
+          });
+        });
+      }
+
+      return {
+        playerId: happiness.playerId,
+        playerName: player?.name || `Player ${happiness.playerId}`,
+        teamName: team?.teamName || team?.coachName || '',
+        totalScore: player?.totalScore || 0,
+        school: tbPlayer?.school,
+        grade: tbPlayer?.grade,
+        happinessScore: happiness.score,
+        coachRequest: tbPlayer?.coachRequest,
+        coachRequestStatus,
+        teammateRequests,
+      };
+    });
+  }, [result, players, playerMap]);
+
+  const handleExportHappiness = () => {
+    const csv = generateHappinessReportCSV(happinessReportData);
+    const date = new Date().toISOString().split('T')[0];
+    downloadCSV(csv, `happiness-report-${date}.csv`);
+  };
+
   return (
     <div className="space-y-6">
       {/* Header with stats */}
@@ -98,15 +164,24 @@ export const TeamBuilderResults = ({
           <h2 className="text-xl font-bold text-gray-900 dark:text-white">
             Team Builder Results
           </h2>
-          {onRerun && (
+          <div className="flex items-center gap-2">
             <button
-              onClick={onRerun}
-              className="flex items-center gap-2 px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
+              onClick={handleExportHappiness}
+              className="flex items-center gap-2 px-3 py-1.5 text-sm border border-green-500 text-green-600 dark:text-green-400 rounded-lg hover:bg-green-50 dark:hover:bg-green-900/20"
             >
-              <RefreshCw className="w-4 h-4" />
-              Re-run
+              <Download className="w-4 h-4" />
+              Export Report
             </button>
-          )}
+            {onRerun && (
+              <button
+                onClick={onRerun}
+                className="flex items-center gap-2 px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Re-run
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Quick stats */}
