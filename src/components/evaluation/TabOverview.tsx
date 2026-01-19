@@ -1,4 +1,4 @@
-import { CheckCircle, AlertCircle, AlertTriangle } from 'lucide-react';
+import { CheckCircle, AlertCircle, AlertTriangle, Users } from 'lucide-react';
 import { ImportedWorkbook, ImportError, ImportWarning } from '../../types/evaluation';
 
 interface TabOverviewProps {
@@ -52,6 +52,23 @@ export function TabOverview({
           </div>
         </div>
       </div>
+
+      {/* Registration Data Found */}
+      {workbook.registrationData && workbook.registrationData.length > 0 && (
+        <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+          <div className="flex items-center gap-3">
+            <Users className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+            <div>
+              <span className="font-medium text-blue-800 dark:text-blue-200">
+                Registration Data Found
+              </span>
+              <span className="text-blue-600 dark:text-blue-400 ml-2">
+                ({workbook.registrationData.length} players with coach/teammate requests, school, grade)
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Tabs Table */}
       <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden mb-6">
