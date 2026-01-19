@@ -278,25 +278,25 @@ export function PlayerSummaryTable({
                     <div key={index} className="space-y-2">
                       <div>
                         <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
-                          Head Coach (Team Name)
+                          Head Coach (Last Name)
                         </label>
                         <input
                           type="text"
                           value={name}
                           onChange={(e) => onTeamNameChange(index, e.target.value)}
-                          placeholder={`Coach Name (e.g., Smith)`}
+                          placeholder="Last name only (e.g., Smith)"
                           className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400"
                         />
                       </div>
                       <div>
                         <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
-                          Assistant Coach
+                          Assistant Coach (Last Name)
                         </label>
                         <input
                           type="text"
                           value={assistantCoaches[index] || ''}
                           onChange={(e) => onAssistantCoachesChange(index, e.target.value)}
-                          placeholder="Smith"
+                          placeholder="Last name only"
                           className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400"
                         />
                       </div>

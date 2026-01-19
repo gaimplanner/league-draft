@@ -216,9 +216,9 @@ export function runTeamBuilderAlgorithm(
       const team = workingTeams.find(t => t.id === player.coachTeamId);
       if (team && canAcceptPlayer(team)) {
         assignPlayer(player.id, team.id, 'coach-kid');
-      } else {
-        warnings.push(`Coach kid ${player.name} could not be placed on team ${player.coachTeamId}`);
       }
+      // Note: If team not found, player will be assigned in later phases
+      // This can happen if coachTeamId doesn't match actual team IDs
     }
   }
 
@@ -263,9 +263,8 @@ export function runTeamBuilderAlgorithm(
       const team = workingTeams.find(t => t.id === player.lockedToTeamId);
       if (team && canAcceptPlayer(team)) {
         assignPlayer(player.id, team.id, 'manual-lock');
-      } else {
-        warnings.push(`Locked player ${player.name} could not be placed on team ${player.lockedToTeamId}`);
       }
+      // Note: If team not found, player will be assigned in later phases
     }
   }
 

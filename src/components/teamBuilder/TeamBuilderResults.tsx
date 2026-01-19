@@ -1,6 +1,5 @@
 import { useState, useMemo } from 'react';
 import {
-  Check,
   AlertTriangle,
   ChevronDown,
   ChevronUp,
@@ -393,7 +392,10 @@ export const TeamBuilderResults = ({
                   Coach Request
                 </th>
                 <th className="px-4 py-3 text-left text-gray-500 dark:text-gray-400 font-medium">
-                  Teammates
+                  Teammate Request
+                </th>
+                <th className="px-4 py-3 text-center text-gray-500 dark:text-gray-400 font-medium">
+                  School
                 </th>
               </tr>
             </thead>
@@ -403,57 +405,94 @@ export const TeamBuilderResults = ({
                   const player = playerMap.get(happiness.playerId)!;
                   const assignment = result.assignments.find(a => a.playerId === happiness.playerId);
                   const team = result.teamSummaries.find(t => t.teamId === assignment?.teamId);
-                  return { happiness, player, assignment, team };
+
+                  // Calculate school count - number of teammates from the same school
+                  let schoolCount = 0;
+                  if (player.school && assignment?.teamId) {
+                    const teamPlayerIds = result.assignments
+                      .filter(a => a.teamId === assignment.teamId && a.playerId !== player.id)
+                      .map(a => a.playerId);
+                    schoolCount = teamPlayerIds.filter(id => {
+                      const teammate = playerMap.get(id);
+                      return teammate?.school && teammate.school.toLowerCase() === player.school!.toLowerCase();
+                    }).length;
+                  }
+
+                  return { happiness, player, assignment, team, schoolCount };
                 })
                 .sort((a, b) => {
                   // Sort by happiness (worst first for review)
                   const order = { 'none': 0, 'some': 1, 'all': 2, 'no-requests': 3 };
                   return order[a.happiness.score] - order[b.happiness.score];
                 })
-                .map(({ happiness, player, team }) => (
-                  <tr key={happiness.playerId} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
-                    <td className="px-4 py-3 text-gray-900 dark:text-white">
-                      {player.name}
-                    </td>
-                    <td className="px-4 py-3 text-gray-600 dark:text-gray-400">
-                      {team?.teamName || team?.coachName || '-'}
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <span title={getHappinessLabel(happiness.score)}>
-                        {getHappinessEmoji(happiness.score)}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      {happiness.coachRequestHonored === null ? (
-                        <span className="text-gray-400">-</span>
-                      ) : happiness.coachRequestHonored ? (
-                        <Check className="w-4 h-4 text-green-500" />
-                      ) : (
-                        <span className="text-red-500">✗</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-gray-600 dark:text-gray-400">
-                      {happiness.teammateRequestsTotal === 0 ? (
-                        <span className="text-gray-400">-</span>
-                      ) : (
-                        <span className={
-                          happiness.teammateRequestsHonored === happiness.teammateRequestsTotal
-                            ? 'text-green-600 dark:text-green-400'
-                            : happiness.teammateRequestsHonored > 0
-                            ? 'text-amber-600 dark:text-amber-400'
-                            : 'text-red-600 dark:text-red-400'
-                        }>
-                          {happiness.teammateRequestsHonored}/{happiness.teammateRequestsTotal}
-                          {happiness.twoWayRequestsTotal > 0 && (
-                            <span className="text-xs ml-1">
-                              ({happiness.twoWayRequestsHonored}/{happiness.twoWayRequestsTotal} 2-way)
-                            </span>
-                          )}
+                .map(({ happiness, player, team, schoolCount }) => {
+                  // Determine coach request status text
+                  let coachRequestText: string;
+                  let coachRequestClass: string;
+                  if (happiness.coachRequestHonored === null) {
+                    coachRequestText = 'Not Requested';
+                    coachRequestClass = 'text-gray-400';
+                  } else if (happiness.coachRequestHonored) {
+                    coachRequestText = 'Granted';
+                    coachRequestClass = 'text-green-600 dark:text-green-400';
+                  } else {
+                    coachRequestText = 'Not Granted';
+                    coachRequestClass = 'text-red-600 dark:text-red-400';
+                  }
+
+                  // Determine teammate request status text
+                  let teammateRequestText: string;
+                  let teammateRequestClass: string;
+                  if (happiness.teammateRequestsTotal === 0) {
+                    teammateRequestText = 'Not Requested';
+                    teammateRequestClass = 'text-gray-400';
+                  } else if (happiness.teammateRequestsHonored === happiness.teammateRequestsTotal) {
+                    teammateRequestText = 'Fully Granted';
+                    teammateRequestClass = 'text-green-600 dark:text-green-400';
+                  } else if (happiness.teammateRequestsHonored > 0) {
+                    teammateRequestText = 'Partially Granted';
+                    teammateRequestClass = 'text-amber-600 dark:text-amber-400';
+                  } else {
+                    teammateRequestText = 'Not Granted';
+                    teammateRequestClass = 'text-red-600 dark:text-red-400';
+                  }
+
+                  return (
+                    <tr key={happiness.playerId} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
+                      <td className="px-4 py-3 text-gray-900 dark:text-white">
+                        {player.name}
+                      </td>
+                      <td className="px-4 py-3 text-gray-600 dark:text-gray-400">
+                        {team?.teamName || team?.coachName || '-'}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span title={getHappinessLabel(happiness.score)}>
+                          {getHappinessEmoji(happiness.score)}
                         </span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className={`px-4 py-3 ${coachRequestClass}`}>
+                        {coachRequestText}
+                      </td>
+                      <td className={`px-4 py-3 ${teammateRequestClass}`}>
+                        {teammateRequestText}
+                        {happiness.teammateRequestsTotal > 0 && (
+                          <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">
+                            ({happiness.teammateRequestsHonored}/{happiness.teammateRequestsTotal})
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-center text-gray-600 dark:text-gray-400">
+                        {player.school ? (
+                          <span title={`${schoolCount} teammate${schoolCount !== 1 ? 's' : ''} from ${player.school}`}>
+                            {schoolCount}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400">-</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
             </tbody>
           </table>
         </div>

@@ -294,7 +294,7 @@ export function PlayerReviewTable({
                         type="text"
                         value={team.name}
                         onChange={(e) => onTeamNameUpdate(team.id, e.target.value)}
-                        placeholder="Coach Name"
+                        placeholder="Last name only"
                         className="flex-1 px-2 py-1 text-sm font-medium border-0 bg-transparent text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500 rounded"
                       />
                     </div>
@@ -308,7 +308,7 @@ export function PlayerReviewTable({
                           type="text"
                           value={team.assistantCoach || ''}
                           onChange={(e) => onAssistantCoachUpdate(team.id, e.target.value)}
-                          placeholder="Name..."
+                          placeholder="Last name..."
                           className="flex-1 px-2 py-1 text-xs border border-gray-200 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 placeholder-gray-400"
                         />
                       </div>

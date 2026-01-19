@@ -250,6 +250,7 @@ export interface RegistrationRecord {
   school?: string;             // School name
   grade?: number;              // Grade level
   address?: string;            // Street address for sibling detection
+  littleLeagueAge?: number;    // LL age (age between 9/1 of prev year and 8/31 of league year)
 }
 
 // Imported workbook structure

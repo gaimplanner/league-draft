@@ -57,6 +57,7 @@ interface RegistrationPlayer {
   school: string;
   grade: number | null;
   address: string;
+  littleLeagueAge: number | null;
   match: PlayerMatch;
   evalBib: string | null;
 }
@@ -110,6 +111,7 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete }: TeamBuilderFlo
       school: r.school || '',
       grade: r.grade ?? null,
       address: r.address || '',
+      littleLeagueAge: r.littleLeagueAge ?? null,
       rawTeammateRequestsString: (r.teammateRequests || []).join(', '),
     }));
 
@@ -133,6 +135,7 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete }: TeamBuilderFlo
         school: row.school,
         grade: row.grade,
         address: row.address,
+        littleLeagueAge: row.littleLeagueAge,
         match,
         evalBib: match.evalBib,
       };
@@ -226,6 +229,7 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete }: TeamBuilderFlo
           school: row.school,
           grade: row.grade,
           address: row.address,
+          littleLeagueAge: row.littleLeagueAge,
           match,
           evalBib: match.evalBib,
         };
@@ -255,6 +259,74 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete }: TeamBuilderFlo
     // Update unmatched list
     setUnmatchedPlayers(prev => prev.filter(p => p.registrationIndex !== registrationIndex));
   }, []);
+
+  // Create a DNE player with 0 scores from registration data
+  const handleCreateDNEPlayer = useCallback((registrationIndex: number) => {
+    const regPlayer = registrationPlayers.find(p => p.registrationIndex === registrationIndex);
+    if (!regPlayer) return;
+
+    // Create a new player with 0 scores and DNE flag
+    const newPlayer: Player = {
+      id: `dne-${registrationIndex}-${Date.now()}`,
+      bib: `DNE-${registrationIndex}`,
+      firstName: regPlayer.firstName,
+      lastName: regPlayer.lastName,
+      name: `${regPlayer.firstName} ${regPlayer.lastName}`,
+
+      // All raw scores are 0 for DNE players
+      fieldScore: 0,
+      throwScore: 0,
+      hitPower: 0,
+      hitForm: 0,
+      hitContact: 0,
+      pitchingStrength: 0,
+      pitchingForm: 0,
+      catchScore: 0,
+      runningScore: 0,
+
+      // All subtotals are 0
+      fieldingSubtotal: 0,
+      hittingSubtotal: 0,
+      pitchingSubtotal: 0,
+      subjectiveTotal: 0,
+      objectiveTotal: 0,
+      officialAdjust: 0,
+
+      totalScore: 0,
+      rank: evalPlayers.length + 1, // Will be last
+      projectedRound: Math.ceil((evalPlayers.length + 1) / teams.length),
+
+      // Player info
+      littleLeagueAge: regPlayer.littleLeagueAge ?? 0, // 0 indicates unknown age
+      birthday: '',
+      isAllStar: false,
+      isDNE: true, // Mark as Did Not Evaluate
+
+      // Draft rules
+      isCoachKid: false,
+      isDrafted: false,
+
+      // Registration data
+      coachRequest: regPlayer.coachRequest || undefined,
+      teammateRequests: regPlayer.teammateRequests.length > 0 ? regPlayer.teammateRequests : undefined,
+      school: regPlayer.school || undefined,
+      grade: regPlayer.grade ?? undefined,
+    };
+
+    // Add to eval players
+    setEvalPlayers(prev => [...prev, newPlayer]);
+
+    // Update registration player to point to this new bib
+    setRegistrationPlayers(prev => prev.map(p => {
+      if (p.registrationIndex === registrationIndex) {
+        return { ...p, evalBib: newPlayer.bib, match: { ...p.match, evalBib: newPlayer.bib, matchType: 'exact' } };
+      }
+      return p;
+    }));
+
+    // Remove from unmatched
+    setUnmatchedPlayers(prev => prev.filter(p => p.registrationIndex !== registrationIndex));
+  }, [registrationPlayers, evalPlayers.length, teams.length]);
 
   const handleProceedToConfigure = useCallback(() => {
     // Detect siblings by address before proceeding
@@ -294,6 +366,12 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete }: TeamBuilderFlo
       assistantCoach: t.assistantCoach,
     }));
 
+    // Create mapping from evaluation team IDs (team-0, team-1, etc.) to actual division team IDs
+    const evalTeamIdToRealId = new Map<string, string>();
+    teams.forEach((team, index) => {
+      evalTeamIdToRealId.set(`team-${index}`, team.id);
+    });
+
     // Create player map for teammate resolution
     const playerIdByBib = new Map(evalPlayers.map(p => [p.bib, p.id]));
 
@@ -327,8 +405,17 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete }: TeamBuilderFlo
         }
       }
 
+      // Remap coachTeamId from eval format (team-0, team-1) to actual division team ID
+      const remappedCoachTeamId = evalPlayer.coachTeamId
+        ? evalTeamIdToRealId.get(evalPlayer.coachTeamId) || evalPlayer.coachTeamId
+        : undefined;
+
       return {
         ...evalPlayer,
+        // Use registration Little League Age if available, otherwise keep eval age
+        littleLeagueAge: regPlayer?.littleLeagueAge ?? evalPlayer.littleLeagueAge,
+        // Remap coach team ID to actual division team ID
+        coachTeamId: remappedCoachTeamId,
         coachRequest: regPlayer?.coachRequest,
         teammateRequests: regPlayer?.teammateRequests,
         school: regPlayer?.school,
@@ -576,14 +663,14 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete }: TeamBuilderFlo
                         type="text"
                         value={team.headCoach || ''}
                         onChange={(e) => handleUpdateTeam(team.id, { headCoach: e.target.value, name: e.target.value })}
-                        placeholder="Head Coach"
+                        placeholder="Last name only (e.g., Smith)"
                         className="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                       />
                       <input
                         type="text"
                         value={team.assistantCoach || ''}
                         onChange={(e) => handleUpdateTeam(team.id, { assistantCoach: e.target.value })}
-                        placeholder="Assistant Coach"
+                        placeholder="Last name only"
                         className="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                       />
                     </div>
@@ -620,6 +707,8 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete }: TeamBuilderFlo
             {evalPlayers.length === 0 ? (
               <EvaluationImport
                 teamCount={division.teamCount}
+                initialTeamNames={teams.map(t => t.headCoach || t.name)}
+                initialAssistantCoaches={teams.map(t => t.assistantCoach || '')}
                 onComplete={handleEvalImportComplete}
                 onCancel={onBack}
               />
@@ -746,7 +835,7 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete }: TeamBuilderFlo
                   });
                 }}
                 onCreateWithoutEval={(index) => {
-                  handleNameResolve(index, null);
+                  handleCreateDNEPlayer(index);
                 }}
               />
             )}
@@ -820,7 +909,7 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete }: TeamBuilderFlo
                         type="text"
                         value={team.headCoach}
                         onChange={(e) => handleUpdateTeam(team.id, { headCoach: e.target.value, name: e.target.value })}
-                        placeholder="Coach name"
+                        placeholder="Last name only"
                         className="flex-1 px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                       />
                     </div>
@@ -836,62 +925,155 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete }: TeamBuilderFlo
 
             {/* Algorithm config */}
             <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
                 Algorithm Settings
               </h3>
-              <div className="grid grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Balance Tolerance: ±{Math.round(config.balanceTolerance * 100)}%
-                  </label>
-                  <input
-                    type="range"
-                    min="5"
-                    max="20"
-                    value={config.balanceTolerance * 100}
-                    onChange={(e) => setConfig({ ...config, balanceTolerance: parseInt(e.target.value) / 100 })}
-                    className="w-full"
-                  />
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+                Fine-tune how teams are balanced and requests are honored.
+              </p>
+
+              <div className="space-y-6">
+                {/* Balance Tolerance */}
+                <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1">
+                      <label className="block text-sm font-semibold text-gray-900 dark:text-white mb-1">
+                        Balance Tolerance
+                      </label>
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                        How much team total scores can differ from the average.
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-500">
+                        <span className="font-medium">Example:</span> With {teams.length} teams averaging ~{Math.round(evalPlayers.reduce((sum, p) => sum + p.totalScore, 0) / teams.length)} points each,
+                        ±{Math.round(config.balanceTolerance * 100)}% means teams can range from {Math.round((evalPlayers.reduce((sum, p) => sum + p.totalScore, 0) / teams.length) * (1 - config.balanceTolerance))} to {Math.round((evalPlayers.reduce((sum, p) => sum + p.totalScore, 0) / teams.length) * (1 + config.balanceTolerance))} points.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setConfig({ ...config, balanceTolerance: Math.max(0.05, config.balanceTolerance - 0.01) })}
+                        className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 font-bold"
+                      >
+                        −
+                      </button>
+                      <div className="w-16 h-10 flex items-center justify-center rounded-lg bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 font-semibold text-gray-900 dark:text-white">
+                        ±{Math.round(config.balanceTolerance * 100)}%
+                      </div>
+                      <button
+                        onClick={() => setConfig({ ...config, balanceTolerance: Math.min(0.25, config.balanceTolerance + 0.01) })}
+                        className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 font-bold"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Top Talent Rounds: {config.topTalentRounds}
-                  </label>
-                  <input
-                    type="range"
-                    min="1"
-                    max="4"
-                    value={config.topTalentRounds}
-                    onChange={(e) => setConfig({ ...config, topTalentRounds: parseInt(e.target.value) })}
-                    className="w-full"
-                  />
+
+                {/* Top Talent Rounds */}
+                <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1">
+                      <label className="block text-sm font-semibold text-gray-900 dark:text-white mb-1">
+                        Top Talent Rounds
+                      </label>
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                        Number of rounds where top players are distributed purely by skill (ignoring friend requests).
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-500">
+                        <span className="font-medium">Example:</span> With {config.topTalentRounds} rounds and {teams.length} teams,
+                        the top {config.topTalentRounds * teams.length} players will be spread evenly across teams before friend requests are considered.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setConfig({ ...config, topTalentRounds: Math.max(1, config.topTalentRounds - 1) })}
+                        className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 font-bold"
+                      >
+                        −
+                      </button>
+                      <div className="w-16 h-10 flex items-center justify-center rounded-lg bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 font-semibold text-gray-900 dark:text-white">
+                        {config.topTalentRounds}
+                      </div>
+                      <button
+                        onClick={() => setConfig({ ...config, topTalentRounds: Math.min(5, config.topTalentRounds + 1) })}
+                        className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 font-bold"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Max Roster Size: {config.maxRosterSize}
-                  </label>
-                  <input
-                    type="range"
-                    min="10"
-                    max="15"
-                    value={config.maxRosterSize}
-                    onChange={(e) => setConfig({ ...config, maxRosterSize: parseInt(e.target.value) })}
-                    className="w-full"
-                  />
+
+                {/* Max Roster Size */}
+                <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1">
+                      <label className="block text-sm font-semibold text-gray-900 dark:text-white mb-1">
+                        Maximum Roster Size
+                      </label>
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                        Hard limit on players per team. Teams won't exceed this even to honor requests.
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-500">
+                        <span className="font-medium">Target:</span> With {evalPlayers.length} players and {teams.length} teams,
+                        average roster is {Math.round(evalPlayers.length / teams.length)} players.
+                        {evalPlayers.length % teams.length !== 0 && ` Some teams will have ${Math.ceil(evalPlayers.length / teams.length)}.`}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setConfig({ ...config, maxRosterSize: Math.max(Math.ceil(evalPlayers.length / teams.length), config.maxRosterSize - 1) })}
+                        className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 font-bold"
+                      >
+                        −
+                      </button>
+                      <div className="w-16 h-10 flex items-center justify-center rounded-lg bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 font-semibold text-gray-900 dark:text-white">
+                        {config.maxRosterSize}
+                      </div>
+                      <button
+                        onClick={() => setConfig({ ...config, maxRosterSize: Math.min(18, config.maxRosterSize + 1) })}
+                        className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 font-bold"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <label className="flex items-center gap-3 text-sm font-medium text-gray-700 dark:text-gray-300">
-                    <input
-                      type="checkbox"
-                      checked={config.prioritizeBalance}
-                      onChange={(e) => setConfig({ ...config, prioritizeBalance: e.target.checked })}
-                      className="w-4 h-4 rounded"
-                    />
-                    Prioritize Balance over Happiness
-                  </label>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-7">
-                    When enabled, balance is maintained even if it means not honoring some requests.
-                  </p>
+
+                {/* Prioritize Balance */}
+                <div
+                  className={`p-4 rounded-lg border-2 cursor-pointer transition-colors ${
+                    config.prioritizeBalance
+                      ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-300 dark:border-purple-700'
+                      : 'bg-gray-50 dark:bg-gray-700/50 border-transparent hover:border-gray-300 dark:hover:border-gray-600'
+                  }`}
+                  onClick={() => setConfig({ ...config, prioritizeBalance: !config.prioritizeBalance })}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className={`w-5 h-5 mt-0.5 rounded flex items-center justify-center flex-shrink-0 ${
+                      config.prioritizeBalance
+                        ? 'bg-purple-600 text-white'
+                        : 'border-2 border-gray-300 dark:border-gray-600'
+                    }`}>
+                      {config.prioritizeBalance && (
+                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <label className="block text-sm font-semibold text-gray-900 dark:text-white mb-1 cursor-pointer">
+                        Prioritize Balance over Happiness
+                      </label>
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                        {config.prioritizeBalance
+                          ? "Team balance takes priority. Some friend requests may not be honored if they would create unbalanced teams."
+                          : "Friend requests take priority. Teams may be slightly unbalanced to honor more requests."}
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-500">
+                        <span className="font-medium">Recommended:</span> Enable for competitive divisions, disable for younger recreational divisions.
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

@@ -10,11 +10,13 @@ import { DetectionModal } from './DetectionModal';
 
 interface EvaluationImportProps {
   teamCount: number;
+  initialTeamNames?: string[];
+  initialAssistantCoaches?: string[];
   onComplete: (players: Player[], teamNames: string[], assistantCoaches: string[], registrationData?: RegistrationRecord[]) => void;
   onCancel: () => void;
 }
 
-export function EvaluationImport({ teamCount, onComplete, onCancel }: EvaluationImportProps) {
+export function EvaluationImport({ teamCount, initialTeamNames, initialAssistantCoaches, onComplete, onCancel }: EvaluationImportProps) {
   const {
     state,
     totalWeight,
@@ -51,7 +53,7 @@ export function EvaluationImport({ teamCount, onComplete, onCancel }: Evaluation
     getPlayers,
     exportCSV,
     registrationData,
-  } = useEvaluationImport(teamCount);
+  } = useEvaluationImport(teamCount, initialTeamNames, initialAssistantCoaches);
 
   const handleContinueToDraft = () => {
     const players = getPlayers();

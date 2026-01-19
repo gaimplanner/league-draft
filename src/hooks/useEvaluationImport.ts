@@ -45,14 +45,22 @@ const initialState: EvaluationImportState = {
   isProcessing: false,
 };
 
-export function useEvaluationImport(initialTeamCount: number = 8) {
+export function useEvaluationImport(
+  initialTeamCount: number = 8,
+  initialTeamNames?: string[],
+  initialAssistantCoaches?: string[]
+) {
   const [state, setState] = useState<EvaluationImportState>(initialState);
   const [teamCount, setTeamCount] = useState(initialTeamCount);
   const [teamNames, setTeamNames] = useState<string[]>(() =>
-    Array.from({ length: initialTeamCount }, (_, i) => `Team ${i + 1}`)
+    initialTeamNames && initialTeamNames.length === initialTeamCount
+      ? initialTeamNames
+      : Array.from({ length: initialTeamCount }, (_, i) => `Team ${i + 1}`)
   );
   const [assistantCoaches, setAssistantCoaches] = useState<string[]>(() =>
-    Array.from({ length: initialTeamCount }, () => '')
+    initialAssistantCoaches && initialAssistantCoaches.length === initialTeamCount
+      ? initialAssistantCoaches
+      : Array.from({ length: initialTeamCount }, () => '')
   );
 
   // Detection modal state

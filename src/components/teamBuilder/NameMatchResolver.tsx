@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { AlertTriangle, Check, X, Search, ChevronDown, ChevronUp } from 'lucide-react';
+import { AlertTriangle, Check, Search, ChevronDown, ChevronUp, Ban } from 'lucide-react';
 import { PlayerMatch } from '../../utils/teamBuilderParser';
 
 interface UnmatchedPlayer {
@@ -54,6 +54,27 @@ export const NameMatchResolver = ({
     onResolve(registrationIndex, evalBib);
   };
 
+  const handleMarkAsDNE = (registrationIndex: number, e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation(); // Prevent toggling expansion
+    }
+    setSelectedMatches(new Map(selectedMatches).set(registrationIndex, null));
+    onResolve(registrationIndex, null);
+    onCreateWithoutEval(registrationIndex);
+  };
+
+  const handleMarkAllAsDNE = () => {
+    const newMatches = new Map(selectedMatches);
+    unmatchedPlayers.forEach(player => {
+      if (!newMatches.has(player.registrationIndex)) {
+        newMatches.set(player.registrationIndex, null);
+        onResolve(player.registrationIndex, null);
+        onCreateWithoutEval(player.registrationIndex);
+      }
+    });
+    setSelectedMatches(newMatches);
+  };
+
   const getFilteredEvalPlayers = (registrationIndex: number): EvalPlayer[] => {
     const searchTerm = (searchTerms.get(registrationIndex) || '').toLowerCase();
     if (!searchTerm) return availableEvalPlayers;
@@ -94,14 +115,25 @@ export const NameMatchResolver = ({
             Unmatched Players ({totalUnmatched - resolvedCount} remaining)
           </h3>
         </div>
-        {resolvedCount > 0 && (
-          <button
-            onClick={handleResolveAll}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium"
-          >
-            Apply {resolvedCount} Resolution{resolvedCount !== 1 ? 's' : ''}
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {totalUnmatched - resolvedCount > 0 && (
+            <button
+              onClick={handleMarkAllAsDNE}
+              className="px-3 py-2 border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 rounded-lg text-sm font-medium hover:bg-amber-100 dark:hover:bg-amber-900/50 flex items-center gap-2"
+            >
+              <Ban className="w-4 h-4" />
+              Mark All as DNE
+            </button>
+          )}
+          {resolvedCount > 0 && (
+            <button
+              onClick={handleResolveAll}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium"
+            >
+              Apply {resolvedCount} Resolution{resolvedCount !== 1 ? 's' : ''}
+            </button>
+          )}
+        </div>
       </div>
 
       <p className="text-sm text-gray-600 dark:text-gray-400">
@@ -127,11 +159,11 @@ export const NameMatchResolver = ({
               }`}
             >
               {/* Player header row */}
-              <button
-                onClick={() => toggleExpanded(player.registrationIndex)}
-                className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-gray-50 dark:hover:bg-gray-700/50"
-              >
-                <div className="flex items-center gap-3">
+              <div className="flex items-center justify-between px-4 py-3">
+                <button
+                  onClick={() => toggleExpanded(player.registrationIndex)}
+                  className="flex-1 flex items-center gap-3 text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 -ml-4 -my-3 px-4 py-3"
+                >
                   <div>
                     <span className="font-medium text-gray-900 dark:text-white">
                       {player.fullName}
@@ -140,24 +172,39 @@ export const NameMatchResolver = ({
                       <span className="ml-2 text-sm text-green-600 dark:text-green-400">
                         {resolvedBib
                           ? `→ BIB ${resolvedBib}`
-                          : '→ No eval data'}
+                          : '→ DNE (no eval data)'}
                       </span>
                     )}
                   </div>
-                </div>
+                </button>
                 <div className="flex items-center gap-2">
-                  {player.match.matchType !== 'none' && (
+                  {!isResolved && (
+                    <button
+                      onClick={(e) => handleMarkAsDNE(player.registrationIndex, e)}
+                      className="px-2 py-1 text-xs border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 rounded hover:bg-amber-100 dark:hover:bg-amber-900/50 flex items-center gap-1"
+                      title="Mark as Did Not Evaluate - player will be assigned 0 scores"
+                    >
+                      <Ban className="w-3 h-3" />
+                      DNE
+                    </button>
+                  )}
+                  {player.match.matchType !== 'none' && !isResolved && (
                     <span className="text-xs px-2 py-1 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 rounded">
                       {Math.round(player.match.matchScore * 100)}% match
                     </span>
                   )}
-                  {isExpanded ? (
-                    <ChevronUp className="w-5 h-5 text-gray-400" />
-                  ) : (
-                    <ChevronDown className="w-5 h-5 text-gray-400" />
-                  )}
+                  <button
+                    onClick={() => toggleExpanded(player.registrationIndex)}
+                    className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+                  >
+                    {isExpanded ? (
+                      <ChevronUp className="w-5 h-5 text-gray-400" />
+                    ) : (
+                      <ChevronDown className="w-5 h-5 text-gray-400" />
+                    )}
+                  </button>
                 </div>
-              </button>
+              </div>
 
               {/* Expanded content */}
               {isExpanded && (
@@ -226,14 +273,11 @@ export const NameMatchResolver = ({
                   {/* Create without eval option */}
                   <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-600">
                     <button
-                      onClick={() => {
-                        handleSelect(player.registrationIndex, null);
-                        onCreateWithoutEval(player.registrationIndex);
-                      }}
-                      className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+                      onClick={() => handleMarkAsDNE(player.registrationIndex)}
+                      className="flex items-center gap-2 text-sm px-3 py-2 border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 rounded-lg hover:bg-amber-100 dark:hover:bg-amber-900/50"
                     >
-                      <X className="w-4 h-4" />
-                      Create player without evaluation data (will be marked DNE)
+                      <Ban className="w-4 h-4" />
+                      Mark as DNE (Did Not Evaluate) - assign 0 scores
                     </button>
                   </div>
                 </div>

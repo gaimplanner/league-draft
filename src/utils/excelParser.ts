@@ -85,6 +85,22 @@ function parseRegistrationDataSheet(sheet: XLSX.WorkSheet): RegistrationRecord[]
   const gradeIdx = headers.findIndex(h => h.includes('grade'));
   const addressIdx = headers.findIndex(h => h.includes('street') && h.includes('address'));
 
+  // Little League Age - look for "little league age", "ll age", or just "age" column
+  let llAgeIdx = headers.findIndex(h => h.includes('little league') && h.includes('age'));
+  if (llAgeIdx === -1) {
+    llAgeIdx = headers.findIndex(h => h === 'll age' || h === 'llage');
+  }
+  if (llAgeIdx === -1) {
+    // Fallback to any "age" column that's not part of another field name
+    llAgeIdx = headers.findIndex(h => h === 'age' || h.endsWith(' age'));
+  }
+
+  // Birthdate column - for calculating LL age if not provided directly
+  let birthdateIdx = headers.findIndex(h =>
+    h.includes('birth') && (h.includes('date') || h.includes('day')) ||
+    h === 'birthdate' || h === 'birthday' || h === 'dob' || h === 'date of birth'
+  );
+
   // Find school - look for "school name", prefer column without "little league" prefix
   let schoolIdx = headers.findIndex(h =>
     h.includes('school') && h.includes('name') && !h.includes('little league')
@@ -103,6 +119,8 @@ function parseRegistrationDataSheet(sheet: XLSX.WorkSheet): RegistrationRecord[]
     schoolIdx,
     gradeIdx,
     addressIdx,
+    llAgeIdx,
+    birthdateIdx,
     headers: headers.join(' | '),
   });
 
@@ -162,6 +180,23 @@ function parseRegistrationDataSheet(sheet: XLSX.WorkSheet): RegistrationRecord[]
     // Address for sibling detection
     if (addressIdx !== -1 && row[addressIdx]) {
       record.address = String(row[addressIdx]).trim();
+    }
+
+    // Little League Age - prefer direct age column, but calculate from birthdate if needed
+    if (llAgeIdx !== -1 && row[llAgeIdx]) {
+      const ageValue = row[llAgeIdx];
+      const ageNum = typeof ageValue === 'number' ? ageValue : parseInt(String(ageValue).trim());
+      if (!isNaN(ageNum) && ageNum > 0 && ageNum < 20) {
+        record.littleLeagueAge = ageNum;
+      }
+    }
+
+    // If no LL age but we have a birthdate, calculate it
+    if (!record.littleLeagueAge && birthdateIdx !== -1 && row[birthdateIdx]) {
+      const birthdate = parseExcelDate(row[birthdateIdx]);
+      if (birthdate) {
+        record.littleLeagueAge = calculateLittleLeagueAge(birthdate);
+      }
     }
 
     records.push(record);
@@ -622,4 +657,94 @@ export function validateWorkbook(workbook: ImportedWorkbook): {
     missingTabs,
     extraTabs,
   };
+}
+
+/**
+ * Parse an Excel date value into a JavaScript Date.
+ * Excel stores dates as numbers (days since 1900) or as strings.
+ */
+function parseExcelDate(value: unknown): Date | null {
+  if (!value) return null;
+
+  // If it's a number, it's an Excel serial date
+  if (typeof value === 'number') {
+    // Excel serial date: days since January 1, 1900 (with a bug for 1900 leap year)
+    // Excel incorrectly treats 1900 as a leap year, so we subtract 1 for dates after Feb 28, 1900
+    const excelEpoch = new Date(1899, 11, 30); // December 30, 1899
+    const date = new Date(excelEpoch.getTime() + value * 24 * 60 * 60 * 1000);
+    if (!isNaN(date.getTime())) {
+      return date;
+    }
+  }
+
+  // If it's a string, try to parse it
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+
+    // Try standard date parsing
+    const parsed = new Date(trimmed);
+    if (!isNaN(parsed.getTime())) {
+      return parsed;
+    }
+
+    // Try MM/DD/YYYY format
+    const mmddyyyy = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (mmddyyyy) {
+      const [, month, day, year] = mmddyyyy;
+      const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+      if (!isNaN(date.getTime())) {
+        return date;
+      }
+    }
+
+    // Try YYYY-MM-DD format
+    const yyyymmdd = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    if (yyyymmdd) {
+      const [, year, month, day] = yyyymmdd;
+      const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+      if (!isNaN(date.getTime())) {
+        return date;
+      }
+    }
+  }
+
+  // If it's already a Date object
+  if (value instanceof Date && !isNaN(value.getTime())) {
+    return value;
+  }
+
+  return null;
+}
+
+/**
+ * Calculate Little League Age from birthdate.
+ *
+ * Little League age is determined by the player's age on August 31 of the league year.
+ * The "league year" is the calendar year of the season (e.g., 2026 for Spring 2026).
+ *
+ * Example: For 2026 season:
+ * - Cutoff date is August 31, 2026
+ * - A player born September 1, 2015 would be LL age 10 (turns 11 after cutoff)
+ * - A player born August 31, 2015 would be LL age 11 (turns 11 on cutoff)
+ */
+function calculateLittleLeagueAge(birthdate: Date): number {
+  // Get current year as the league year
+  // In practice, this should work for spring seasons (Jan-Aug evaluations for that year's season)
+  const now = new Date();
+  const leagueYear = now.getFullYear();
+
+  // Cutoff date is August 31 of the league year
+  const cutoffDate = new Date(leagueYear, 7, 31); // August is month 7 (0-indexed)
+
+  // Calculate age as of the cutoff date
+  let age = cutoffDate.getFullYear() - birthdate.getFullYear();
+
+  // Adjust if birthday hasn't occurred yet by the cutoff
+  const birthdayThisYear = new Date(cutoffDate.getFullYear(), birthdate.getMonth(), birthdate.getDate());
+  if (birthdayThisYear > cutoffDate) {
+    age--;
+  }
+
+  return age;
 }
