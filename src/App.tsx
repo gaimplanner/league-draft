@@ -7,7 +7,7 @@ import { useAuth } from './contexts/AuthContext';
 import { DivisionSelector } from './components/DivisionSelector';
 import { DivisionCreator } from './components/DivisionCreator';
 import { FileUpload } from './components/FileUpload';
-import { ColumnMapper } from './components/ColumnMapper';
+import { VisualColumnMapper } from './components/VisualColumnMapper';
 import { ImportTypeSelector, EvaluationImport } from './components/evaluation';
 import { PlayerReview } from './components/PlayerReview';
 import { DraftConfig } from './components/DraftConfig';
@@ -923,7 +923,11 @@ function App() {
         )}
 
         {phase === 'mapping' && csvData && (
-          <ColumnMapper csvData={csvData} onMappingComplete={handleMappingComplete} />
+          <VisualColumnMapper
+            csvData={csvData}
+            onMappingComplete={handleMappingComplete}
+            teamCount={teams.length || 8}
+          />
         )}
 
         {phase === 'review' && (
