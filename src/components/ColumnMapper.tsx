@@ -166,6 +166,16 @@ export const ColumnMapper = ({ csvData, onMappingComplete }: ColumnMapperProps) 
     return Object.values(mapping).includes(field);
   };
 
+  // Check if a field is mapped to a different column (not the current one)
+  const isFieldMappedToOtherColumn = (field: AppField, currentColumn: string): string | null => {
+    for (const [csvCol, mappedField] of Object.entries(mapping)) {
+      if (mappedField === field && csvCol !== currentColumn) {
+        return csvCol;
+      }
+    }
+    return null;
+  };
+
   const allRequiredFieldsMapped = REQUIRED_FIELDS.every((field) =>
     isFieldMapped(field.field)
   );
@@ -317,18 +327,24 @@ export const ColumnMapper = ({ csvData, onMappingComplete }: ColumnMapperProps) 
                   >
                     <option value="">-- Skip this column --</option>
                     <optgroup label="Required Fields">
-                      {REQUIRED_FIELDS.map(({ field, label }) => (
-                        <option key={field} value={field}>
-                          {label}
-                        </option>
-                      ))}
+                      {REQUIRED_FIELDS.map(({ field, label }) => {
+                        const mappedTo = isFieldMappedToOtherColumn(field, header);
+                        return (
+                          <option key={field} value={field} disabled={!!mappedTo}>
+                            {label}{mappedTo ? ` (mapped to "${mappedTo}")` : ''}
+                          </option>
+                        );
+                      })}
                     </optgroup>
                     <optgroup label="Optional Fields">
-                      {OPTIONAL_FIELDS.map(({ field, label }) => (
-                        <option key={field} value={field}>
-                          {label}
-                        </option>
-                      ))}
+                      {OPTIONAL_FIELDS.map(({ field, label }) => {
+                        const mappedTo = isFieldMappedToOtherColumn(field, header);
+                        return (
+                          <option key={field} value={field} disabled={!!mappedTo}>
+                            {label}{mappedTo ? ` (mapped to "${mappedTo}")` : ''}
+                          </option>
+                        );
+                      })}
                     </optgroup>
                   </select>
                 </div>
