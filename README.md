@@ -43,16 +43,64 @@ A comprehensive draft management system for Little League baseball divisions. St
 - Coach's kid team assignments
 
 ### Live Draft Board
-- **Two View Modes:**
-  - **Player Grid**: Sortable table with Proj. Rnd, Rank, BIB, Name, Age, F/H/P/C/R scores, Total, Flags
-  - **Roster View**: Round-by-round grid showing draft progression and pre-filled slots for locked players
-- **Score Toggle**: Hide/show scores for presentation mode
-- Real-time pick tracking with current/next team display
-- Searchable by player name or BIB number
-- Mandatory pick alerts for coach's kids and siblings
-- Lock icon treatment for players assigned to specific teams
-- Undo last pick and reset draft functionality
-- Round interstitials showing new order (recalculated format)
+
+The draft board provides a comprehensive interface for conducting live drafts with two switchable drawer views.
+
+#### Main Header
+- **Compact gradient header** with pick counter (R# · Pick X/Y) and current/next team display
+- **Age breakdown badges** showing player count per age for current team (with color-coded limit warnings)
+- **Mandatory pick banner** (yellow) alerts when coach's kid or sibling must be drafted
+- **Pending draft confirmation banner** (blue) for confirming player selections
+- **Best Available by Age** quick-pick buttons grouped by age (top 2 per age)
+- **Admin controls**: Skip pick (final round only), Undo, Reset
+
+#### Round Order Display
+- Horizontal team cards showing pick order for current round
+- Visual states: current pick (blue highlight, "NOW" badge), past picks (grayed, strikethrough), upcoming
+- Shows draft format label (straight/snake/recalculated)
+
+#### Drawer View Toggle
+Switch between two views using the toggle bar:
+
+**Available Players View** (`DraftBoardPlayerGrid.tsx`)
+- Sortable table with columns: Proj. Rnd, Rank, BIB, Name, Age, F/H/P/C/R scores, Total, Flags, Action
+- Search by name or BIB number with clear button
+- Available player count display
+- Sorting: click column headers (score columns default to descending)
+- Round column shows effective round (lockedToRound or projectedRound) with asterisk for overrides
+- **Flag badges**: Lock+team (coach's kid/sibling locked), SIB (sibling unlocked), AS (All-Star), DNE (Did Not Evaluate), age limit warning
+- Restricted players (coach's kids/siblings for other teams) shown with reduced opacity and red lock badge
+- Draft buttons with mandatory pick highlighting (yellow for mandatory)
+- Legend bar with flag explanations and score abbreviations
+
+**Team Rosters View** (`DraftBoardRosterView.tsx`)
+- Round-by-round grid with teams as columns, rounds as rows
+- Teams sorted by current round order with position numbers
+- Team headers show draft position, name, and total score
+- **Cell states**:
+  - **Drafted** (green): Shows player name, score, and lock icon if was locked
+  - **Pre-filled** (blue dashed border): Undrafted players locked to team/round (coach's kids, siblings)
+  - **Current pick** (yellow ring): Active pick position with "PICKING" label
+  - **Empty**: Future picks awaiting selection
+- Sticky round column for horizontal scrolling
+- Legend bar explaining cell colors
+
+#### Round Interstitial Modal
+- Appears automatically when advancing to a new round
+- Shows completed round celebration and new round number
+- Displays new draft order with team positions and scores
+- Format-specific messaging (snake reversal, recalculated by score)
+- "Continue to Round X" button to dismiss
+
+#### Draft Complete Modal
+- Appears when all picks are made
+- Shows total pick count
+- Options: "Go Back & Review" or "Finalize Draft"
+
+#### View Modes
+- **Admin View**: Full functionality (draft buttons, undo, reset, skip, confirmations)
+- **Public View**: Read-only display for spectators (no action column, no pending confirmations, "Live View" badge)
+- **Score Toggle**: Hide/show scores for presentation mode (affects both views)
 
 ### Draft Simulation
 - Preview draft outcomes before committing

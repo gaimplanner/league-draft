@@ -62,8 +62,10 @@ Has name, roster (drafted players), totalScore, draftPosition, coachKids array, 
 | `src/utils/teamUtils.ts` | Team display name helpers |
 | `src/types/index.ts` | All TypeScript interfaces (Player, Team, Division, DraftState, etc.) |
 | `src/components/PlayerReviewTable.tsx` | Spreadsheet-style table for CSV player review |
-| `src/components/draft/DraftBoardPlayerGrid.tsx` | Sortable player grid for draft board (Proj. Rnd, Rank, BIB, Name, Age, scores, flags) |
-| `src/components/draft/DraftBoardRosterView.tsx` | Round-by-round roster view with pre-filled slots for locked players |
+| `src/components/DraftBoard.tsx` | Main draft interface with header, round order, drawer toggle, modals |
+| `src/components/draft/DraftBoardPlayerGrid.tsx` | Available players table view (sortable, searchable, with flags and draft buttons) |
+| `src/components/draft/DraftBoardRosterView.tsx` | Round-by-round roster grid (teams as columns, shows drafted/pre-filled/current pick) |
+| `src/contexts/ViewContext.tsx` | Admin/Public view mode context for draft board |
 | `server/draft/models.py` | Django models: League, User, LeagueMembership, LeagueInvitation, Division, Team, Player, DraftState |
 | `server/draft/views.py` | DRF ViewSets, auth endpoints, member management, invitations |
 | `server/draft/serializers.py` | DRF serializers with snake_case/camelCase handling |
@@ -94,9 +96,14 @@ App
 │   └── PlayerReviewTable (spreadsheet-style table)
 ├── DraftConfig
 │   └── SimulationModal
-├── DraftBoard
-│   ├── DraftBoardPlayerGrid (available players table view)
-│   └── DraftBoardRosterView (round-by-round roster view)
+├── DraftBoard (main draft interface)
+│   ├── Header: pick counter, current/next team, age breakdown, mandatory pick alert
+│   ├── Round Order Display: horizontal team cards with pick states
+│   ├── Drawer Toggle: switch between players/rosters views
+│   ├── DraftBoardPlayerGrid (available players - sortable table with search, flags, draft buttons)
+│   ├── DraftBoardRosterView (team rosters - round×team grid with drafted/pre-filled/current states)
+│   ├── Round Interstitial Modal (between-round order display)
+│   └── Draft Complete Modal (finalization prompt)
 └── DraftComplete
     └── TradeModal
 ```
