@@ -8,17 +8,20 @@ interface ColumnMapperProps {
 }
 
 const REQUIRED_FIELDS: { field: AppField; label: string }[] = [
+  { field: 'bib', label: 'Bib Number' },
   { field: 'firstName', label: 'First Name' },
   { field: 'lastName', label: 'Last Name' },
-  { field: 'littleLeagueAge', label: 'Little League Age' },
-  { field: 'isAllStar', label: 'All-Star' },
-  { field: 'isDNE', label: 'DNE (Did Not Evaluate)' },
+  { field: 'totalScore', label: 'Overall Score' },
 ];
 
 const OPTIONAL_FIELDS: { field: AppField; label: string }[] = [
-  { field: 'bib', label: 'Bib Number' },
+  // Player info
+  { field: 'littleLeagueAge', label: 'Little League Age' },
   { field: 'birthday', label: 'Birthday' },
-  // Raw component scores (preferred)
+  // Evaluation flags
+  { field: 'isAllStar', label: 'All-Star' },
+  { field: 'isDNE', label: 'DNE (Did Not Evaluate)' },
+  // Raw component scores
   { field: 'fieldScore', label: 'Field Score' },
   { field: 'throwScore', label: 'Throw Score' },
   { field: 'hitPower', label: 'Hit Power' },
@@ -26,13 +29,15 @@ const OPTIONAL_FIELDS: { field: AppField; label: string }[] = [
   { field: 'hitContact', label: 'Hit Contact' },
   { field: 'pitchingStrength', label: 'Pitching Strength' },
   { field: 'pitchingForm', label: 'Pitching Form' },
-  // Pre-calculated subtotals (for validation or legacy data)
+  // Pre-calculated subtotals
   { field: 'fieldingSubtotal', label: 'Fielding Subtotal' },
   { field: 'hittingSubtotal', label: 'Hitting Subtotal' },
   { field: 'pitchingSubtotal', label: 'Pitching Subtotal' },
   // Other scores
   { field: 'catchScore', label: 'Catch Score' },
+  { field: 'flyBallForm', label: 'Fly Ball Form' },
   { field: 'runningScore', label: 'Running Score' },
+  { field: 'runningForm', label: 'Running Form' },
   { field: 'officialAdjust', label: 'Official Adjust' },
   // Draft rules
   { field: 'isCoachKid', label: "Coach's Kid" },
@@ -48,19 +53,37 @@ export const ColumnMapper = ({ csvData, onMappingComplete }: ColumnMapperProps) 
   const [showOptional, setShowOptional] = useState(false);
 
   // Auto-suggest mappings based on column names
+  // Be generous in matching - try to recognize common variations
   useEffect(() => {
     const autoMapping: ColumnMapping = {};
 
     csvData.headers.forEach((header) => {
       const lowerHeader = header.toLowerCase().trim();
 
-      // Try to match common variations
-      if (lowerHeader === 'bib' || lowerHeader.includes('bib number')) {
+      // Required fields - match generously
+      if (lowerHeader === 'bib' || lowerHeader.includes('bib') || lowerHeader === '#') {
         autoMapping[header] = 'bib';
+      } else if (
+        lowerHeader === 'total' ||
+        lowerHeader === 'total score' ||
+        lowerHeader === 'overall' ||
+        lowerHeader === 'overall score' ||
+        lowerHeader === 'score' ||
+        lowerHeader === 'points' ||
+        lowerHeader === 'total points' ||
+        (lowerHeader.includes('total') && (lowerHeader.includes('score') || lowerHeader.includes('point'))) ||
+        (lowerHeader.includes('overall') && (lowerHeader.includes('score') || lowerHeader.includes('point')))
+      ) {
+        autoMapping[header] = 'totalScore';
       } else if (lowerHeader.includes('first') && lowerHeader.includes('name')) {
+        autoMapping[header] = 'firstName';
+      } else if (lowerHeader === 'first' || lowerHeader === 'firstname') {
         autoMapping[header] = 'firstName';
       } else if (lowerHeader.includes('last') && lowerHeader.includes('name')) {
         autoMapping[header] = 'lastName';
+      } else if (lowerHeader === 'last' || lowerHeader === 'lastname') {
+        autoMapping[header] = 'lastName';
+      // Optional fields - also match generously
       } else if (lowerHeader.includes('field') && lowerHeader.includes('score')) {
         autoMapping[header] = 'fieldScore';
       } else if (lowerHeader.includes('throw') && lowerHeader.includes('score')) {
@@ -71,36 +94,62 @@ export const ColumnMapper = ({ csvData, onMappingComplete }: ColumnMapperProps) 
         autoMapping[header] = 'hitForm';
       } else if (lowerHeader.includes('hit') && lowerHeader.includes('contact')) {
         autoMapping[header] = 'hitContact';
-      } else if (lowerHeader.includes('pitching') && lowerHeader.includes('strength')) {
+      } else if (lowerHeader.includes('pitch') && (lowerHeader.includes('strength') || lowerHeader.includes('str'))) {
         autoMapping[header] = 'pitchingStrength';
-      } else if (lowerHeader.includes('pitching') && lowerHeader.includes('form')) {
+      } else if (lowerHeader.includes('pitch') && lowerHeader.includes('form')) {
         autoMapping[header] = 'pitchingForm';
-      } else if (lowerHeader.includes('fielding') && lowerHeader.includes('subtotal')) {
+      } else if (lowerHeader.includes('field') && lowerHeader.includes('subtotal')) {
         autoMapping[header] = 'fieldingSubtotal';
-      } else if (lowerHeader.includes('hitting') && lowerHeader.includes('subtotal')) {
+      } else if (lowerHeader.includes('hit') && lowerHeader.includes('subtotal')) {
         autoMapping[header] = 'hittingSubtotal';
-      } else if (lowerHeader.includes('pitching') && lowerHeader.includes('subtotal')) {
+      } else if (lowerHeader.includes('pitch') && lowerHeader.includes('subtotal')) {
         autoMapping[header] = 'pitchingSubtotal';
-      } else if (lowerHeader.includes('catch')) {
+      } else if (
+        (lowerHeader.includes('fly') && lowerHeader.includes('catch')) ||
+        (lowerHeader.includes('catch') && !lowerHeader.includes('catcher') && !lowerHeader.includes('form'))
+      ) {
         autoMapping[header] = 'catchScore';
-      } else if (lowerHeader.includes('running') || lowerHeader.includes('base')) {
+      } else if (lowerHeader.includes('fly') && lowerHeader.includes('form')) {
+        autoMapping[header] = 'flyBallForm';
+      } else if (
+        (lowerHeader.includes('running') && lowerHeader.includes('form')) ||
+        (lowerHeader.includes('baserunning') && lowerHeader.includes('form')) ||
+        (lowerHeader.includes('base') && lowerHeader.includes('form'))
+      ) {
+        autoMapping[header] = 'runningForm';
+      } else if (lowerHeader.includes('running') || lowerHeader.includes('run score') || lowerHeader.includes('baserunning') || lowerHeader.includes('base run')) {
         autoMapping[header] = 'runningScore';
-      } else if (lowerHeader.includes('adjust') || lowerHeader.includes('official')) {
+      } else if (lowerHeader.includes('adjust') || lowerHeader.includes('official') || lowerHeader.includes('bonus')) {
         autoMapping[header] = 'officialAdjust';
-      } else if (lowerHeader.includes('age')) {
+      } else if (
+        lowerHeader.includes('age') ||
+        lowerHeader === 'll age' ||
+        lowerHeader.includes('league age')
+      ) {
         autoMapping[header] = 'littleLeagueAge';
-      } else if (lowerHeader.includes('birthday') || lowerHeader.includes('birth')) {
+      } else if (lowerHeader.includes('birthday') || lowerHeader.includes('birth') || lowerHeader.includes('dob') || lowerHeader === 'birthdate') {
         autoMapping[header] = 'birthday';
       } else if (lowerHeader.includes('all') && lowerHeader.includes('star')) {
         autoMapping[header] = 'isAllStar';
-      } else if (lowerHeader === 'dne') {
+      } else if (lowerHeader === 'allstar' || lowerHeader === 'all-star') {
+        autoMapping[header] = 'isAllStar';
+      } else if (
+        lowerHeader === 'dne' ||
+        lowerHeader.includes('did not') ||
+        lowerHeader.includes('not evaluate') ||
+        lowerHeader.includes('no eval')
+      ) {
         autoMapping[header] = 'isDNE';
-      } else if (lowerHeader.includes('coach') && !lowerHeader.includes('manager') && !lowerHeader.includes('assistant')) {
+      } else if (
+        (lowerHeader.includes('coach') && !lowerHeader.includes('manager') && !lowerHeader.includes('assistant')) ||
+        lowerHeader === 'coaches kid' ||
+        lowerHeader === 'coach kid' ||
+        lowerHeader === 'coachkid'
+      ) {
         autoMapping[header] = 'isCoachKid';
-      } else if (lowerHeader.includes('sibling')) {
+      } else if (lowerHeader.includes('sibling') || lowerHeader.includes('brother') || lowerHeader.includes('sister')) {
         autoMapping[header] = 'sibling';
       } else if (lowerHeader === 'team' || lowerHeader === 'teams') {
-        // Match both "Team" and "Teams" column names
         autoMapping[header] = 'teamColumn';
       } else if (lowerHeader.includes('manager') && lowerHeader.includes('team')) {
         autoMapping[header] = 'managerTeam';
@@ -130,31 +179,25 @@ export const ColumnMapper = ({ csvData, onMappingComplete }: ColumnMapperProps) 
     return Object.values(mapping).includes(field);
   };
 
+  // Check if a field is mapped to a different column (not the current one)
+  const isFieldMappedToOtherColumn = (field: AppField, currentColumn: string): string | null => {
+    for (const [csvCol, mappedField] of Object.entries(mapping)) {
+      if (mappedField === field && csvCol !== currentColumn) {
+        return csvCol;
+      }
+    }
+    return null;
+  };
+
   const allRequiredFieldsMapped = REQUIRED_FIELDS.every((field) =>
     isFieldMapped(field.field)
   );
 
-  // Check if we have scoring data (either raw scores OR subtotals)
-  const hasRawScores =
-    isFieldMapped('fieldScore') || isFieldMapped('throwScore') ||
-    isFieldMapped('hitPower') || isFieldMapped('hitForm') || isFieldMapped('hitContact') ||
-    isFieldMapped('pitchingStrength') || isFieldMapped('pitchingForm');
-
-  const hasSubtotals =
-    isFieldMapped('fieldingSubtotal') || isFieldMapped('hittingSubtotal') ||
-    isFieldMapped('pitchingSubtotal');
-
-  const hasScoringData = hasRawScores || hasSubtotals;
-
-  const canContinue = allRequiredFieldsMapped && hasScoringData;
+  const canContinue = allRequiredFieldsMapped;
 
   const handleContinue = () => {
     if (!allRequiredFieldsMapped) {
       alert('Please map all required fields before continuing.');
-      return;
-    }
-    if (!hasScoringData) {
-      alert('Please map at least one scoring field.\n\nYou need either:\n- Raw component scores (Field Score, Throw Score, Hit Power, etc.)\nOR\n- Pre-calculated subtotals (Fielding Subtotal, Hitting Subtotal, Pitching Subtotal)');
       return;
     }
     onMappingComplete(mapping);
@@ -173,7 +216,7 @@ export const ColumnMapper = ({ csvData, onMappingComplete }: ColumnMapperProps) 
         </div>
 
         <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700 mb-6">
-          <div className="space-y-2 mb-4">
+          <div className="mb-4">
             <div className="flex items-center gap-2">
               {allRequiredFieldsMapped ? (
                 <>
@@ -188,23 +231,6 @@ export const ColumnMapper = ({ csvData, onMappingComplete }: ColumnMapperProps) 
                   <span className="text-orange-600 dark:text-orange-400 font-medium">
                     {REQUIRED_FIELDS.filter((f) => !isFieldMapped(f.field)).length} required fields
                     remaining
-                  </span>
-                </>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              {hasScoringData ? (
-                <>
-                  <CheckCircle className="w-5 h-5 text-green-600" />
-                  <span className="text-green-600 dark:text-green-400 font-medium">
-                    Scoring data mapped {hasRawScores ? '(raw scores)' : '(subtotals)'}
-                  </span>
-                </>
-              ) : (
-                <>
-                  <AlertCircle className="w-5 h-5 text-orange-600" />
-                  <span className="text-orange-600 dark:text-orange-400 font-medium">
-                    No scoring data mapped - need raw scores OR subtotals
                   </span>
                 </>
               )}
@@ -314,18 +340,24 @@ export const ColumnMapper = ({ csvData, onMappingComplete }: ColumnMapperProps) 
                   >
                     <option value="">-- Skip this column --</option>
                     <optgroup label="Required Fields">
-                      {REQUIRED_FIELDS.map(({ field, label }) => (
-                        <option key={field} value={field}>
-                          {label}
-                        </option>
-                      ))}
+                      {REQUIRED_FIELDS.map(({ field, label }) => {
+                        const mappedTo = isFieldMappedToOtherColumn(field, header);
+                        return (
+                          <option key={field} value={field} disabled={!!mappedTo}>
+                            {label}{mappedTo ? ` (mapped to "${mappedTo}")` : ''}
+                          </option>
+                        );
+                      })}
                     </optgroup>
                     <optgroup label="Optional Fields">
-                      {OPTIONAL_FIELDS.map(({ field, label }) => (
-                        <option key={field} value={field}>
-                          {label}
-                        </option>
-                      ))}
+                      {OPTIONAL_FIELDS.map(({ field, label }) => {
+                        const mappedTo = isFieldMappedToOtherColumn(field, header);
+                        return (
+                          <option key={field} value={field} disabled={!!mappedTo}>
+                            {label}{mappedTo ? ` (mapped to "${mappedTo}")` : ''}
+                          </option>
+                        );
+                      })}
                     </optgroup>
                   </select>
                 </div>

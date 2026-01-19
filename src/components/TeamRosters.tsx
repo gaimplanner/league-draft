@@ -5,20 +5,34 @@ import { getTeamDisplayName } from '../utils/teamUtils';
 interface TeamRostersProps {
   teams: Team[];
   currentTeamId: string | null;
+  currentRoundOrder?: string[];
   enforceAgeLimit?: boolean;
   maxPerAge?: number;
 }
 
-export const TeamRosters = ({ teams, currentTeamId, enforceAgeLimit = false, maxPerAge = 0 }: TeamRostersProps) => {
+export const TeamRosters = ({ teams, currentTeamId, currentRoundOrder, enforceAgeLimit = false, maxPerAge = 0 }: TeamRostersProps) => {
   const viewMode = useViewMode();
   const isPublicView = viewMode === 'public';
+
+  // Sort teams by current round draft order if provided
+  const sortedTeams = currentRoundOrder && currentRoundOrder.length > 0
+    ? [...teams].sort((a, b) => {
+        const aIndex = currentRoundOrder.indexOf(a.id);
+        const bIndex = currentRoundOrder.indexOf(b.id);
+        // Teams not in order go to the end
+        if (aIndex === -1) return 1;
+        if (bIndex === -1) return -1;
+        return aIndex - bIndex;
+      })
+    : teams;
+
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-      {teams.map((team) => (
+      {sortedTeams.map((team, index) => (
         <div
           key={team.id}
           className={`
-            rounded-lg p-4 border-2 transition-all
+            relative rounded-lg p-4 border-2 transition-all
             ${
               team.id === currentTeamId
                 ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
@@ -26,15 +40,26 @@ export const TeamRosters = ({ teams, currentTeamId, enforceAgeLimit = false, max
             }
           `}
         >
-          <div className="flex justify-between items-start mb-3">
-            <h3 className="font-semibold text-lg text-gray-900 dark:text-white">
-              {getTeamDisplayName(team)}
-            </h3>
-            {team.id === currentTeamId && (
-              <span className="text-xs bg-blue-500 text-white px-2 py-1 rounded">
-                Picking
+          {/* Picking indicator - top left corner */}
+          {team.id === currentTeamId && (
+            <span className="absolute -top-2 -left-2 text-[10px] bg-blue-500 text-white px-1.5 py-0.5 rounded font-medium shadow-sm">
+              On The Clock
+            </span>
+          )}
+          <div className="flex items-center gap-2 mb-3">
+            {/* Pick order badge */}
+            {currentRoundOrder && currentRoundOrder.length > 0 && (
+              <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+                team.id === currentTeamId
+                  ? 'bg-blue-500 text-white'
+                  : 'bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300'
+              }`}>
+                {index + 1}
               </span>
             )}
+            <h3 className="font-semibold text-lg text-gray-900 dark:text-white truncate">
+              {getTeamDisplayName(team)}
+            </h3>
           </div>
 
           {/* Team score - hidden in public view */}

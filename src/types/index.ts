@@ -1,5 +1,146 @@
+// -----------------------------------------------------------------------------
+// Auth Types
+// -----------------------------------------------------------------------------
+
+export type UserRole = 'master_admin' | 'user';
+
+// Organization membership roles (coach can view draft, viewer is read-only)
+export type OrganizationMembershipRole = 'admin' | 'coach' | 'viewer';
+
+// Legacy alias for backwards compatibility
+export type LeagueMembershipRole = OrganizationMembershipRole;
+
+export interface OrganizationMembership {
+  id: string;
+  organizationId: string;
+  organizationName: string;
+  organizationSlug: string;
+  role: OrganizationMembershipRole;
+  createdAt: string;
+  // Legacy aliases for backwards compatibility
+  leagueId: string;
+  leagueName: string;
+  leagueSlug: string;
+}
+
+// Legacy alias
+export type LeagueMembership = OrganizationMembership;
+
+export interface User {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  role: UserRole;
+  organizations: OrganizationMembership[];
+  // Legacy alias for backwards compatibility
+  leagues: OrganizationMembership[];
+}
+
+export interface Organization {
+  id: string;
+  name: string;
+  slug: string;
+  createdAt: string;
+}
+
+// Legacy alias
+export type League = Organization;
+
+export interface LoginCredentials {
+  email: string;
+  password: string;
+}
+
+export interface RegisterData {
+  email: string;
+  password: string;
+  firstName?: string;
+  lastName?: string;
+  organizationName?: string;
+  organizationSlug?: string;
+  // Legacy aliases
+  leagueName?: string;
+  leagueSlug?: string;
+}
+
+export interface ProfileUpdateData {
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+}
+
+export interface ChangePasswordData {
+  currentPassword: string;
+  newPassword: string;
+}
+
+// -----------------------------------------------------------------------------
+// Organization Member Types
+// -----------------------------------------------------------------------------
+
+export interface OrganizationMember {
+  id: string;
+  userId: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  role: OrganizationMembershipRole;
+  joinedAt: string;
+}
+
+// Legacy alias
+export type LeagueMember = OrganizationMember;
+
+export interface OrganizationInvitation {
+  id: string;
+  email: string | null;
+  role: OrganizationMembershipRole;
+  invitedByEmail: string;
+  isLinkInvite: boolean;
+  createdAt: string;
+  expiresAt: string;
+  acceptedAt: string | null;
+  isExpired: boolean;
+  isPending: boolean;
+}
+
+// Legacy alias
+export type LeagueInvitation = OrganizationInvitation;
+
+export interface JoinLinkStatus {
+  enabled: boolean;
+  token: string | null;
+  url: string | null;
+}
+
+export interface JoinLinkInfo {
+  organizationName: string;
+  organizationSlug: string;
+  type?: 'join_link' | 'email_invitation';
+  invitedBy?: string | null;
+  role?: OrganizationMembershipRole;
+  // Legacy aliases
+  leagueName?: string;
+  leagueSlug?: string;
+}
+
+export interface AcceptInvitationResult {
+  message: string;
+  organizationId: string;
+  organizationName: string;
+  // Legacy aliases
+  leagueId?: string;
+  leagueName?: string;
+}
+
+// -----------------------------------------------------------------------------
+// Game Types
+// -----------------------------------------------------------------------------
+
 export interface Player {
   id: string;
+  divisionId?: string; // ID of the division this player belongs to (from API)
   bib: string; // Unique ID from evaluation day
   firstName: string;
   lastName: string;
@@ -53,13 +194,14 @@ export interface Player {
 
 export interface Team {
   id: string;
+  divisionId?: string; // ID of the division this team belongs to (from API)
   name: string;
   roster: Player[];
   totalScore: number;
   draftPosition: number; // 1-8
   coachKids: string[]; // player IDs
   assistantCoaches: string[]; // assistant coach last names
-  ageBreakdown: Record<number, number>; // { 10: 3, 11: 4, 12: 2 } - count per age
+  ageBreakdown: Record<string, number>; // { "10": 3, "11": 4, "12": 2 } - count per age (string keys from JSON)
 }
 
 export interface DraftPick {
@@ -80,6 +222,8 @@ export interface DraftConfig {
 }
 
 export interface DraftState {
+  id?: string; // Backend draft state ID (for API mode)
+  divisionId?: string; // ID of the division this draft belongs to (from API)
   players: Player[];
   teams: Team[];
   draftFormat: DraftFormat;
@@ -144,7 +288,9 @@ export type AppField =
   | 'hittingSubtotal'
   | 'pitchingSubtotal'
   | 'catchScore'
+  | 'flyBallForm'
   | 'runningScore'
+  | 'runningForm'
   | 'officialAdjust'
   | 'littleLeagueAge'
   | 'birthday'
@@ -154,7 +300,8 @@ export type AppField =
   | 'sibling'
   | 'managerTeam'
   | 'assistantTeam'
-  | 'teamColumn'; // "Manager, Assistant" format for auto team creation
+  | 'teamColumn' // "Manager, Assistant" format for auto team creation
+  | 'totalScore'; // Overall/total score (alternative to component scores)
 
 export interface ColumnMapping {
   [csvColumn: string]: AppField | null;
@@ -229,7 +376,13 @@ export interface Division {
   scoringMode: ScoringMode; // Whether CSV scores are raw or pre-weighted
   phase: AppPhase;
   createdAt: string; // ISO date string
+  updatedAt?: string; // ISO date string (from API)
   completedAt?: string; // ISO date string
+
+  // Organization or personal workspace ownership
+  organizationId?: string; // If part of an organization
+  ownerId?: string; // If personal workspace
+  isPersonal: boolean; // True if personal workspace (no organization)
 }
 
 export interface DivisionSummary {
@@ -241,6 +394,11 @@ export interface DivisionSummary {
   phase: AppPhase;
   createdAt: string;
   completedAt?: string;
+
+  // Organization or personal workspace ownership
+  organizationId?: string;
+  ownerId?: string;
+  isPersonal: boolean;
 }
 
 // Preset configurations for common divisions
@@ -307,5 +465,6 @@ export function createInitialDivision(
     scoringMode: 'pre-weighted', // Default to pre-weighted since most CSVs have this format
     phase: 'upload',
     createdAt: new Date().toISOString(),
+    isPersonal: true, // Default to personal workspace
   };
 }

@@ -418,8 +418,10 @@ export function convertToPlayers(
       hitContact: ep.normalizedScores.hitting?.hits ?? 0,
       pitchingStrength: ep.normalizedScores.pitching?.armStrength ?? 0,
       pitchingForm: ep.normalizedScores.pitching?.form ?? 0,
-      catchScore: ep.normalizedScores.flyBalls?.catches ?? 0,
-      runningScore: ep.normalizedScores.baserunning?.bestTime ?? 0,
+      // Catch score combines fly ball catches + fly ball form
+      catchScore: (ep.normalizedScores.flyBalls?.catches ?? 0) + (ep.normalizedScores.flyBalls?.form ?? 0),
+      // Running score combines best time + baserunning form
+      runningScore: (ep.normalizedScores.baserunning?.bestTime ?? 0) + (ep.normalizedScores.baserunning?.form ?? 0),
 
       // Map category scores to subtotals
       fieldingSubtotal: ep.categoryScores.fielding ?? 0,
@@ -486,34 +488,34 @@ export function generateEvaluationCSV(
 
   const headers = [
     'Rank',
-    'Proj Round',
-    'BIB',
+    'Projected Round',
+    'Bib Number',
     'First Name',
     'Last Name',
-    'Age',
+    'Little League Age',
     'All-Star',
     'Coach Kid',
     'Team',
     'Sibling Group',
     // Pitching fields with weights
-    `P.Form (${getWeight('pitchingForm')}%)`,
-    `P.Arm (${getWeight('armStrength')}%)`,
+    `Pitching Form (${getWeight('pitchingForm')}%)`,
+    `Pitching Arm Strength (${getWeight('armStrength')}%)`,
     // Hitting fields with weights
-    `H.Form (${getWeight('hittingForm')}%)`,
-    `H.Power (${getWeight('contactPower')}%)`,
-    `H.Hits (${getWeight('hits')}%)`,
+    `Hitting Form (${getWeight('hittingForm')}%)`,
+    `Hit Power (${getWeight('contactPower')}%)`,
+    `Hit Contact (${getWeight('hits')}%)`,
     // Fielding fields with weights
-    `Field (${getWeight('field')}%)`,
-    `Throw (${getWeight('throw')}%)`,
+    `Field Score (${getWeight('field')}%)`,
+    `Throw Score (${getWeight('throw')}%)`,
     // Fly Balls fields with weights
-    `F.Catches (${getWeight('catches')}%)`,
-    `F.Form (${getWeight('flyBallForm')}%)`,
+    `Catch Score (${getWeight('catches')}%)`,
+    `Fly Ball Form (${getWeight('flyBallForm')}%)`,
     // Baserunning fields with weights
-    `R.Time (${getWeight('bestTime')}%)`,
-    `R.Form (${getWeight('baserunningForm')}%)`,
+    `Running Time (${getWeight('bestTime')}%)`,
+    `Running Form (${getWeight('baserunningForm')}%)`,
     // Totals
-    'Adjust',
-    'Total',
+    'Official Adjust',
+    'Total Score',
   ];
 
   const rows = players.map((p) => [

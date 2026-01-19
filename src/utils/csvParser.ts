@@ -57,7 +57,7 @@ export const parseCSVWithMapping = (
     const lastName = getMappedValue('lastName');
     const fullName = `${firstName} ${lastName}`.trim();
 
-    // Parse raw component scores
+    // Parse raw component scores (optional)
     const fieldScore = parseFloat(getMappedValue('fieldScore')) || 0;
     const throwScore = parseFloat(getMappedValue('throwScore')) || 0;
     const hitPower = parseFloat(getMappedValue('hitPower')) || 0;
@@ -65,14 +65,23 @@ export const parseCSVWithMapping = (
     const hitContact = parseFloat(getMappedValue('hitContact')) || 0;
     const pitchingStrength = parseFloat(getMappedValue('pitchingStrength')) || 0;
     const pitchingForm = parseFloat(getMappedValue('pitchingForm')) || 0;
-    const catchScore = parseFloat(getMappedValue('catchScore')) || 0;
-    const runningScore = parseFloat(getMappedValue('runningScore')) || 0;
+    // Catch score combines catches + fly ball form (if both mapped)
+    const catchScoreBase = parseFloat(getMappedValue('catchScore')) || 0;
+    const flyBallForm = parseFloat(getMappedValue('flyBallForm')) || 0;
+    const catchScore = catchScoreBase + flyBallForm;
+    // Running score combines running/time + running form (if both mapped)
+    const runningScoreBase = parseFloat(getMappedValue('runningScore')) || 0;
+    const runningForm = parseFloat(getMappedValue('runningForm')) || 0;
+    const runningScore = runningScoreBase + runningForm;
     const officialAdjust = parseFloat(getMappedValue('officialAdjust')) || 0;
 
-    // Parse imported subtotals (for validation or fallback)
+    // Parse imported subtotals (optional, for validation or fallback)
     const importedFieldingSubtotal = parseFloat(getMappedValue('fieldingSubtotal')) || 0;
     const importedHittingSubtotal = parseFloat(getMappedValue('hittingSubtotal')) || 0;
     const importedPitchingSubtotal = parseFloat(getMappedValue('pitchingSubtotal')) || 0;
+
+    // Parse direct total score (required field now)
+    const importedTotalScore = parseFloat(getMappedValue('totalScore')) || 0;
 
     // Check if we have raw component scores
     const hasRawScores =
@@ -93,6 +102,7 @@ export const parseCSVWithMapping = (
     let totalScore: number;
 
     if (hasRawScores) {
+      // Option 1: Calculate from raw component scores
       const playerScoreData = {
         fieldScore,
         throwScore,
@@ -133,7 +143,7 @@ export const parseCSVWithMapping = (
         }
       }
     } else if (hasImportedSubtotals) {
-      // Use imported subtotals (legacy format without raw scores)
+      // Option 2: Use imported subtotals (legacy format without raw scores)
       fieldingSubtotal = importedFieldingSubtotal;
       hittingSubtotal = importedHittingSubtotal;
       pitchingSubtotal = importedPitchingSubtotal;
@@ -141,13 +151,14 @@ export const parseCSVWithMapping = (
       objectiveTotal = catchScore + runningScore;
       totalScore = subjectiveTotal + objectiveTotal + officialAdjust;
     } else {
-      // No component scores provided - use zeros but still include official adjust
+      // Option 3: Use direct totalScore (simplest case - just bib, name, and overall score)
       fieldingSubtotal = 0;
       hittingSubtotal = 0;
       pitchingSubtotal = 0;
       subjectiveTotal = 0;
-      objectiveTotal = catchScore + runningScore; // catchScore/runningScore might still have values
-      totalScore = objectiveTotal + officialAdjust; // ALWAYS include official adjust
+      objectiveTotal = catchScore + runningScore;
+      // Use imported total score if available, otherwise calculate from components
+      totalScore = importedTotalScore > 0 ? importedTotalScore : (objectiveTotal + officialAdjust);
     }
 
     // Parse player info

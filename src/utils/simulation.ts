@@ -47,6 +47,10 @@ export function runSimulation(
   const totalRounds = Math.ceil(simPlayers.length / simTeams.length);
   let overallPick = 0;
 
+  // Track picks made by each team
+  const teamPicksMade: Record<string, number> = {};
+  simTeams.forEach(t => { teamPicksMade[t.id] = 0; });
+
   for (let round = 1; round <= totalRounds; round++) {
     // USE THE SAME calculateDraftOrder function as real draft
     const roundOrder = calculateDraftOrder(simTeams, round, draftFormat, draftOrder);
@@ -62,7 +66,12 @@ export function runSimulation(
       let playerToDraft: Player | null = null;
 
       // USE THE SAME getMandatoryPick function as real draft
-      const mandatoryResult = getMandatoryPick(simPlayers, teamId, round, options);
+      // Pass totalRounds and teamPicksMade to enable "not enough picks" logic
+      const mandatoryResult = getMandatoryPick(simPlayers, teamId, round, {
+        ...options,
+        totalRounds,
+        teamPicksMade: teamPicksMade[teamId],
+      });
 
       if (mandatoryResult) {
         playerToDraft = mandatoryResult.player;
@@ -73,6 +82,7 @@ export function runSimulation(
 
       if (playerToDraft) {
         overallPick++;
+        teamPicksMade[teamId]++;
 
         // Execute simulated draft
         playerToDraft.isDrafted = true;
@@ -106,9 +116,22 @@ export function runSimulation(
 
 /**
  * Calculate simulation statistics
+ * Only includes players from complete rounds to ensure fair comparison
+ * (avoids skewing when some teams get an extra player in incomplete final round)
  */
 export function getSimulationStats(result: SimulationResult) {
-  const teamScores = result.teams.map(t => t.totalScore);
+  const teamCount = result.teams.length;
+  const totalPlayers = result.players.filter(p => p.isDrafted).length;
+  const completeRounds = Math.floor(totalPlayers / teamCount);
+
+  // Calculate scores using only players from complete rounds
+  const teamScores = result.teams.map(team => {
+    const completeRoundPlayers = team.roster.filter(
+      p => p.draftedInRound !== undefined && p.draftedInRound <= completeRounds
+    );
+    return completeRoundPlayers.reduce((sum, p) => sum + p.totalScore, 0);
+  });
+
   const highest = Math.max(...teamScores);
   const lowest = Math.min(...teamScores);
   const spread = highest - lowest;

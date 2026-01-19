@@ -1,12 +1,15 @@
 import { useState } from 'react';
-import { Plus, Play, Eye, Trash2, Calendar, Users, AlertCircle } from 'lucide-react';
-import { DivisionSummary, AppPhase } from '../types';
+import { Plus, Play, Eye, Trash2, Calendar, Users, AlertCircle, LogOut, User, Settings } from 'lucide-react';
+import { DivisionSummary, AppPhase, User as UserType } from '../types';
 
 interface DivisionSelectorProps {
   divisions: DivisionSummary[];
   onSelectDivision: (divisionId: string) => void;
   onCreateNew: () => void;
   onDeleteDivision: (divisionId: string) => void;
+  user?: UserType | null;
+  onLogout?: () => void;
+  onOpenSettings?: () => void;
 }
 
 function getPhaseLabel(phase: AppPhase): string {
@@ -46,6 +49,9 @@ export const DivisionSelector = ({
   onSelectDivision,
   onCreateNew,
   onDeleteDivision,
+  user,
+  onLogout,
+  onOpenSettings,
 }: DivisionSelectorProps) => {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
@@ -72,6 +78,37 @@ export const DivisionSelector = ({
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center p-4">
       <div className="max-w-3xl w-full">
+        {/* User Header */}
+        {user && onLogout && (
+          <div className="flex items-center justify-end gap-4 mb-4 px-1">
+            <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+              <User className="w-4 h-4" />
+              <span>{user.email}</span>
+              {user.leagues.length > 0 && (
+                <span className="text-gray-400 dark:text-gray-500">
+                  ({user.leagues.map(l => l.leagueName).join(', ')})
+                </span>
+              )}
+            </div>
+            {onOpenSettings && (
+              <button
+                onClick={onOpenSettings}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-md transition-colors"
+              >
+                <Settings className="w-4 h-4" />
+                Settings
+              </button>
+            )}
+            <button
+              onClick={onLogout}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors"
+            >
+              <LogOut className="w-4 h-4" />
+              Sign Out
+            </button>
+          </div>
+        )}
+
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-2">
             Little League Draft

@@ -170,8 +170,19 @@ export function PlayerReviewTable({
 
   const handleCellSave = useCallback(() => {
     if (editingCell) {
-      const numValue = parseFloat(editValue) || 0;
-      onUpdatePlayer(editingCell.playerId, editingCell.field, numValue);
+      const numValue = parseFloat(editValue);
+
+      // Security: Validate score bounds
+      if (isNaN(numValue) || numValue < 0 || numValue > 100) {
+        // Invalid value - revert to original, don't update
+        setEditingCell(null);
+        setEditValue('');
+        return;
+      }
+
+      // Round to 2 decimal places to prevent floating point issues
+      const sanitizedValue = Math.round(numValue * 100) / 100;
+      onUpdatePlayer(editingCell.playerId, editingCell.field, sanitizedValue);
       setEditingCell(null);
       setEditValue('');
     }
@@ -205,17 +216,18 @@ export function PlayerReviewTable({
     <div className="space-y-4">
       {/* Teams & Detection Panel */}
       <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-        <button
-          onClick={() => setTeamsExpanded(!teamsExpanded)}
-          className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-        >
-          <div className="flex items-center gap-4">
-            <span className="font-medium text-gray-900 dark:text-white flex items-center gap-2">
-              {teamsExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-              <Users className="w-4 h-4 text-gray-500" />
-              Teams & Detection
+        <div className="px-4 py-3 flex flex-wrap items-center justify-between gap-2">
+          <button
+            onClick={() => setTeamsExpanded(!teamsExpanded)}
+            className="flex items-center gap-2 sm:gap-4 hover:bg-gray-50 dark:hover:bg-gray-700 -ml-2 px-2 py-1 rounded-lg transition-colors min-w-0"
+          >
+            <span className="font-medium text-gray-900 dark:text-white flex items-center gap-2 whitespace-nowrap">
+              {teamsExpanded ? <ChevronUp className="w-4 h-4 flex-shrink-0" /> : <ChevronDown className="w-4 h-4 flex-shrink-0" />}
+              <Users className="w-4 h-4 text-gray-500 flex-shrink-0" />
+              <span className="hidden xs:inline">Teams & Detection</span>
+              <span className="xs:hidden">Teams</span>
             </span>
-            <div className="flex items-center gap-3 text-sm text-gray-600 dark:text-gray-400">
+            <div className="hidden sm:flex items-center gap-3 text-sm text-gray-600 dark:text-gray-400">
               <span>{teams.length} teams</span>
               {coachKidCount > 0 && (
                 <span className="text-blue-600 dark:text-blue-400">
@@ -230,63 +242,95 @@ export function PlayerReviewTable({
                 </span>
               )}
             </div>
-          </div>
-        </button>
+          </button>
+          {/* Detection Button - always visible in header */}
+          <button
+            onClick={onRunAutoDetection}
+            className="flex items-center gap-2 px-3 py-1.5 bg-purple-500 hover:bg-purple-600 text-white rounded-lg font-medium text-sm flex-shrink-0"
+            title="Auto-detect coach's kids and siblings by matching last names"
+          >
+            <Wand2 className="w-4 h-4" />
+            <span className="hidden sm:inline">Find Coach Kids & Siblings</span>
+            <span className="sm:hidden">Detect</span>
+          </button>
+        </div>
 
         {teamsExpanded && (
           <div className="px-4 pb-4 border-t border-gray-200 dark:border-gray-700">
-            <div className="mt-4 space-y-4">
-              {/* Team Names & Coaches Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {teams.map(team => {
-                  const teamCoachKids = players.filter(p => p.coachTeamId === team.id);
-                  return (
-                    <div key={team.id} className="space-y-2">
-                      <div>
-                        <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
-                          Head Coach (Team Name)
-                        </label>
-                        <input
-                          type="text"
-                          value={team.name}
-                          onChange={(e) => onTeamNameUpdate(team.id, e.target.value)}
-                          placeholder={`Coach Name (e.g., Smith)`}
-                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
-                          Assistant Coaches (comma-separated)
-                        </label>
+            {/* Instructions */}
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-3 mb-3">
+              Enter head coach last name as the team name. Assistant coaches are optional.
+            </p>
+
+            {/* Team Cards Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+              {teams.map((team, index) => {
+                const teamCoachKids = players.filter(p => p.coachTeamId === team.id);
+                const hasCoachKids = teamCoachKids.length > 0;
+
+                return (
+                  <div
+                    key={team.id}
+                    className={`rounded-lg border overflow-hidden ${
+                      hasCoachKids
+                        ? 'border-yellow-400 dark:border-yellow-600 bg-yellow-50/50 dark:bg-yellow-900/10'
+                        : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50'
+                    }`}
+                  >
+                    {/* Team Header */}
+                    <div className={`px-3 py-2 flex items-center gap-2 ${
+                      hasCoachKids
+                        ? 'bg-yellow-100 dark:bg-yellow-900/30'
+                        : 'bg-gray-100 dark:bg-gray-700/50'
+                    }`}>
+                      <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                        hasCoachKids
+                          ? 'bg-yellow-500 text-white'
+                          : 'bg-gray-400 dark:bg-gray-600 text-white'
+                      }`}>
+                        {index + 1}
+                      </span>
+                      <input
+                        type="text"
+                        value={team.name}
+                        onChange={(e) => onTeamNameUpdate(team.id, e.target.value)}
+                        placeholder="Coach Name"
+                        className="flex-1 px-2 py-1 text-sm font-medium border-0 bg-transparent text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500 rounded"
+                      />
+                    </div>
+
+                    {/* Team Body */}
+                    <div className="px-3 py-2 space-y-2">
+                      {/* Assistant Coaches */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">Asst.</span>
                         <input
                           type="text"
                           value={team.assistantCoaches.join(', ')}
                           onChange={(e) => onAssistantCoachesUpdate(team.id, e.target.value)}
-                          placeholder="Smith, Jones"
-                          className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400"
+                          placeholder="Names..."
+                          className="flex-1 px-2 py-1 text-xs border border-gray-200 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 placeholder-gray-400"
                         />
                       </div>
-                      {teamCoachKids.length > 0 && (
-                        <p className="text-xs text-gray-500 dark:text-gray-400">
-                          Coach's Kids: {teamCoachKids.map(p => p.name).join(', ')}
-                        </p>
+
+                      {/* Coach's Kids */}
+                      {hasCoachKids && (
+                        <div className="flex flex-wrap gap-1">
+                          {teamCoachKids.map(kid => (
+                            <span
+                              key={kid.id}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-yellow-200 dark:bg-yellow-800/50 text-yellow-800 dark:text-yellow-200"
+                            >
+                              <span className="w-1.5 h-1.5 rounded-full bg-yellow-500" />
+                              {kid.firstName} {kid.lastName?.charAt(0)}.
+                            </span>
+                          ))}
+                        </div>
                       )}
                     </div>
-                  );
-                })}
-              </div>
-
-              {/* Detection Button */}
-              <div className="flex items-center gap-3 pt-2 border-t border-gray-200 dark:border-gray-700">
-                <button
-                  onClick={onRunAutoDetection}
-                  className="flex items-center gap-2 px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg font-medium"
-                  title="Auto-detect coach's kids and siblings by matching last names"
-                >
-                  <Wand2 className="w-4 h-4" />
-                  Find Coach Kids & Siblings
-                </button>
-              </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
@@ -297,14 +341,15 @@ export function PlayerReviewTable({
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
           <button
             onClick={() => setWeightsExpanded(!weightsExpanded)}
-            className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+            className="w-full px-4 py-3 flex flex-wrap items-center justify-between gap-2 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
           >
-            <div className="flex items-center gap-4">
-              <span className="font-medium text-gray-900 dark:text-white flex items-center gap-2">
-                {weightsExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                Scoring Weights
+            <div className="flex items-center gap-2 sm:gap-4 min-w-0">
+              <span className="font-medium text-gray-900 dark:text-white flex items-center gap-2 whitespace-nowrap">
+                {weightsExpanded ? <ChevronUp className="w-4 h-4 flex-shrink-0" /> : <ChevronDown className="w-4 h-4 flex-shrink-0" />}
+                <span className="hidden xs:inline">Scoring Weights</span>
+                <span className="xs:hidden">Weights</span>
               </span>
-              <div className="flex items-center gap-3 text-sm text-gray-600 dark:text-gray-400">
+              <div className="hidden md:flex items-center gap-3 text-sm text-gray-600 dark:text-gray-400">
                 <span>F: {weights.fielding.field + weights.fielding.throw}%</span>
                 <span>H: {weights.hitting.power + weights.hitting.form + weights.hitting.contact}%</span>
                 <span>P: {weights.pitching.strength + weights.pitching.form}%</span>
@@ -312,7 +357,7 @@ export function PlayerReviewTable({
                 <span>R: {weights.running}%</span>
               </div>
             </div>
-            <span className={`text-sm font-medium ${weightsValidation.isValid ? 'text-green-600' : 'text-red-600'}`}>
+            <span className={`text-sm font-medium flex-shrink-0 ${weightsValidation.isValid ? 'text-green-600' : 'text-red-600'}`}>
               Total: {weightsValidation.total}%
             </span>
           </button>
@@ -331,38 +376,40 @@ export function PlayerReviewTable({
       )}
 
       {/* Scoring Mode Toggle (compact) */}
-      <div className="flex items-center gap-4 text-sm">
-        <span className="text-gray-600 dark:text-gray-400">Scoring Mode:</span>
-        <label className={`px-3 py-1.5 rounded-lg cursor-pointer transition-all ${
-          scoringMode === 'pre-weighted'
-            ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-300 dark:border-blue-700'
-            : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-600'
-        }`}>
-          <input
-            type="radio"
-            name="scoringMode"
-            value="pre-weighted"
-            checked={scoringMode === 'pre-weighted'}
-            onChange={() => onScoringModeChange('pre-weighted')}
-            className="sr-only"
-          />
-          Pre-weighted
-        </label>
-        <label className={`px-3 py-1.5 rounded-lg cursor-pointer transition-all ${
-          scoringMode === 'raw'
-            ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-300 dark:border-blue-700'
-            : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-600'
-        }`}>
-          <input
-            type="radio"
-            name="scoringMode"
-            value="raw"
-            checked={scoringMode === 'raw'}
-            onChange={() => onScoringModeChange('raw')}
-            className="sr-only"
-          />
-          Raw Scores
-        </label>
+      <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-sm">
+        <span className="text-gray-600 dark:text-gray-400 whitespace-nowrap">Scoring Mode:</span>
+        <div className="flex items-center gap-2">
+          <label className={`px-3 py-1.5 rounded-lg cursor-pointer transition-all ${
+            scoringMode === 'pre-weighted'
+              ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-300 dark:border-blue-700'
+              : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-600'
+          }`}>
+            <input
+              type="radio"
+              name="scoringMode"
+              value="pre-weighted"
+              checked={scoringMode === 'pre-weighted'}
+              onChange={() => onScoringModeChange('pre-weighted')}
+              className="sr-only"
+            />
+            Pre-weighted
+          </label>
+          <label className={`px-3 py-1.5 rounded-lg cursor-pointer transition-all ${
+            scoringMode === 'raw'
+              ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-300 dark:border-blue-700'
+              : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-600'
+          }`}>
+            <input
+              type="radio"
+              name="scoringMode"
+              value="raw"
+              checked={scoringMode === 'raw'}
+              onChange={() => onScoringModeChange('raw')}
+              className="sr-only"
+            />
+            Raw Scores
+          </label>
+        </div>
       </div>
 
       {/* Search and Count */}
@@ -393,7 +440,7 @@ export function PlayerReviewTable({
       {/* Table */}
       <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="text-sm">
             <thead>
               <tr className="bg-gray-100 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
                 <th
@@ -415,7 +462,7 @@ export function PlayerReviewTable({
                   BIB<SortIndicator field="bib" />
                 </th>
                 <th
-                  className="sticky left-[136px] z-20 bg-gray-100 dark:bg-gray-700 px-2 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 min-w-[140px]"
+                  className="sticky left-[136px] z-20 bg-gray-100 dark:bg-gray-700 px-2 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 w-[140px]"
                   onClick={() => handleSort('name')}
                 >
                   Name<SortIndicator field="name" />
@@ -525,8 +572,8 @@ export function PlayerReviewTable({
                     {player.bib}
                   </td>
                   {/* Name */}
-                  <td className="sticky left-[136px] z-10 bg-inherit px-2 py-1.5 text-gray-900 dark:text-white">
-                    <span className="truncate">{player.lastName}, {player.firstName}</span>
+                  <td className="sticky left-[136px] z-10 bg-inherit px-2 py-1.5 text-gray-900 dark:text-white w-[140px] max-w-[140px]">
+                    <div className="truncate">{player.lastName}, {player.firstName}</div>
                   </td>
                   {/* Age */}
                   <td className="px-2 py-1.5 text-gray-600 dark:text-gray-400 text-center">

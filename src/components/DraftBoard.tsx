@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
-import { Undo, ChevronLeft, AlertCircle, Search, ChevronRight } from 'lucide-react';
-import { DraftState, Team } from '../types';
-import { TeamRosters } from './TeamRosters';
+import { Undo, ChevronLeft, AlertCircle, ChevronRight, X, Users, Grid3X3, Eye, EyeOff } from 'lucide-react';
+import { DraftState, Team, DivisionAgeRange, Player } from '../types';
 import { getNextPick, calculateDraftOrder } from '../utils/draftOrder';
 import { useViewMode } from '../contexts/ViewContext';
 import { getTeamDisplayName } from '../utils/teamUtils';
+import { DraftBoardPlayerGrid } from './draft/DraftBoardPlayerGrid';
+import { DraftBoardRosterView } from './draft/DraftBoardRosterView';
 
 interface DraftBoardProps {
   draftState: DraftState;
@@ -14,9 +15,12 @@ interface DraftBoardProps {
   onReset: () => void;
   enforceAgeLimit: boolean;
   maxPerAge: number;
+  ageRange?: DivisionAgeRange;
   pendingComplete: boolean;
   onFinalizeDraft: () => void;
   onCancelComplete: () => void;
+  // Issue #20: isLoading prop to disable buttons during API calls
+  isLoading?: boolean;
 }
 
 export const DraftBoard = ({
@@ -27,15 +31,20 @@ export const DraftBoard = ({
   onReset,
   enforceAgeLimit,
   maxPerAge,
+  ageRange: _ageRange,
   pendingComplete,
   onFinalizeDraft,
   onCancelComplete,
+  isLoading = false,
 }: DraftBoardProps) => {
   const viewMode = useViewMode();
   const isPublicView = viewMode === 'public';
 
-  const [searchTerm, setSearchTerm] = useState('');
+  const [drawerMode, setDrawerMode] = useState<'players' | 'rosters'>('players');
+  const [showScores, setShowScores] = useState(!isPublicView);
   const [showRoundInterstitial, setShowRoundInterstitial] = useState(false);
+  // Pending draft confirmation (replaces browser confirm dialog)
+  const [pendingDraftPlayer, setPendingDraftPlayer] = useState<Player | null>(null);
   const [interstitialData, setInterstitialData] = useState<{
     completedRound: number;
     nextRound: number;
@@ -66,12 +75,7 @@ export const DraftBoard = ({
     previousRoundRef.current = draftState.currentRound;
   }, [draftState.currentRound, draftState.currentRoundOrder, draftState.teams]);
 
-  const availablePlayers = draftState.players
-    .filter((p) => !p.isDrafted)
-    .filter((p) =>
-      searchTerm === '' ||
-      p.name.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+  const availablePlayers = draftState.players.filter((p) => !p.isDrafted);
 
   const currentTeam = draftState.teams.find((t) => t.id === draftState.currentTeamId);
 
@@ -112,6 +116,19 @@ export const DraftBoard = ({
       onSkipPick();
     }
   };
+
+  // Handle confirming a pending draft pick
+  const handleConfirmDraft = () => {
+    if (pendingDraftPlayer) {
+      onDraftPlayer(pendingDraftPlayer.id);
+      setPendingDraftPlayer(null);
+    }
+  };
+
+  // Clear pending draft when team changes or draft completes
+  useEffect(() => {
+    setPendingDraftPlayer(null);
+  }, [draftState.currentTeamId, draftState.isDraftComplete]);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
@@ -176,183 +193,176 @@ export const DraftBoard = ({
       )}
 
       <div className="max-w-7xl mx-auto">
-        {/* Prominent Draft Header - ESPN Style */}
-        <div className="bg-gradient-to-r from-blue-600 to-blue-500 rounded-lg p-6 sm:p-8 mb-4 text-white shadow-lg">
-          {/* Header with centered content and absolute-positioned buttons */}
-          <div className="relative">
-            {/* Centered content - full width */}
+        {/* Compact Draft Header */}
+        <div className="bg-gradient-to-r from-blue-600 to-blue-500 rounded-lg p-4 mb-4 text-white shadow-lg">
+          {/* Header row */}
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            {/* Left: Pick info and current team */}
             {currentTeam && (
-              <div className="text-center">
-                <div className="text-sm uppercase tracking-wide opacity-90 mb-1">
-                  Round {draftState.currentRound}, Pick {currentPickNumber} of {totalPicks}
+              <div className="flex items-center gap-4 flex-wrap">
+                <div className="text-xs uppercase tracking-wide opacity-80 bg-white/10 px-2 py-1 rounded">
+                  R{draftState.currentRound} · Pick {currentPickNumber}/{totalPicks}
                 </div>
-                <h1 className="text-3xl sm:text-4xl font-bold mb-2">
-                  Now Drafting: {getTeamDisplayName(currentTeam)}
-                </h1>
-                {nextTeam && (
-                  <div className="text-lg opacity-80">
-                    Up Next: {getTeamDisplayName(nextTeam)}
-                  </div>
-                )}
-                {/* Age Breakdown - only show if age limit is enforced */}
-                {enforceAgeLimit && maxPerAge > 0 && (
-                  <div className="mt-2 flex items-center justify-center gap-2 text-sm">
-                    <span className="text-white/60">Roster:</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-2xl font-bold">{getTeamDisplayName(currentTeam)}</span>
+                  {nextTeam && (
+                    <span className="text-sm opacity-70">→ {getTeamDisplayName(nextTeam)}</span>
+                  )}
+                </div>
+                {/* Age Breakdown - compact inline badges */}
+                {enforceAgeLimit && maxPerAge > 0 && Object.keys(currentTeam.ageBreakdown || {}).length > 0 && (
+                  <div className="flex items-center gap-1">
                     {Object.entries(currentTeam.ageBreakdown || {})
                       .sort(([a], [b]) => Number(a) - Number(b))
                       .map(([age, count]) => (
                         <span
                           key={age}
-                          className={`px-2 py-1 rounded ${
+                          className={`px-1.5 py-0.5 rounded text-xs ${
                             count >= maxPerAge
-                              ? 'bg-red-500/30 text-red-300'
+                              ? 'bg-red-500/40 text-red-200'
                               : count >= maxPerAge - 1
-                              ? 'bg-yellow-500/30 text-yellow-300'
-                              : 'bg-white/20 text-white/90'
+                              ? 'bg-yellow-500/40 text-yellow-200'
+                              : 'bg-white/20 text-white/80'
                           }`}
                         >
-                          {age}yr: {count}
+                          {age}:{count}
                         </span>
                       ))}
-                    {Object.keys(currentTeam.ageBreakdown || {}).length === 0 && (
-                      <span className="text-white/60">Empty</span>
-                    )}
                   </div>
                 )}
               </div>
             )}
 
-            {/* Admin controls - absolute positioned top-right */}
+            {/* Right: Admin controls */}
             {!isPublicView && (
-              <div className="absolute top-0 right-0 flex gap-2">
-                {/* Skip Pick - only available in final round */}
+              <div className="flex gap-1 flex-shrink-0">
                 {isFinalRound && (
                   <button
                     onClick={handleSkipPick}
-                    className="px-3 py-2 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg font-medium flex items-center gap-2 backdrop-blur-sm"
+                    className="px-2 py-1 bg-yellow-500 hover:bg-yellow-600 text-white rounded text-xs font-medium flex items-center gap-1"
                     title="Skip this team's pick"
                   >
-                    <span>⏭️</span>
-                    <span className="hidden sm:inline">Skip Pick</span>
+                    ⏭️ <span className="hidden sm:inline">Skip</span>
                   </button>
                 )}
                 <button
                   onClick={onUndo}
-                  disabled={draftState.picks.length === 0}
-                  className="px-3 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg font-medium flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed backdrop-blur-sm"
+                  disabled={draftState.picks.length === 0 || isLoading}
+                  className="px-2 py-1 bg-white/20 hover:bg-white/30 text-white rounded text-xs font-medium flex items-center gap-1 disabled:opacity-30 disabled:cursor-not-allowed"
                   title="Undo last pick"
                 >
-                  <Undo className="w-4 h-4" />
+                  <Undo className="w-3 h-3" />
                   <span className="hidden sm:inline">Undo</span>
                 </button>
                 <button
                   onClick={onReset}
-                  className="px-3 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg font-medium flex items-center gap-2 backdrop-blur-sm"
-                  title="Go back to configuration"
+                  className="px-2 py-1 bg-white/20 hover:bg-white/30 text-white rounded text-xs font-medium flex items-center gap-1"
+                  title="Return to Draft Setup"
                 >
-                  <ChevronLeft className="w-4 h-4" />
-                  <span className="hidden sm:inline">Back to Config</span>
+                  <ChevronLeft className="w-3 h-3" />
+                  <span className="hidden sm:inline">Reset</span>
                 </button>
               </div>
             )}
-            {/* Public view indicator - absolute positioned */}
             {isPublicView && (
-              <div className="absolute top-0 right-0 px-3 py-2 bg-white/20 text-white rounded-lg font-medium backdrop-blur-sm">
+              <div className="px-2 py-1 bg-white/20 text-white rounded text-xs font-medium">
                 Live View
               </div>
             )}
           </div>
 
-          {/* Mandatory Pick Warning */}
+          {/* Mandatory Pick Warning - compact inline */}
           {draftState.mandatoryPick && !isPublicView && (() => {
             const mandatoryPlayer = draftState.players.find((p) => p.id === draftState.mandatoryPick?.playerId);
             return (
-              <div className="mt-4 flex justify-center">
-                <div className="bg-yellow-50 dark:bg-yellow-900/30 border-2 border-yellow-400 dark:border-yellow-600 rounded-lg p-4 inline-block text-center">
-                  <div className="flex items-center justify-center gap-2 mb-2">
-                    <AlertCircle className="w-6 h-6 text-yellow-600 dark:text-yellow-400 flex-shrink-0" />
-                    <span className="font-bold text-lg text-yellow-800 dark:text-yellow-200">
-                      Mandatory Pick Required
-                    </span>
-                  </div>
-                  <div className="text-sm text-yellow-700 dark:text-yellow-300 mb-3">
-                    {draftState.mandatoryPick.reason === 'coach-kid' ? (
-                      <>
-                        <strong>{mandatoryPlayer?.name}</strong> is a coach's kid and must be drafted in Round {draftState.currentRound}.
-                      </>
-                    ) : (
-                      <>
-                        <strong>{mandatoryPlayer?.name}</strong> must be drafted with their sibling ({draftState.mandatoryPick.siblingName}).
-                      </>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => {
-                      if (mandatoryPlayer) {
-                        // Directly draft the mandatory player
-                        onDraftPlayer(mandatoryPlayer.id);
-                      }
-                    }}
-                    className="px-4 py-3 bg-green-600 hover:bg-green-700 text-white font-bold text-lg rounded-lg inline-flex items-center justify-center gap-2 shadow-lg"
-                  >
-                    Draft {mandatoryPlayer?.name}
-                    <ChevronRight className="w-5 h-5" />
-                  </button>
-                </div>
+              <div className="mt-3 flex items-center justify-center gap-3 bg-yellow-500/20 border border-yellow-400/50 rounded-lg px-4 py-2">
+                <AlertCircle className="w-5 h-5 text-yellow-300 flex-shrink-0" />
+                <span className="text-sm text-yellow-100">
+                  <strong>Mandatory:</strong> {mandatoryPlayer?.name}
+                  {draftState.mandatoryPick.reason === 'coach-kid' ? ' (coach\'s kid)' : ` (sibling of ${draftState.mandatoryPick.siblingName})`}
+                </span>
+                <button
+                  onClick={() => mandatoryPlayer && onDraftPlayer(mandatoryPlayer.id)}
+                  disabled={isLoading}
+                  className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white font-medium text-sm rounded flex items-center gap-1 disabled:opacity-50"
+                >
+                  {isLoading ? '...' : 'Draft'} <ChevronRight className="w-4 h-4" />
+                </button>
               </div>
             );
           })()}
 
-          {/* Best Available by Age - show when no mandatory pick */}
-          {!draftState.mandatoryPick && !isPublicView && (() => {
-            // Get best available player for each age (only eligible players for current team)
-            const bestByAge: Record<number, typeof availablePlayers[0]> = {};
+          {/* Pending Draft Confirmation Banner */}
+          {pendingDraftPlayer && !draftState.mandatoryPick && !isPublicView && (
+            <div className="mt-3 flex items-center justify-center gap-3 bg-blue-500/20 border border-blue-400/50 rounded-lg px-4 py-2">
+              <span className="text-sm text-blue-100">
+                <strong>Confirm:</strong> Draft {pendingDraftPlayer.name} ({pendingDraftPlayer.totalScore.toFixed(1)} pts)?
+              </span>
+              <button
+                onClick={handleConfirmDraft}
+                disabled={isLoading}
+                className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white font-medium text-sm rounded flex items-center gap-1 disabled:opacity-50"
+              >
+                {isLoading ? '...' : 'Draft'} <ChevronRight className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setPendingDraftPlayer(null)}
+                disabled={isLoading}
+                className="px-2 py-1 bg-white/10 hover:bg-white/20 text-white font-medium text-sm rounded flex items-center gap-1 disabled:opacity-50"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
+          {/* Best Available by Age - compact horizontal layout */}
+          {!draftState.mandatoryPick && !pendingDraftPlayer && !isPublicView && (() => {
+            const topByAge: Record<number, typeof availablePlayers> = {};
             availablePlayers.forEach(player => {
-              // Skip players that current team cannot draft
               const isCoachKidForOtherTeam = player.isCoachKid && player.coachTeamId && player.coachTeamId !== draftState.currentTeamId;
               const isSiblingLocked = player.lockedToTeamId && player.lockedToTeamId !== draftState.currentTeamId;
               if (isCoachKidForOtherTeam || isSiblingLocked) return;
-
               const age = player.littleLeagueAge;
-              if (!bestByAge[age] || player.totalScore > bestByAge[age].totalScore) {
-                bestByAge[age] = player;
-              }
+              if (!topByAge[age]) topByAge[age] = [];
+              topByAge[age].push(player);
             });
-            const ages = Object.keys(bestByAge).map(Number).sort((a, b) => a - b);
+
+            Object.keys(topByAge).forEach(age => {
+              topByAge[Number(age)] = topByAge[Number(age)]
+                .sort((a, b) => b.totalScore - a.totalScore)
+                .slice(0, 2);
+            });
+
+            const ages = Object.keys(topByAge)
+              .map(Number)
+              .filter(age => topByAge[age] && topByAge[age].length > 0)
+              .sort((a, b) => a - b);
 
             if (ages.length === 0) return null;
 
             return (
-              <div className="mt-4 flex justify-center">
-                <div className="bg-white/10 rounded-lg p-4 inline-block">
-                  <div className="text-sm font-semibold text-white/80 mb-3 text-center">
-                    📊 BEST AVAILABLE BY AGE
-                  </div>
-                  <div className="inline-flex gap-3 flex-wrap justify-center">
+              <div className="mt-3 bg-white/10 rounded-lg px-3 py-2">
+                <div className="flex items-center gap-4 overflow-x-auto">
+                  <span className="text-xs font-medium text-white/70 whitespace-nowrap flex-shrink-0">Best by Age</span>
                   {ages.map(age => {
-                    const player = bestByAge[age];
+                    const players = topByAge[age] || [];
                     return (
-                      <div
-                        key={age}
-                        className="bg-white/10 rounded-lg p-3 flex flex-col items-center min-w-[120px]"
-                      >
-                        <span className="text-xs text-white/60 mb-1">Age {age}</span>
-                        <span className="font-medium text-white text-sm text-center">
-                          {player.firstName} {player.lastName.charAt(0)}.
-                        </span>
-                        <span className="text-sm text-white/80 mb-2">
-                          {player.totalScore.toFixed(1)} pts
-                        </span>
-                        <button
-                          onClick={() => onDraftPlayer(player.id)}
-                          className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded text-sm font-medium w-full"
-                        >
-                          Draft
-                        </button>
+                      <div key={age} className="flex items-center gap-2 flex-shrink-0">
+                        <span className="text-xs text-white/50 w-6">{age}:</span>
+                        {players.map((player) => (
+                          <button
+                            key={player.id}
+                            onClick={() => setPendingDraftPlayer(player)}
+                            disabled={isLoading}
+                            className="px-2 py-1 rounded text-xs font-medium transition-colors disabled:opacity-50 bg-white/10 hover:bg-white/20 text-white"
+                            title={`Draft ${player.firstName} ${player.lastName} (${player.totalScore.toFixed(1)} pts)`}
+                          >
+                            {player.firstName} {player.lastName.charAt(0)}. <span className="opacity-70">{player.totalScore.toFixed(1)}</span>
+                          </button>
+                        ))}
                       </div>
                     );
                   })}
-                  </div>
                 </div>
               </div>
             );
@@ -421,199 +431,92 @@ export const DraftBoard = ({
           </div>
         </div>
 
-        <div className="grid lg:grid-cols-3 gap-6">
-          {/* Available Players */}
-          <div className="lg:col-span-1">
-            <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 sticky top-4">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-                  Available Players
-                </h2>
-                <span className="text-sm text-gray-600 dark:text-gray-400">
-                  {availablePlayers.length} left
-                </span>
-              </div>
-
-              {/* Search */}
-              <div className="mb-4 relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Search players..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
-                />
-              </div>
-
-              <div className="space-y-2 max-h-[600px] overflow-y-auto">
-                {availablePlayers.map((player) => {
-                  const isMandatory = draftState.mandatoryPick?.playerId === player.id;
-
-                  // Check if this is a coach's kid assigned to another team
-                  const isCoachKidForOtherTeam = player.isCoachKid &&
-                                                  player.coachTeamId &&
-                                                  player.coachTeamId !== draftState.currentTeamId;
-                  const coachTeam = isCoachKidForOtherTeam
-                    ? draftState.teams.find(t => t.id === player.coachTeamId)
-                    : null;
-
-                  // Check if this is a sibling locked to another team
-                  const isSiblingLockedToOtherTeam = player.lockedToTeamId &&
-                                                      player.lockedToTeamId !== draftState.currentTeamId;
-                  const siblingLockedTeam = isSiblingLockedToOtherTeam
-                    ? draftState.teams.find(t => t.id === player.lockedToTeamId)
-                    : null;
-
-                  // Check if player's age is at/over limit for current team (only if age limit is enforced)
-                  // This is now a WARNING, not a block
-                  const playerAge = player.littleLeagueAge;
-                  const currentTeamAgeCount = currentTeam?.ageBreakdown?.[playerAge] || 0;
-                  const isAgeWarning = enforceAgeLimit && maxPerAge > 0 && currentTeamAgeCount >= maxPerAge - 1;
-                  const isAgeMaxed = enforceAgeLimit && maxPerAge > 0 && currentTeamAgeCount >= maxPerAge;
-
-                  // Player is restricted ONLY if they're a coach's kid for another team or locked sibling
-                  // Age limit is a WARNING, not a restriction
-                  const isRestricted = isCoachKidForOtherTeam || isSiblingLockedToOtherTeam;
-                  return (
-                    <div
-                      key={player.id}
-                      id={`player-${player.id}`}
-                      className={`
-                        w-full text-left p-3 rounded-lg border-2 transition-all
-                        ${
-                          isRestricted && !isPublicView
-                            ? 'opacity-50 border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-900/10'
-                            : isMandatory && !isPublicView
-                            ? 'border-yellow-400 bg-yellow-50 dark:bg-yellow-900/20'
-                            : 'border-gray-200 dark:border-gray-700'
-                        }
-                      `}
-                    >
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1 min-w-0">
-                          <div className="font-medium text-gray-900 dark:text-white truncate">
-                            {player.name}
-                          </div>
-                          <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                            Rank #{player.rank} • Round {player.lockedToRound ?? player.projectedRound}
-                            {player.lockedToRound && player.lockedToRound !== player.projectedRound && (
-                              <span className="text-blue-600 dark:text-blue-400 font-bold">*</span>
-                            )}
-                            {' '}• Age {player.littleLeagueAge}
-                          </div>
-
-                          {/* Restricted player warning */}
-                          {isCoachKidForOtherTeam && (
-                            <div className="text-xs text-red-600 dark:text-red-400 mt-2 font-semibold">
-                              ⚠ Coach's kid - Can only be drafted by {coachTeam ? getTeamDisplayName(coachTeam) : 'Unknown'}
-                            </div>
-                          )}
-                          {isSiblingLockedToOtherTeam && !isCoachKidForOtherTeam && (
-                            <div className="text-xs text-red-600 dark:text-red-400 mt-2 font-semibold">
-                              ⚠ Sibling locked - Must be drafted by {siblingLockedTeam ? getTeamDisplayName(siblingLockedTeam) : 'Unknown'}
-                            </div>
-                          )}
-                          {isAgeMaxed && !isCoachKidForOtherTeam && !isSiblingLockedToOtherTeam && (
-                            <div className="text-xs text-orange-600 dark:text-orange-400 mt-2 font-semibold">
-                              ⚠️ Warning: Team has {currentTeamAgeCount} players age {playerAge} (limit: {maxPerAge})
-                            </div>
-                          )}
-                          {isAgeWarning && !isAgeMaxed && !isCoachKidForOtherTeam && !isSiblingLockedToOtherTeam && (
-                            <div className="text-xs text-yellow-600 dark:text-yellow-400 mt-2">
-                              ⚠️ Team has {currentTeamAgeCount} players age {playerAge}
-                            </div>
-                          )}
-
-                          <div className="flex gap-1 mt-1 flex-wrap">
-                            {player.isCoachKid && (
-                              <span className={`text-xs px-2 py-0.5 rounded ${
-                                isRestricted
-                                  ? 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200'
-                                  : 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200'
-                              }`}>
-                                Coach's Kid{coachTeam ? ` (${getTeamDisplayName(coachTeam)})` : ''}
-                              </span>
-                            )}
-                            {player.isDNE && (
-                              <span className="text-xs bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200 px-2 py-0.5 rounded">
-                                DNE
-                              </span>
-                            )}
-                            {player.isAllStar && (
-                              <span className="text-xs bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 px-2 py-0.5 rounded">
-                                All-Star
-                              </span>
-                            )}
-                            {player.sibling && (
-                              <span className={`text-xs px-2 py-0.5 rounded ${
-                                isSiblingLockedToOtherTeam
-                                  ? 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200'
-                                  : player.lockedToTeamId
-                                  ? 'bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200'
-                                  : 'bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200'
-                              }`}>
-                                Sibling{player.lockedToTeamId ? ` → ${(() => { const t = draftState.teams.find(t => t.id === player.lockedToTeamId); return t ? getTeamDisplayName(t) : 'Unknown'; })()}` : ''}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        {/* Scores and Draft Button - hidden in public view */}
-                        {!isPublicView && (
-                          <div className="ml-2 flex items-center gap-3">
-                            <div className="text-right">
-                              <div className={`text-lg font-bold ${
-                                isRestricted
-                                  ? 'text-gray-400 dark:text-gray-600'
-                                  : 'text-gray-900 dark:text-white'
-                              }`}>
-                                {player.totalScore.toFixed(1)}
-                              </div>
-                              <div className="text-xs text-gray-500 dark:text-gray-500 mt-1">
-                                H:{player.hittingSubtotal.toFixed(0)} F:{player.fieldingSubtotal.toFixed(0)} P:{player.pitchingSubtotal.toFixed(0)}
-                              </div>
-                            </div>
-                            {/* Draft Button */}
-                            {!isRestricted && (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  // Check for age warning confirmation
-                                  if (enforceAgeLimit && maxPerAge > 0 && currentTeamAgeCount >= maxPerAge) {
-                                    if (!window.confirm(`Warning: Team already has ${currentTeamAgeCount} players age ${playerAge} (limit: ${maxPerAge}). Continue anyway?`)) {
-                                      return;
-                                    }
-                                  }
-                                  onDraftPlayer(player.id);
-                                }}
-                                className={`px-3 py-2 rounded-lg font-semibold text-sm transition-all ${
-                                  isMandatory
-                                    ? 'bg-yellow-500 hover:bg-yellow-600 text-white'
-                                    : 'bg-green-600 hover:bg-green-700 text-white'
-                                }`}
-                              >
-                                Draft
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+        {/* Drawer Header Bar */}
+        <div className="flex items-center justify-between bg-white dark:bg-gray-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 mb-4">
+          {/* Mode Toggle */}
+          <div className="flex gap-1 bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
+            <button
+              onClick={() => setDrawerMode('players')}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                drawerMode === 'players'
+                  ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+              }`}
+            >
+              <Grid3X3 className="w-4 h-4" />
+              <span className="hidden sm:inline">Available Players</span>
+              <span className="sm:hidden">Players</span>
+              <span className="text-xs bg-gray-200 dark:bg-gray-500 px-1.5 py-0.5 rounded">
+                {availablePlayers.length}
+              </span>
+            </button>
+            <button
+              onClick={() => setDrawerMode('rosters')}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                drawerMode === 'rosters'
+                  ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+              }`}
+            >
+              <Users className="w-4 h-4" />
+              <span className="hidden sm:inline">Team Rosters</span>
+              <span className="sm:hidden">Rosters</span>
+            </button>
           </div>
 
-          {/* Team Rosters */}
-          <div className="lg:col-span-2">
-            <TeamRosters
-              teams={draftState.teams}
+          {/* Score Toggle */}
+          <button
+            onClick={() => setShowScores(!showScores)}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              showScores
+                ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
+            }`}
+            title={showScores ? 'Hide scores (presentation mode)' : 'Show scores'}
+          >
+            {showScores ? (
+              <>
+                <Eye className="w-4 h-4" />
+                <span className="hidden sm:inline">Scores Visible</span>
+              </>
+            ) : (
+              <>
+                <EyeOff className="w-4 h-4" />
+                <span className="hidden sm:inline">Scores Hidden</span>
+              </>
+            )}
+          </button>
+        </div>
+
+        {/* Drawer Content */}
+        <div className="overflow-auto">
+          {drawerMode === 'players' ? (
+            <DraftBoardPlayerGrid
+              players={draftState.players}
               currentTeamId={draftState.currentTeamId}
+              teams={draftState.teams}
+              showScores={showScores}
+              onDraftPlayer={onDraftPlayer}
+              mandatoryPick={draftState.mandatoryPick}
+              isLoading={isLoading}
               enforceAgeLimit={enforceAgeLimit}
               maxPerAge={maxPerAge}
+              currentTeamAgeBreakdown={currentTeam?.ageBreakdown || {}}
+              isPublicView={isPublicView}
             />
-          </div>
+          ) : (
+            <DraftBoardRosterView
+              teams={draftState.teams}
+              players={draftState.players}
+              draftOrder={draftState.draftOrder}
+              currentRound={draftState.currentRound}
+              currentPickInRound={draftState.currentPickInRound}
+              currentRoundOrder={draftState.currentRoundOrder}
+              showScores={showScores}
+              totalRounds={totalRounds}
+              isPublicView={isPublicView}
+            />
+          )}
         </div>
       </div>
 
@@ -633,15 +536,17 @@ export const DraftBoard = ({
             <div className="flex gap-4 justify-center">
               <button
                 onClick={onCancelComplete}
-                className="px-4 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-lg font-medium transition-colors"
+                disabled={isLoading}
+                className="px-4 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 ← Go Back & Review
               </button>
               <button
                 onClick={onFinalizeDraft}
-                className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors"
+                disabled={isLoading}
+                className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Finalize Draft →
+                {isLoading ? 'Finalizing...' : 'Finalize Draft →'}
               </button>
             </div>
           </div>

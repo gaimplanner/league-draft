@@ -1,0 +1,14 @@
+# Django
+Django==5.2.7
+django-cors-headers==4.4.0
+dj-database-url==2.2.0
+
+# Database
+psycopg[binary]==3.2.3
+
+# Server
+gunicorn==22.0.0
+
+# Utilities
+python-dotenv==1.0.1
+pydantic==2.9.2

@@ -6,6 +6,19 @@ import { useScoringWeights } from '../hooks/useScoringWeights';
 import { recalculateAllScores } from '../utils/scoreCalculation';
 import { PlayerReviewTable } from './PlayerReviewTable';
 
+// Security: Team name validation constants
+const MAX_TEAM_NAME_LENGTH = 100;
+
+/**
+ * Sanitize team name to prevent XSS and enforce length limits.
+ */
+function sanitizeTeamName(name: string): string {
+  return name
+    .trim()
+    .slice(0, MAX_TEAM_NAME_LENGTH)
+    .replace(/[<>]/g, ''); // Remove HTML-like characters
+}
+
 interface PlayerReviewProps {
   players: Player[];
   teams: Team[];
@@ -29,12 +42,14 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
   const [selectedSiblingPairs, setSelectedSiblingPairs] = useState<Set<string>>(new Set());
   const { weights, updateWeight, resetToDefaults, validation } = useScoringWeights();
 
-  // Recalculate all player scores when weights change (only in raw mode)
+  // Recalculate all player scores when weights change (raw mode) or mode changes
   useEffect(() => {
-    // Skip recalculation in pre-weighted mode - CSV scores are already weighted
-    if (scoringMode === 'pre-weighted') return;
+    // In raw mode: weights affect calculation, so recalculate on weight changes
+    // When switching modes: always recalculate to restore correct values from raw scores
+    // Skip weight validation in pre-weighted mode since weights aren't used
+    if (scoringMode === 'raw' && !validation.isValid) return;
 
-    if (validation.isValid && players.length > 0) {
+    if (players.length > 0) {
       const recalculated = recalculateAllScores(players, weights, scoringMode);
       // Only update if scores actually changed to avoid infinite loops
       const hasChanges = recalculated.some((p, i) =>
@@ -58,16 +73,19 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
   }, [weights, scoringMode]);
 
   const handleTeamNameUpdate = (teamId: string, newName: string) => {
+    // Security: Sanitize team name input
+    const sanitizedName = sanitizeTeamName(newName);
     const updatedTeams = teams.map(t =>
-      t.id === teamId ? { ...t, name: newName } : t
+      t.id === teamId ? { ...t, name: sanitizedName } : t
     );
     onTeamsUpdate(updatedTeams);
   };
 
   const handleAssistantCoachesUpdate = (teamId: string, assistantCoachesText: string) => {
+    // Security: Sanitize each assistant coach name
     const assistantCoaches = assistantCoachesText
       .split(',')
-      .map(name => name.trim())
+      .map(name => sanitizeTeamName(name)) // Reuse sanitization function
       .filter(name => name.length > 0);
 
     const updatedTeams = teams.map(t =>
