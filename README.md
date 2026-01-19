@@ -43,10 +43,14 @@ A comprehensive draft management system for Little League baseball divisions. St
 - Coach's kid team assignments
 
 ### Live Draft Board
+- **Two View Modes:**
+  - **Player Grid**: Sortable table with Proj. Rnd, Rank, BIB, Name, Age, F/H/P/C/R scores, Total, Flags
+  - **Roster View**: Round-by-round grid showing draft progression and pre-filled slots for locked players
+- **Score Toggle**: Hide/show scores for presentation mode
 - Real-time pick tracking with current/next team display
-- Searchable available players list
+- Searchable by player name or BIB number
 - Mandatory pick alerts for coach's kids and siblings
-- Live roster updates with running scores and age breakdowns
+- Lock icon treatment for players assigned to specific teams
 - Undo last pick and reset draft functionality
 - Round interstitials showing new order (recalculated format)
 
@@ -239,6 +243,9 @@ src/
 │   ├── PlayerReviewTable.tsx  # Spreadsheet-style player table
 │   ├── DraftConfig.tsx        # Draft configuration
 │   ├── DraftBoard.tsx         # Live draft interface
+│   ├── draft/
+│   │   ├── DraftBoardPlayerGrid.tsx  # Sortable player table
+│   │   └── DraftBoardRosterView.tsx  # Round-by-round roster grid
 │   ├── DraftComplete.tsx      # Results and exports
 │   ├── SimulationModal.tsx    # Draft simulation
 │   ├── TradeModal.tsx         # Post-draft trades

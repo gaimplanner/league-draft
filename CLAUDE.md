@@ -62,6 +62,8 @@ Has name, roster (drafted players), totalScore, draftPosition, coachKids array, 
 | `src/utils/teamUtils.ts` | Team display name helpers |
 | `src/types/index.ts` | All TypeScript interfaces (Player, Team, Division, DraftState, etc.) |
 | `src/components/PlayerReviewTable.tsx` | Spreadsheet-style table for CSV player review |
+| `src/components/draft/DraftBoardPlayerGrid.tsx` | Sortable player grid for draft board (Proj. Rnd, Rank, BIB, Name, Age, scores, flags) |
+| `src/components/draft/DraftBoardRosterView.tsx` | Round-by-round roster view with pre-filled slots for locked players |
 | `server/draft/models.py` | Django models: League, User, LeagueMembership, LeagueInvitation, Division, Team, Player, DraftState |
 | `server/draft/views.py` | DRF ViewSets, auth endpoints, member management, invitations |
 | `server/draft/serializers.py` | DRF serializers with snake_case/camelCase handling |
@@ -93,7 +95,8 @@ App
 ├── DraftConfig
 │   └── SimulationModal
 ├── DraftBoard
-│   └── TeamRosters
+│   ├── DraftBoardPlayerGrid (available players table view)
+│   └── DraftBoardRosterView (round-by-round roster view)
 └── DraftComplete
     └── TradeModal
 ```
