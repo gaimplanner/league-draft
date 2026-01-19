@@ -440,7 +440,7 @@ export function PlayerReviewTable({
       {/* Table */}
       <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="text-sm">
             <thead>
               <tr className="bg-gray-100 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
                 <th
@@ -462,7 +462,7 @@ export function PlayerReviewTable({
                   BIB<SortIndicator field="bib" />
                 </th>
                 <th
-                  className="sticky left-[136px] z-20 bg-gray-100 dark:bg-gray-700 px-2 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 min-w-[140px]"
+                  className="sticky left-[136px] z-20 bg-gray-100 dark:bg-gray-700 px-2 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 w-[140px]"
                   onClick={() => handleSort('name')}
                 >
                   Name<SortIndicator field="name" />
@@ -572,8 +572,8 @@ export function PlayerReviewTable({
                     {player.bib}
                   </td>
                   {/* Name */}
-                  <td className="sticky left-[136px] z-10 bg-inherit px-2 py-1.5 text-gray-900 dark:text-white">
-                    <span className="truncate">{player.lastName}, {player.firstName}</span>
+                  <td className="sticky left-[136px] z-10 bg-inherit px-2 py-1.5 text-gray-900 dark:text-white w-[140px] max-w-[140px]">
+                    <div className="truncate">{player.lastName}, {player.firstName}</div>
                   </td>
                   {/* Age */}
                   <td className="px-2 py-1.5 text-gray-600 dark:text-gray-400 text-center">

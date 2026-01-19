@@ -37,6 +37,7 @@ const OPTIONAL_FIELDS: { field: AppField; label: string }[] = [
   { field: 'catchScore', label: 'Catch Score' },
   { field: 'flyBallForm', label: 'Fly Ball Form' },
   { field: 'runningScore', label: 'Running Score' },
+  { field: 'runningForm', label: 'Running Form' },
   { field: 'officialAdjust', label: 'Official Adjust' },
   // Draft rules
   { field: 'isCoachKid', label: "Coach's Kid" },
@@ -103,13 +104,20 @@ export const ColumnMapper = ({ csvData, onMappingComplete }: ColumnMapperProps) 
         autoMapping[header] = 'hittingSubtotal';
       } else if (lowerHeader.includes('pitch') && lowerHeader.includes('subtotal')) {
         autoMapping[header] = 'pitchingSubtotal';
-      } else if (lowerHeader.includes('catch') && !lowerHeader.includes('catcher') && !lowerHeader.includes('fly')) {
+      } else if (
+        (lowerHeader.includes('fly') && lowerHeader.includes('catch')) ||
+        (lowerHeader.includes('catch') && !lowerHeader.includes('catcher') && !lowerHeader.includes('form'))
+      ) {
         autoMapping[header] = 'catchScore';
-      } else if (lowerHeader.includes('fly') && lowerHeader.includes('ball') && lowerHeader.includes('form')) {
-        autoMapping[header] = 'flyBallForm';
       } else if (lowerHeader.includes('fly') && lowerHeader.includes('form')) {
         autoMapping[header] = 'flyBallForm';
-      } else if (lowerHeader.includes('running') || lowerHeader.includes('run score') || lowerHeader.includes('base')) {
+      } else if (
+        (lowerHeader.includes('running') && lowerHeader.includes('form')) ||
+        (lowerHeader.includes('baserunning') && lowerHeader.includes('form')) ||
+        (lowerHeader.includes('base') && lowerHeader.includes('form'))
+      ) {
+        autoMapping[header] = 'runningForm';
+      } else if (lowerHeader.includes('running') || lowerHeader.includes('run score') || lowerHeader.includes('baserunning') || lowerHeader.includes('base run')) {
         autoMapping[header] = 'runningScore';
       } else if (lowerHeader.includes('adjust') || lowerHeader.includes('official') || lowerHeader.includes('bonus')) {
         autoMapping[header] = 'officialAdjust';

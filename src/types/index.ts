@@ -259,6 +259,7 @@ export type AppField =
   | 'catchScore'
   | 'flyBallForm'
   | 'runningScore'
+  | 'runningForm'
   | 'officialAdjust'
   | 'littleLeagueAge'
   | 'birthday'

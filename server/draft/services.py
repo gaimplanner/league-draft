@@ -14,9 +14,8 @@ class DraftService:
         cls, division_id: UUID, draft_format: str, draft_order: list[UUID]
     ) -> DraftState:
         """Start a new draft for a division."""
-        # Check if draft already exists
-        if DraftState.objects.filter(division_id=division_id).exists():
-            raise ValueError("Draft already started for this division")
+        # Delete any existing draft state (allows re-starting draft)
+        DraftState.objects.filter(division_id=division_id).delete()
 
         division = Division.objects.get(id=division_id)
         current_team = Team.objects.get(id=draft_order[0])
@@ -365,7 +364,7 @@ class DraftService:
         total_rounds = roster_size
 
         # Count picks already made by this team
-        picks_made = draft_state.picks.filter(team=team).count()
+        picks_made = draft_state.picks.filter(team_id=team.id).count()
 
         # Remaining picks = total rounds - picks already made
         return total_rounds - picks_made

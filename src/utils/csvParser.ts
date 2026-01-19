@@ -65,8 +65,14 @@ export const parseCSVWithMapping = (
     const hitContact = parseFloat(getMappedValue('hitContact')) || 0;
     const pitchingStrength = parseFloat(getMappedValue('pitchingStrength')) || 0;
     const pitchingForm = parseFloat(getMappedValue('pitchingForm')) || 0;
-    const catchScore = parseFloat(getMappedValue('catchScore')) || 0;
-    const runningScore = parseFloat(getMappedValue('runningScore')) || 0;
+    // Catch score combines catches + fly ball form (if both mapped)
+    const catchScoreBase = parseFloat(getMappedValue('catchScore')) || 0;
+    const flyBallForm = parseFloat(getMappedValue('flyBallForm')) || 0;
+    const catchScore = catchScoreBase + flyBallForm;
+    // Running score combines running/time + running form (if both mapped)
+    const runningScoreBase = parseFloat(getMappedValue('runningScore')) || 0;
+    const runningForm = parseFloat(getMappedValue('runningForm')) || 0;
+    const runningScore = runningScoreBase + runningForm;
     const officialAdjust = parseFloat(getMappedValue('officialAdjust')) || 0;
 
     // Parse imported subtotals (optional, for validation or fallback)

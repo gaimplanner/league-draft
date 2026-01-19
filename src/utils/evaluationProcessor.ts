@@ -418,8 +418,10 @@ export function convertToPlayers(
       hitContact: ep.normalizedScores.hitting?.hits ?? 0,
       pitchingStrength: ep.normalizedScores.pitching?.armStrength ?? 0,
       pitchingForm: ep.normalizedScores.pitching?.form ?? 0,
-      catchScore: ep.normalizedScores.flyBalls?.catches ?? 0,
-      runningScore: ep.normalizedScores.baserunning?.bestTime ?? 0,
+      // Catch score combines fly ball catches + fly ball form
+      catchScore: (ep.normalizedScores.flyBalls?.catches ?? 0) + (ep.normalizedScores.flyBalls?.form ?? 0),
+      // Running score combines best time + baserunning form
+      runningScore: (ep.normalizedScores.baserunning?.bestTime ?? 0) + (ep.normalizedScores.baserunning?.form ?? 0),
 
       // Map category scores to subtotals
       fieldingSubtotal: ep.categoryScores.fielding ?? 0,
