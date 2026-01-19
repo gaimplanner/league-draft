@@ -325,23 +325,23 @@ export const VisualColumnMapper = ({
                             draggable
                             onDragStart={() => handleDragStart(header)}
                             className={`
-                              px-3 py-2 text-left font-medium cursor-grab active:cursor-grabbing
-                              border-b border-gray-200 dark:border-gray-600 whitespace-nowrap
+                              px-4 py-3 text-left text-sm font-semibold cursor-grab active:cursor-grabbing
+                              border-b-2 whitespace-nowrap
                               ${isMapped
-                                ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200'
+                                ? 'bg-blue-100 dark:bg-blue-800 text-blue-900 dark:text-white border-blue-300 dark:border-blue-600'
                                 : isCalculated
-                                ? 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-300'
-                                : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                                ? 'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-200 border-yellow-300 dark:border-yellow-700'
+                                : 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100 border-gray-300 dark:border-gray-600 hover:bg-gray-200 dark:hover:bg-gray-600'
                               }
                             `}
                           >
-                            <div className="flex items-center gap-1">
-                              <GripVertical className="w-3 h-3 opacity-50" />
-                              <span className="truncate max-w-24">{header}</span>
-                              {isMapped && <Check className="w-3 h-3 text-blue-600" />}
+                            <div className="flex items-center gap-2">
+                              <GripVertical className="w-4 h-4 opacity-60" />
+                              <span className="truncate max-w-32">{header}</span>
+                              {isMapped && <Check className="w-4 h-4 text-blue-600 dark:text-blue-300" />}
                               {isCalculated && !isMapped && (
                                 <span title="Looks like a calculated field">
-                                  <AlertTriangle className="w-3 h-3 text-yellow-600" />
+                                  <AlertTriangle className="w-4 h-4 text-yellow-600 dark:text-yellow-400" />
                                 </span>
                               )}
                             </div>
@@ -352,11 +352,11 @@ export const VisualColumnMapper = ({
                   </thead>
                   <tbody>
                     {sampleRows.map((row, rowIdx) => (
-                      <tr key={rowIdx} className="border-b border-gray-100 dark:border-gray-700">
+                      <tr key={rowIdx} className={`border-b border-gray-200 dark:border-gray-700 ${rowIdx % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-850'}`}>
                         {csvData.headers.map((header) => (
                           <td
                             key={header}
-                            className="px-3 py-1.5 text-gray-600 dark:text-gray-400 whitespace-nowrap truncate max-w-32"
+                            className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap truncate max-w-40"
                           >
                             {row[header] || '-'}
                           </td>
