@@ -135,6 +135,49 @@ export const DraftConfig = ({ teams, players, onConfigComplete, onBack }: DraftC
 
   const coachKids = resolvedPlayers.filter((p) => p.isCoachKid);
 
+  // Check if all teams have at least 2 coach's kids (for "By Coach Kids" ordering option)
+  const canOrderByCoachKids = useMemo(() => {
+    // Group coach's kids by team
+    const kidsByTeam: Record<string, Player[]> = {};
+    teams.forEach(team => {
+      kidsByTeam[team.id] = resolvedPlayers.filter(p => p.isCoachKid && p.coachTeamId === team.id);
+    });
+    // All teams must have at least 2 coach's kids
+    return teams.every(team => kidsByTeam[team.id].length >= 2);
+  }, [teams, resolvedPlayers]);
+
+  // Order teams by sum of top 2 coach's kids scores (lowest first)
+  const handleOrderByCoachKids = () => {
+    // Clear any pending sort timeout
+    if (sortTimeoutRef.current) {
+      clearTimeout(sortTimeoutRef.current);
+    }
+
+    // Calculate score for each team (sum of top 2 coach's kids by score)
+    const teamScores: Array<{ id: string; score: number }> = teams.map(team => {
+      const teamKids = resolvedPlayers
+        .filter(p => p.isCoachKid && p.coachTeamId === team.id)
+        .sort((a, b) => b.totalScore - a.totalScore) // Sort descending by score
+        .slice(0, 2); // Take top 2
+
+      const score = teamKids.reduce((sum, p) => sum + p.totalScore, 0);
+      return { id: team.id, score };
+    });
+
+    // Sort by score ascending (lowest picks first)
+    teamScores.sort((a, b) => a.score - b.score);
+
+    // Assign positions 1 through N
+    const newPositions: Record<string, number | null> = {};
+    teamScores.forEach(({ id }, index) => {
+      newPositions[id] = index + 1;
+    });
+
+    // Update both immediately
+    setTeamPositions(newPositions);
+    setSortPositions(newPositions);
+  };
+
   // Find sibling groups (pairs of players linked as siblings)
   const siblingGroups = useMemo(() => {
     const groups: Array<{ player1: Player; player2: Player }> = [];
@@ -458,12 +501,23 @@ export const DraftConfig = ({ teams, players, onConfigComplete, onBack }: DraftC
               <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
                 Draft Order
               </h2>
-              <button
-                onClick={handleRandomizeOrder}
-                className="px-2 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded text-xs font-medium flex items-center gap-1"
-              >
-                🎲 Randomize
-              </button>
+              <div className="flex gap-1">
+                {canOrderByCoachKids && (
+                  <button
+                    onClick={handleOrderByCoachKids}
+                    className="px-2 py-1 bg-green-500 hover:bg-green-600 text-white rounded text-xs font-medium flex items-center gap-1"
+                    title="Order by sum of top 2 coach's kids scores (lowest first)"
+                  >
+                    👶 By Coach Kids
+                  </button>
+                )}
+                <button
+                  onClick={handleRandomizeOrder}
+                  className="px-2 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded text-xs font-medium flex items-center gap-1"
+                >
+                  🎲 Randomize
+                </button>
+              </div>
             </div>
             <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">
               Position 1 picks first in round 1.
