@@ -114,11 +114,12 @@ export const DraftConfig = ({ teams, players, onConfigComplete, onBack }: DraftC
     });
   }, [players]);
 
-  // Initialize team positions from teams (all empty by default)
+  // Initialize team positions from teams (use existing draftPosition if set)
   useEffect(() => {
     const initial: Record<string, number | null> = {};
     teams.forEach((team) => {
-      initial[team.id] = null;
+      // Use existing draftPosition if valid, otherwise null
+      initial[team.id] = team.draftPosition > 0 ? team.draftPosition : null;
     });
     setTeamPositions(initial);
     setSortPositions(initial);
