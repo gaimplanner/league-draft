@@ -253,7 +253,7 @@ class DraftService:
             team2_id=team2_id,
             player1_id=player1_id,
             player2_id=player2_id,
-            created_at__gte=timezone.now() - timedelta(seconds=10),
+            timestamp__gte=timezone.now() - timedelta(seconds=10),
         ).exists()
         if recent_trade:
             raise ValueError("This trade was already processed")
