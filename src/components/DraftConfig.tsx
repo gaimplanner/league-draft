@@ -135,15 +135,15 @@ export const DraftConfig = ({ teams, players, onConfigComplete, onBack }: DraftC
 
   const coachKids = resolvedPlayers.filter((p) => p.isCoachKid);
 
-  // Check if all teams have at least 2 coach's kids (for "By Coach Kids" ordering option)
+  // Check if all teams have at least 2 locked picks (coach's kids OR siblings locked to team)
   const canOrderByCoachKids = useMemo(() => {
-    // Group coach's kids by team
-    const kidsByTeam: Record<string, Player[]> = {};
+    // Group locked picks by team (coach's kids assigned to team)
+    const lockedByTeam: Record<string, Player[]> = {};
     teams.forEach(team => {
-      kidsByTeam[team.id] = resolvedPlayers.filter(p => p.isCoachKid && p.coachTeamId === team.id);
+      lockedByTeam[team.id] = resolvedPlayers.filter(p => p.isCoachKid && p.coachTeamId === team.id);
     });
-    // All teams must have at least 2 coach's kids
-    return teams.every(team => kidsByTeam[team.id].length >= 2);
+    // All teams must have at least 2 locked picks
+    return teams.every(team => lockedByTeam[team.id].length >= 2);
   }, [teams, resolvedPlayers]);
 
   // Order teams by sum of top 2 coach's kids scores (lowest first)
