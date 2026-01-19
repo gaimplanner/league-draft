@@ -715,6 +715,7 @@ export const api = {
   async createDivision(params: {
     name: string;
     preset: DivisionPreset;
+    mode?: Division['mode'];
     ageRange: DivisionAgeRange;
     teamCount: number;
     enforceAgeLimit?: boolean;
@@ -728,6 +729,7 @@ export const api = {
       body: JSON.stringify({
         name: params.name,
         preset: params.preset,
+        mode: params.mode ?? 'live-draft',
         age_range: params.ageRange,
         team_count: params.teamCount,
         enforce_age_limit: params.enforceAgeLimit ?? true,

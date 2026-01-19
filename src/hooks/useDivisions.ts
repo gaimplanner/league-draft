@@ -4,6 +4,7 @@ import {
   DivisionSummary,
   DivisionPreset,
   DivisionAgeRange,
+  DivisionMode,
 } from '../types';
 import { api, ApiError } from '../api/client';
 
@@ -61,6 +62,7 @@ export function useDivisions() {
   const createDivision = useCallback(async (config: {
     name: string;
     preset: DivisionPreset;
+    mode?: DivisionMode;
     teamCount: number;
     ageRange: DivisionAgeRange;
     enforceAgeLimit: boolean;
@@ -76,6 +78,7 @@ export function useDivisions() {
       const division = await api.createDivision({
         name: config.name,
         preset: config.preset,
+        mode: config.mode,
         ageRange: config.ageRange,
         teamCount: config.teamCount,
         enforceAgeLimit: config.enforceAgeLimit,

@@ -1,12 +1,13 @@
 import { useState } from 'react';
-import { ArrowLeft, Check, AlertCircle } from 'lucide-react';
-import { DivisionPreset, DIVISION_PRESETS, DivisionAgeRange } from '../types';
+import { ArrowLeft, Check, AlertCircle, AlertTriangle, Users, Wand2 } from 'lucide-react';
+import { DivisionPreset, DIVISION_PRESETS, DivisionAgeRange, DivisionMode } from '../types';
 
 interface DivisionCreatorProps {
   onCancel: () => void;
   onCreate: (config: {
     name: string;
     preset: DivisionPreset;
+    mode: DivisionMode;
     teamCount: number;
     ageRange: DivisionAgeRange;
     enforceAgeLimit: boolean;
@@ -23,8 +24,9 @@ const presetOptions: { id: DivisionPreset; label: string; description: string }[
 ];
 
 export const DivisionCreator = ({ onCancel, onCreate, existingNames = [] }: DivisionCreatorProps) => {
-  const [step, setStep] = useState<'preset' | 'configure'>('preset');
+  const [step, setStep] = useState<'preset' | 'mode' | 'configure'>('preset');
   const [selectedPreset, setSelectedPreset] = useState<DivisionPreset | null>(null);
+  const [selectedMode, setSelectedMode] = useState<DivisionMode | null>(null);
   const [name, setName] = useState('');
   const [teamCount, setTeamCount] = useState(8);
   const [ageMin, setAgeMin] = useState(7);
@@ -51,15 +53,30 @@ export const DivisionCreator = ({ onCancel, onCreate, existingNames = [] }: Divi
       setName('');
     }
 
+    setStep('mode');
+  };
+
+  const handleModeSelect = (mode: DivisionMode) => {
+    setSelectedMode(mode);
     setStep('configure');
   };
 
+  const handleBackFromMode = () => {
+    setSelectedMode(null);
+    setStep('preset');
+  };
+
+  const handleBackFromConfigure = () => {
+    setStep('mode');
+  };
+
   const handleCreate = () => {
-    if (!name.trim() || !selectedPreset) return;
+    if (!name.trim() || !selectedPreset || !selectedMode) return;
 
     onCreate({
       name: name.trim(),
       preset: selectedPreset,
+      mode: selectedMode,
       teamCount,
       ageRange: { min: ageMin, max: ageMax },
       enforceAgeLimit,
@@ -74,11 +91,17 @@ export const DivisionCreator = ({ onCancel, onCreate, existingNames = [] }: Divi
       <div className="max-w-2xl w-full">
         <div className="mb-8">
           <button
-            onClick={step === 'configure' ? () => setStep('preset') : onCancel}
+            onClick={
+              step === 'configure' ? handleBackFromConfigure :
+              step === 'mode' ? handleBackFromMode :
+              onCancel
+            }
             className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors mb-4"
           >
             <ArrowLeft className="w-4 h-4" />
-            {step === 'configure' ? 'Back to Presets' : 'Back to Divisions'}
+            {step === 'configure' ? 'Back to Mode Selection' :
+             step === 'mode' ? 'Back to Presets' :
+             'Back to Divisions'}
           </button>
 
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
@@ -87,6 +110,8 @@ export const DivisionCreator = ({ onCancel, onCreate, existingNames = [] }: Divi
           <p className="text-gray-600 dark:text-gray-400 mt-1">
             {step === 'preset'
               ? 'Choose a preset or configure your own'
+              : step === 'mode'
+              ? 'How will teams be formed?'
               : 'Configure your division settings'}
           </p>
         </div>
@@ -107,6 +132,63 @@ export const DivisionCreator = ({ onCancel, onCreate, existingNames = [] }: Divi
                 </p>
               </button>
             ))}
+          </div>
+        )}
+
+        {step === 'mode' && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 gap-4">
+              {/* Live Draft Option */}
+              <button
+                onClick={() => handleModeSelect('live-draft')}
+                className="p-6 bg-white dark:bg-gray-800 rounded-lg border-2 border-gray-200 dark:border-gray-700 hover:border-blue-500 dark:hover:border-blue-500 transition-colors text-left group"
+              >
+                <div className="flex items-start gap-4">
+                  <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                    <Users className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-semibold text-gray-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                      Live Draft
+                    </h3>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                      Teams take turns selecting players in real-time. Coaches participate
+                      in the draft process, picking players round by round.
+                    </p>
+                  </div>
+                </div>
+              </button>
+
+              {/* League Generated Teams Option */}
+              <button
+                onClick={() => handleModeSelect('league-generated')}
+                className="p-6 bg-white dark:bg-gray-800 rounded-lg border-2 border-gray-200 dark:border-gray-700 hover:border-blue-500 dark:hover:border-blue-500 transition-colors text-left group"
+              >
+                <div className="flex items-start gap-4">
+                  <div className="p-3 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
+                    <Wand2 className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-semibold text-gray-900 dark:text-white group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors">
+                      League Generated Teams
+                    </h3>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                      System creates balanced teams automatically. Honors friend requests
+                      and coach assignments while ensuring competitive balance.
+                    </p>
+                  </div>
+                </div>
+              </button>
+            </div>
+
+            {/* Warning about immutability */}
+            <div className="flex items-start gap-3 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+              <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-amber-800 dark:text-amber-200">
+                This choice cannot be changed later. Once a division is created, its team formation
+                mode is locked to ensure data consistency.
+              </p>
+            </div>
           </div>
         )}
 
@@ -238,6 +320,19 @@ export const DivisionCreator = ({ onCancel, onCreate, existingNames = [] }: Divi
                   {enforceAgeLimit
                     ? `• Max ${maxPerAge} players per age group per team`
                     : '• No age group limits'}
+                </li>
+                <li className="flex items-center gap-2">
+                  • {selectedMode === 'live-draft' ? (
+                    <>
+                      <Users className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                      <span>Live Draft</span>
+                    </>
+                  ) : (
+                    <>
+                      <Wand2 className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                      <span>League Generated Teams</span>
+                    </>
+                  )}
                 </li>
               </ul>
             </div>

@@ -28,6 +28,7 @@ import {
   ColumnMapping,
   DivisionPreset,
   DivisionAgeRange,
+  DivisionMode,
   ScoringMode,
   AppPhase,
 } from './types';
@@ -253,6 +254,7 @@ function App() {
   const handleCreateDivision = useCallback(async (config: {
     name: string;
     preset: DivisionPreset;
+    mode: DivisionMode;
     teamCount: number;
     ageRange: DivisionAgeRange;
     enforceAgeLimit: boolean;
