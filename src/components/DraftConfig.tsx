@@ -501,21 +501,21 @@ export const DraftConfig = ({ teams, players, onConfigComplete, onBack }: DraftC
               <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
                 Draft Order
               </h2>
-              <div className="flex gap-1">
+              <div className="inline-flex rounded-md border border-gray-300 dark:border-gray-600 overflow-hidden">
                 {canOrderByCoachKids && (
                   <button
                     onClick={handleOrderByCoachKids}
-                    className="px-2 py-1 bg-green-500 hover:bg-green-600 text-white rounded text-xs font-medium flex items-center gap-1"
+                    className="px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 border-r border-gray-300 dark:border-gray-600 transition-colors"
                     title="Order by sum of top 2 coach's kids scores (lowest first)"
                   >
-                    👶 By Coach Kids
+                    Locked Pick Rank
                   </button>
                 )}
                 <button
                   onClick={handleRandomizeOrder}
-                  className="px-2 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded text-xs font-medium flex items-center gap-1"
+                  className="px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                 >
-                  🎲 Randomize
+                  Randomize
                 </button>
               </div>
             </div>
