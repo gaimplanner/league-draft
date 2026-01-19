@@ -35,6 +35,7 @@ const OPTIONAL_FIELDS: { field: AppField; label: string }[] = [
   { field: 'pitchingSubtotal', label: 'Pitching Subtotal' },
   // Other scores
   { field: 'catchScore', label: 'Catch Score' },
+  { field: 'flyBallForm', label: 'Fly Ball Form' },
   { field: 'runningScore', label: 'Running Score' },
   { field: 'officialAdjust', label: 'Official Adjust' },
   // Draft rules
@@ -102,8 +103,12 @@ export const ColumnMapper = ({ csvData, onMappingComplete }: ColumnMapperProps) 
         autoMapping[header] = 'hittingSubtotal';
       } else if (lowerHeader.includes('pitch') && lowerHeader.includes('subtotal')) {
         autoMapping[header] = 'pitchingSubtotal';
-      } else if (lowerHeader.includes('catch') && !lowerHeader.includes('catcher')) {
+      } else if (lowerHeader.includes('catch') && !lowerHeader.includes('catcher') && !lowerHeader.includes('fly')) {
         autoMapping[header] = 'catchScore';
+      } else if (lowerHeader.includes('fly') && lowerHeader.includes('ball') && lowerHeader.includes('form')) {
+        autoMapping[header] = 'flyBallForm';
+      } else if (lowerHeader.includes('fly') && lowerHeader.includes('form')) {
+        autoMapping[header] = 'flyBallForm';
       } else if (lowerHeader.includes('running') || lowerHeader.includes('run score') || lowerHeader.includes('base')) {
         autoMapping[header] = 'runningScore';
       } else if (lowerHeader.includes('adjust') || lowerHeader.includes('official') || lowerHeader.includes('bonus')) {

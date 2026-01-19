@@ -257,6 +257,7 @@ export type AppField =
   | 'hittingSubtotal'
   | 'pitchingSubtotal'
   | 'catchScore'
+  | 'flyBallForm'
   | 'runningScore'
   | 'officialAdjust'
   | 'littleLeagueAge'
