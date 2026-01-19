@@ -39,7 +39,7 @@ import * as XLSX from 'xlsx';
 // Types
 // -----------------------------------------------------------------------------
 
-type TeamBuilderStep = 'import' | 'resolution' | 'configure' | 'generate' | 'results';
+type TeamBuilderStep = 'setup' | 'import' | 'resolution' | 'configure' | 'generate' | 'results';
 
 interface TeamBuilderFlowProps {
   division: Division;
@@ -66,8 +66,10 @@ interface RegistrationPlayer {
 // -----------------------------------------------------------------------------
 
 export const TeamBuilderFlow = ({ division, onBack, onComplete }: TeamBuilderFlowProps) => {
-  // Step state
-  const [step, setStep] = useState<TeamBuilderStep>('import');
+  // Step state - start at setup for new divisions (no players), import for divisions with players
+  const [step, setStep] = useState<TeamBuilderStep>(
+    division.players.length > 0 ? 'import' : 'setup'
+  );
 
   // Import data
   const [evalPlayers, setEvalPlayers] = useState<Player[]>([]);
@@ -444,10 +446,11 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete }: TeamBuilderFlo
   // -----------------------------------------------------------------------------
 
   const steps: { key: TeamBuilderStep; label: string; icon: typeof Upload }[] = [
+    { key: 'setup', label: 'Setup', icon: Settings },
     { key: 'import', label: 'Import', icon: Upload },
     { key: 'resolution', label: 'Resolution', icon: Users },
-    { key: 'configure', label: 'Configure', icon: Settings },
-    { key: 'generate', label: 'Generate', icon: Wand2 },
+    { key: 'configure', label: 'Configure', icon: Wand2 },
+    { key: 'generate', label: 'Generate', icon: Play },
     { key: 'results', label: 'Results', icon: BarChart3 },
   ];
 
@@ -513,6 +516,95 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete }: TeamBuilderFlo
 
       {/* Content */}
       <div className="max-w-6xl mx-auto p-6">
+        {/* Step 0: Setup */}
+        {step === 'setup' && (
+          <div className="space-y-6">
+            <div className="text-center mb-8">
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+                Division Setup
+              </h2>
+              <p className="text-gray-600 dark:text-gray-400">
+                Review and configure teams and coaches before importing players.
+              </p>
+            </div>
+
+            <div className="max-w-2xl mx-auto space-y-6">
+              {/* Division Info */}
+              <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                  Division Settings
+                </h3>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-gray-500 dark:text-gray-400">Name:</span>
+                    <span className="ml-2 font-medium text-gray-900 dark:text-white">{division.name}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500 dark:text-gray-400">Age Range:</span>
+                    <span className="ml-2 font-medium text-gray-900 dark:text-white">
+                      {division.ageRange.min}-{division.ageRange.max}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500 dark:text-gray-400">Teams:</span>
+                    <span className="ml-2 font-medium text-gray-900 dark:text-white">{teams.length}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500 dark:text-gray-400">Mode:</span>
+                    <span className="ml-2 font-medium text-purple-600 dark:text-purple-400">
+                      League Generated
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Team Coaches */}
+              <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                  Team Coaches
+                </h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                  Configure head coach and assistant coach for each team. These names are used for coach kid detection.
+                </p>
+                <div className="space-y-3">
+                  {teams.map((team, index) => (
+                    <div key={team.id} className="flex items-center gap-3">
+                      <span className="text-sm font-medium text-gray-500 dark:text-gray-400 w-20">
+                        Team {index + 1}
+                      </span>
+                      <input
+                        type="text"
+                        value={team.headCoach || ''}
+                        onChange={(e) => handleUpdateTeam(team.id, { headCoach: e.target.value, name: e.target.value })}
+                        placeholder="Head Coach"
+                        className="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      />
+                      <input
+                        type="text"
+                        value={team.assistantCoach || ''}
+                        onChange={(e) => handleUpdateTeam(team.id, { assistantCoach: e.target.value })}
+                        placeholder="Assistant Coach"
+                        className="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Continue button */}
+              <div className="flex justify-end">
+                <button
+                  onClick={() => setStep('import')}
+                  className="px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium flex items-center gap-2"
+                >
+                  Continue to Import
+                  <Upload className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Step 1: Import */}
         {step === 'import' && (
           <div className="space-y-6">
