@@ -147,6 +147,24 @@ export const DraftConfig = ({ teams, players, onConfigComplete, onBack }: DraftC
     return teams.every(team => lockedByTeam[team.id].length >= 2);
   }, [teams, resolvedPlayers]);
 
+  // Calculate locked pick scores for each team (sum of top 2 coach's kids by score)
+  const teamLockedScores = useMemo(() => {
+    const scores: Record<string, { score: number; kids: Array<{ name: string; score: number }> }> = {};
+    teams.forEach(team => {
+      const teamKids = resolvedPlayers
+        .filter(p => p.isCoachKid && p.coachTeamId === team.id)
+        .sort((a, b) => b.totalScore - a.totalScore) // Sort descending by score
+        .slice(0, 2); // Take top 2
+
+      const score = teamKids.reduce((sum, p) => sum + p.totalScore, 0);
+      scores[team.id] = {
+        score,
+        kids: teamKids.map(p => ({ name: p.name, score: p.totalScore })),
+      };
+    });
+    return scores;
+  }, [teams, resolvedPlayers]);
+
   // Order teams by sum of top 2 coach's kids scores (lowest first)
   const handleOrderByCoachKids = () => {
     // Clear any pending sort timeout
@@ -155,15 +173,10 @@ export const DraftConfig = ({ teams, players, onConfigComplete, onBack }: DraftC
     }
 
     // Calculate score for each team (sum of top 2 coach's kids by score)
-    const teamScores: Array<{ id: string; score: number }> = teams.map(team => {
-      const teamKids = resolvedPlayers
-        .filter(p => p.isCoachKid && p.coachTeamId === team.id)
-        .sort((a, b) => b.totalScore - a.totalScore) // Sort descending by score
-        .slice(0, 2); // Take top 2
-
-      const score = teamKids.reduce((sum, p) => sum + p.totalScore, 0);
-      return { id: team.id, score };
-    });
+    const teamScores: Array<{ id: string; score: number }> = teams.map(team => ({
+      id: team.id,
+      score: teamLockedScores[team.id]?.score ?? 0,
+    }));
 
     // Sort by score ascending (lowest picks first)
     teamScores.sort((a, b) => a.score - b.score);
@@ -537,6 +550,7 @@ export const DraftConfig = ({ teams, players, onConfigComplete, onBack }: DraftC
                 const position = teamPositions[team.id];
                 const teamCoachKids = resolvedPlayers.filter(p => p.coachTeamId === team.id);
                 const hasError = isDuplicate(position) || (position !== null && (position < 1 || position > teams.length));
+                const lockedScore = teamLockedScores[team.id];
 
                 return (
                   <div
@@ -567,6 +581,17 @@ export const DraftConfig = ({ teams, players, onConfigComplete, onBack }: DraftC
                         </span>
                       )}
                     </div>
+                    {/* Show locked score breakdown */}
+                    {canOrderByCoachKids && lockedScore && (
+                      <div className="text-right hidden sm:block">
+                        <span className="text-sm font-semibold text-gray-700 dark:text-gray-300 tabular-nums">
+                          {lockedScore.score.toFixed(1)}
+                        </span>
+                        <span className="text-xs text-gray-400 dark:text-gray-500 ml-1">
+                          ({lockedScore.kids.map(k => k.score.toFixed(1)).join(' + ')})
+                        </span>
+                      </div>
+                    )}
                     {hasError && isDuplicate(position) && (
                       <span className="text-xs text-red-600 dark:text-red-400">
                         Dup
