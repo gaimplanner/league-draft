@@ -116,9 +116,8 @@ class DraftService:
         team.age_breakdown = age_breakdown
         team.save()
 
-        # Handle sibling locking
-        if player.sibling_id:
-            Player.objects.filter(id=player.sibling_id).update(locked_to_team=team)
+        # Handle sibling locking - follow chains for 3+ sibling groups
+        cls._lock_sibling_chain(player, team)
 
         # Advance to next pick
         cls._advance_to_next_pick(draft_state)
@@ -208,9 +207,8 @@ class DraftService:
         player.drafted_at_pick = None
         player.save()
 
-        # If player had a sibling, remove sibling lock
-        if player.sibling_id:
-            Player.objects.filter(id=player.sibling_id).update(locked_to_team=None)
+        # If player had siblings, remove sibling locks for the entire chain
+        cls._unlock_sibling_chain(player)
 
         # Update team score
         team.total_score = sum(p.total_score for p in team.roster.all())
@@ -484,3 +482,78 @@ class DraftService:
                 draft_state.mandatory_sibling_name = forced_player.sibling or ""
 
             draft_state.save()
+
+    @classmethod
+    def _lock_sibling_chain(cls, player: Player, team: Team) -> None:
+        """Lock all siblings in a chain/group to a team.
+
+        For 3+ siblings (e.g., Braden → Austin → Caden), this follows the chain
+        in both directions to lock ALL related siblings, not just direct links.
+        """
+        from django.db.models import Q
+
+        division = player.division
+        processed_ids = {player.id}
+        to_process = [player]
+
+        while to_process:
+            current = to_process.pop(0)
+
+            # Forward direction: current's sibling_id
+            if current.sibling_id and current.sibling_id not in processed_ids:
+                sibling = Player.objects.filter(
+                    id=current.sibling_id, division=division, is_drafted=False
+                ).first()
+                if sibling:
+                    sibling.locked_to_team = team
+                    sibling.save()
+                    processed_ids.add(sibling.id)
+                    to_process.append(sibling)
+
+            # Reverse direction: anyone whose sibling_id points to current
+            reverse_siblings = Player.objects.filter(
+                sibling_id=current.id, division=division, is_drafted=False
+            ).exclude(id__in=processed_ids)
+
+            for sibling in reverse_siblings:
+                sibling.locked_to_team = team
+                sibling.save()
+                processed_ids.add(sibling.id)
+                to_process.append(sibling)
+
+    @classmethod
+    def _unlock_sibling_chain(cls, player: Player) -> None:
+        """Unlock all siblings in a chain/group when undoing a pick.
+
+        Similar to _lock_sibling_chain but removes locks instead of adding them.
+        Only unlocks siblings that are NOT drafted (since drafted siblings
+        should stay with their team).
+        """
+        division = player.division
+        processed_ids = {player.id}
+        to_process = [player]
+
+        while to_process:
+            current = to_process.pop(0)
+
+            # Forward direction: current's sibling_id
+            if current.sibling_id and current.sibling_id not in processed_ids:
+                sibling = Player.objects.filter(
+                    id=current.sibling_id, division=division, is_drafted=False
+                ).first()
+                if sibling:
+                    sibling.locked_to_team = None
+                    sibling.save()
+                    processed_ids.add(sibling.id)
+                    to_process.append(sibling)
+
+            # Reverse direction: anyone whose sibling_id points to current
+            reverse_siblings = Player.objects.filter(
+                sibling_id=current.id, division=division, is_drafted=False
+            ).exclude(id__in=processed_ids)
+
+            for sibling in reverse_siblings:
+                sibling.locked_to_team = None
+                sibling.save()
+                processed_ids.add(sibling.id)
+                to_process.append(sibling)

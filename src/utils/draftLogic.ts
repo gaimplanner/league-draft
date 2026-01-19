@@ -135,27 +135,39 @@ export function getMandatoryPick(
 /**
  * Lock a sibling to follow the drafted player to their team.
  * Call this after drafting a player who has siblings.
- * Handles both directions of the sibling link.
+ * Handles both directions of the sibling link and follows chains for 3+ sibling groups.
  */
 export function lockSiblingToTeam(
   players: Player[],
   draftedPlayer: Player,
   teamId: string
 ): void {
-  // Check drafted player's siblingId (forward direction)
-  if (draftedPlayer.siblingId) {
-    const sibling = players.find(p => p.id === draftedPlayer.siblingId);
-    if (sibling && !sibling.isDrafted) {
-      sibling.lockedToTeamId = teamId;
-    }
-  }
+  // Track which players we've already processed to avoid infinite loops
+  const processed = new Set<string>([draftedPlayer.id]);
+  const toProcess: Player[] = [draftedPlayer];
 
-  // Also check for any players whose siblingId points to the drafted player (reverse direction)
-  players.forEach(p => {
-    if (p.siblingId === draftedPlayer.id && !p.isDrafted) {
-      p.lockedToTeamId = teamId;
+  while (toProcess.length > 0) {
+    const current = toProcess.shift()!;
+
+    // Check current player's siblingId (forward direction)
+    if (current.siblingId) {
+      const sibling = players.find(p => p.id === current.siblingId);
+      if (sibling && !sibling.isDrafted && !processed.has(sibling.id)) {
+        sibling.lockedToTeamId = teamId;
+        processed.add(sibling.id);
+        toProcess.push(sibling); // Follow the chain
+      }
     }
-  });
+
+    // Also check for any players whose siblingId points to current (reverse direction)
+    players.forEach(p => {
+      if (p.siblingId === current.id && !p.isDrafted && !processed.has(p.id)) {
+        p.lockedToTeamId = teamId;
+        processed.add(p.id);
+        toProcess.push(p); // Follow the chain
+      }
+    });
+  }
 }
 
 /**
