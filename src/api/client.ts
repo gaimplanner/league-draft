@@ -348,6 +348,7 @@ function transformDivisionFromApi(data: Record<string, unknown>): Division {
     id: data.id as string,
     name: data.name as string,
     preset: data.preset as DivisionPreset,
+    mode: (data.mode as Division['mode']) || 'live-draft',
     ageRange: ageRange,
     enforceAgeLimit: data.enforce_age_limit as boolean,
     // Use safe parsing for numeric fields (Issue #3)
@@ -420,6 +421,7 @@ function transformDivisionSummaryFromApi(data: Record<string, unknown>): Divisio
     id: data.id as string,
     name: data.name as string,
     preset: data.preset as DivisionPreset,
+    mode: (data.mode as DivisionSummary['mode']) || 'live-draft',
     // Use safe parsing for numeric fields (Issue #3)
     teamCount: safeParseNumber(data.team_count),
     playerCount: safeParseNumber(data.player_count),

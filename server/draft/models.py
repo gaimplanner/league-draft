@@ -272,6 +272,11 @@ class Division(models.Model):
         ("pre-weighted", "Pre-weighted"),
     ]
 
+    MODE_CHOICES = [
+        ("live-draft", "Live Draft"),
+        ("league-generated", "League Generated Teams"),
+    ]
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
     # Organization (null for personal workspaces)
@@ -306,6 +311,13 @@ class Division(models.Model):
     scoring_weights = models.JSONField(default=dict)
     scoring_mode = models.CharField(
         max_length=20, choices=SCORING_MODE_CHOICES, default="pre-weighted"
+    )
+
+    # Team formation mode (immutable after creation)
+    # live-draft: Traditional draft where teams take turns picking
+    # league-generated: Auto-assignment algorithm creates balanced teams
+    mode = models.CharField(
+        max_length=20, choices=MODE_CHOICES, default="live-draft"
     )
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -429,6 +441,13 @@ class Player(models.Model):
         blank=True,
         related_name="locked_players",
     )
+
+    # Team Builder fields (for league-generated mode)
+    # These are only used during auto-assignment, not for live drafts
+    coach_request = models.CharField(max_length=200, blank=True)  # Raw coach name request
+    teammate_requests = models.JSONField(default=list, blank=True)  # Raw teammate name requests
+    school = models.CharField(max_length=200, blank=True)
+    grade = models.IntegerField(null=True, blank=True)
 
     # Draft Status
     is_drafted = models.BooleanField(default=False)

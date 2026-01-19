@@ -85,6 +85,11 @@ def transform_player(player) -> dict:
         "drafted_by_team_id": str(player.drafted_by_team_id) if player.drafted_by_team_id else None,
         "drafted_in_round": player.drafted_in_round,
         "drafted_at_pick": player.drafted_at_pick,
+        # Team Builder fields (for league-generated mode)
+        "coach_request": player.coach_request,
+        "teammate_requests": player.teammate_requests or [],
+        "school": player.school,
+        "grade": player.grade,
     }
 
 
@@ -170,6 +175,7 @@ def transform_division_summary(division) -> dict:
         "preset": division.preset,
         "team_count": division.team_count,
         "player_count": division.players.count(),
+        "mode": division.mode,
         "phase": division.phase,
         "created_at": division.created_at.isoformat(),
         "completed_at": division.completed_at.isoformat() if division.completed_at else None,
@@ -210,6 +216,7 @@ def transform_division(division, include_all: bool = False) -> dict:
         "roster_size": division.roster_size,
         "scoring_weights": division.scoring_weights,
         "scoring_mode": division.scoring_mode,
+        "mode": division.mode,
         "phase": division.phase,
         "created_at": division.created_at.isoformat(),
         "updated_at": division.updated_at.isoformat(),

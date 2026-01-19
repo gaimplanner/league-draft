@@ -327,6 +327,12 @@ def validate_division_create_data(data: Dict[str, Any]) -> Tuple[Optional[Dict],
     if scoring_mode not in valid_modes:
         errors["scoring_mode"] = [f"Invalid scoring mode. Must be one of: {', '.join(valid_modes)}"]
 
+    # Division mode (live-draft vs league-generated)
+    mode = data.get("mode", "live-draft")
+    valid_division_modes = ["live-draft", "league-generated"]
+    if mode not in valid_division_modes:
+        errors["mode"] = [f"Invalid mode. Must be one of: {', '.join(valid_division_modes)}"]
+
     if errors:
         return None, errors
 
@@ -339,6 +345,7 @@ def validate_division_create_data(data: Dict[str, Any]) -> Tuple[Optional[Dict],
         "team_count": int(team_count),
         "scoring_weights": data.get("scoring_weights", {}),
         "scoring_mode": scoring_mode,
+        "mode": mode,
     }, None
 
 
@@ -424,6 +431,10 @@ def validate_division_update_data(data: Dict[str, Any]) -> Tuple[Optional[Dict],
             errors["phase"] = [f"Invalid phase. Must be one of: {', '.join(valid_phases)}"]
         else:
             cleaned["phase"] = phase
+
+    # Mode is immutable after creation - reject any attempt to change it
+    if "mode" in data:
+        errors["mode"] = ["Division mode cannot be changed after creation"]
 
     if errors:
         return None, errors

@@ -190,6 +190,12 @@ export interface Player {
   draftedByTeamId?: string;
   draftedInRound?: number;
   draftedAtPick?: number;
+
+  // Team Builder fields (for league-generated mode)
+  coachRequest?: string; // Raw coach name from registration
+  teammateRequests?: string[]; // Parsed teammate names from registration
+  school?: string;
+  grade?: number;
 }
 
 export interface Team {
@@ -357,6 +363,9 @@ export const DEFAULT_SCORING_WEIGHTS: ScoringWeights = {
 // Division types for multi-division support
 export type DivisionPreset = 'majors' | 'aaa' | 'aa' | 'custom';
 
+// Division mode: how teams are formed
+export type DivisionMode = 'live-draft' | 'league-generated';
+
 export interface DivisionAgeRange {
   min: number;
   max: number;
@@ -366,6 +375,7 @@ export interface Division {
   id: string;
   name: string;
   preset: DivisionPreset;
+  mode: DivisionMode; // How teams are formed (immutable after creation)
   ageRange: DivisionAgeRange;
   enforceAgeLimit: boolean;
   maxPerAge: number; // Max players per age group (0 = no limit)
@@ -391,6 +401,7 @@ export interface DivisionSummary {
   id: string;
   name: string;
   preset: DivisionPreset;
+  mode: DivisionMode;
   teamCount: number;
   playerCount: number;
   phase: AppPhase;
@@ -438,7 +449,8 @@ export function createInitialDivision(
   teamCount: number,
   ageRange: DivisionAgeRange,
   enforceAgeLimit: boolean,
-  maxPerAge: number
+  maxPerAge: number,
+  mode: DivisionMode = 'live-draft'
 ): Division {
   const teams: Team[] = Array.from({ length: teamCount }, (_, i) => ({
     id: `${id}-team-${i + 1}`,
@@ -456,6 +468,7 @@ export function createInitialDivision(
     id,
     name,
     preset,
+    mode,
     ageRange,
     enforceAgeLimit,
     maxPerAge,
