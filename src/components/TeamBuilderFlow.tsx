@@ -8,10 +8,12 @@ import {
   Check,
   Settings,
   Play,
+  ArrowLeftRight,
 } from 'lucide-react';
 import { Division, Player, Team } from '../types';
 import { EvaluationImport } from './evaluation';
 import { NameMatchResolver, TeamBuilderResults } from './teamBuilder';
+import { TradeModal } from './TradeModal';
 import {
   runTeamBuilderAlgorithm,
   TeamBuilderConfig,
@@ -82,6 +84,9 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete }: TeamBuilderFlo
   const [algorithmResult, setAlgorithmResult] = useState<TeamBuilderResult | null>(null);
   const [finalPlayers, setFinalPlayers] = useState<Player[]>([]);
   const [finalTeams, setFinalTeams] = useState<Team[]>([]);
+
+  // Swap modal
+  const [showSwapModal, setShowSwapModal] = useState(false);
 
   // -----------------------------------------------------------------------------
   // Step 1: Import
@@ -322,6 +327,55 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete }: TeamBuilderFlo
       onComplete(finalPlayers, finalTeams);
     }
   }, [onComplete, algorithmResult, finalPlayers, finalTeams]);
+
+  // Handle player swap (local, no API)
+  const handleSwap = useCallback((
+    team1Id: string,
+    team2Id: string,
+    player1Id: string,
+    player2Id: string,
+    _reason: string
+  ) => {
+    // Find the players
+    const player1 = finalPlayers.find(p => p.id === player1Id);
+    const player2 = finalPlayers.find(p => p.id === player2Id);
+
+    if (!player1 || !player2) return;
+
+    // Update player assignments
+    const updatedPlayers = finalPlayers.map(p => {
+      if (p.id === player1Id) {
+        return { ...p, draftedByTeamId: team2Id };
+      }
+      if (p.id === player2Id) {
+        return { ...p, draftedByTeamId: team1Id };
+      }
+      return p;
+    });
+
+    // Update team rosters
+    const updatedTeams = finalTeams.map(team => {
+      if (team.id === team1Id) {
+        // Remove player1, add player2
+        const newRoster = team.roster.filter(p => p.id !== player1Id);
+        newRoster.push({ ...player2, draftedByTeamId: team1Id });
+        const newTotalScore = newRoster.reduce((sum, p) => sum + p.totalScore, 0);
+        return { ...team, roster: newRoster, totalScore: newTotalScore };
+      }
+      if (team.id === team2Id) {
+        // Remove player2, add player1
+        const newRoster = team.roster.filter(p => p.id !== player2Id);
+        newRoster.push({ ...player1, draftedByTeamId: team2Id });
+        const newTotalScore = newRoster.reduce((sum, p) => sum + p.totalScore, 0);
+        return { ...team, roster: newRoster, totalScore: newTotalScore };
+      }
+      return team;
+    });
+
+    setFinalPlayers(updatedPlayers);
+    setFinalTeams(updatedTeams);
+    setShowSwapModal(false);
+  }, [finalPlayers, finalTeams]);
 
   // -----------------------------------------------------------------------------
   // Render
@@ -776,12 +830,21 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete }: TeamBuilderFlo
 
             {/* Action buttons */}
             <div className="flex justify-between pt-6 border-t border-gray-200 dark:border-gray-700">
-              <button
-                onClick={handleRerun}
-                className="px-6 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-50 dark:hover:bg-gray-700"
-              >
-                Adjust & Re-run
-              </button>
+              <div className="flex gap-3">
+                <button
+                  onClick={handleRerun}
+                  className="px-6 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-50 dark:hover:bg-gray-700"
+                >
+                  Adjust & Re-run
+                </button>
+                <button
+                  onClick={() => setShowSwapModal(true)}
+                  className="px-6 py-2 border border-blue-500 text-blue-600 dark:text-blue-400 rounded-lg font-medium hover:bg-blue-50 dark:hover:bg-blue-900/20 flex items-center gap-2"
+                >
+                  <ArrowLeftRight className="w-4 h-4" />
+                  Swap Players
+                </button>
+              </div>
               <button
                 onClick={handleFinalize}
                 className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold flex items-center gap-2"
@@ -790,6 +853,16 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete }: TeamBuilderFlo
                 Finalize Teams
               </button>
             </div>
+
+            {/* Swap Modal */}
+            {showSwapModal && (
+              <TradeModal
+                teams={finalTeams}
+                players={finalPlayers}
+                onExecuteTrade={handleSwap}
+                onClose={() => setShowSwapModal(false)}
+              />
+            )}
           </div>
         )}
       </div>
