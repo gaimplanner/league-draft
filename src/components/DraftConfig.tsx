@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
-import { ChevronRight, ChevronLeft, ChevronDown, ChevronUp, CheckCircle, AlertCircle, Users, UserCheck } from 'lucide-react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { ChevronRight, ChevronLeft, ChevronDown, ChevronUp, CheckCircle, AlertCircle, Users, UserCheck, Loader2 } from 'lucide-react';
 import { Team, Player, DraftFormat } from '../types';
 import { SimulationModal } from './SimulationModal';
 import { getTeamDisplayName } from '../utils/teamUtils';
@@ -7,7 +7,9 @@ import { getTeamDisplayName } from '../utils/teamUtils';
 interface DraftConfigProps {
   teams: Team[];
   players: Player[];
+  divisionId?: string;
   onConfigComplete: (draftFormat: DraftFormat, draftOrder: string[], resolvedPlayers: Player[]) => void;
+  onTeamsUpdate?: (teams: Team[]) => Promise<void>;
   onBack?: () => void;
 }
 
@@ -49,8 +51,10 @@ function validateDraftOrder(positions: (number | null)[], teamCount: number): Or
 
 // Debounce delay for resorting after position changes (ms)
 const SORT_DEBOUNCE_MS = 800;
+// Debounce delay for auto-saving (ms)
+const AUTO_SAVE_DEBOUNCE_MS = 1500;
 
-export const DraftConfig = ({ teams, players, onConfigComplete, onBack }: DraftConfigProps) => {
+export const DraftConfig = ({ teams, players, divisionId, onConfigComplete, onTeamsUpdate, onBack }: DraftConfigProps) => {
   const [draftFormat, setDraftFormat] = useState<DraftFormat | null>(null);
   // Store position by team ID (immediate updates for input display)
   const [teamPositions, setTeamPositions] = useState<Record<string, number | null>>({});
@@ -58,6 +62,8 @@ export const DraftConfig = ({ teams, players, onConfigComplete, onBack }: DraftC
   const [sortPositions, setSortPositions] = useState<Record<string, number | null>>({});
   const [showSimulation, setShowSimulation] = useState(false);
   const [showRulesPanel, setShowRulesPanel] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sortTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Compute resolved players with lockedToRound set for coach's kids with conflicts
@@ -125,14 +131,55 @@ export const DraftConfig = ({ teams, players, onConfigComplete, onBack }: DraftC
     setSortPositions(initial);
   }, [teams]);
 
-  // Cleanup timeout on unmount
+  // Cleanup timeouts on unmount
   useEffect(() => {
     return () => {
       if (sortTimeoutRef.current) {
         clearTimeout(sortTimeoutRef.current);
       }
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
     };
   }, []);
+
+  // Load saved draft format from localStorage
+  useEffect(() => {
+    if (divisionId) {
+      const savedFormat = localStorage.getItem(`draft-format-${divisionId}`);
+      if (savedFormat && ['straight', 'snake', 'recalculated'].includes(savedFormat)) {
+        setDraftFormat(savedFormat as DraftFormat);
+      }
+    }
+  }, [divisionId]);
+
+  // Auto-save teams when positions change (debounced)
+  const saveTeamPositions = useCallback(async (positions: Record<string, number | null>) => {
+    if (!onTeamsUpdate) return;
+
+    // Build updated teams with new draft positions
+    const updatedTeams = teams.map(team => ({
+      ...team,
+      draftPosition: positions[team.id] ?? 0,
+    }));
+
+    try {
+      setIsSaving(true);
+      await onTeamsUpdate(updatedTeams);
+    } catch (err) {
+      console.error('Failed to auto-save draft order:', err);
+    } finally {
+      setIsSaving(false);
+    }
+  }, [teams, onTeamsUpdate]);
+
+  // Save draft format to localStorage when it changes
+  const handleFormatChange = useCallback((format: DraftFormat) => {
+    setDraftFormat(format);
+    if (divisionId) {
+      localStorage.setItem(`draft-format-${divisionId}`, format);
+    }
+  }, [divisionId]);
 
   const coachKids = resolvedPlayers.filter((p) => p.isCoachKid);
 
@@ -167,9 +214,12 @@ export const DraftConfig = ({ teams, players, onConfigComplete, onBack }: DraftC
 
   // Order teams by sum of top 2 coach's kids scores (lowest first)
   const handleOrderByCoachKids = () => {
-    // Clear any pending sort timeout
+    // Clear any pending timeouts
     if (sortTimeoutRef.current) {
       clearTimeout(sortTimeoutRef.current);
+    }
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
     }
 
     // Calculate score for each team (sum of top 2 coach's kids by score)
@@ -190,6 +240,9 @@ export const DraftConfig = ({ teams, players, onConfigComplete, onBack }: DraftC
     // Update both immediately
     setTeamPositions(newPositions);
     setSortPositions(newPositions);
+
+    // Auto-save immediately for intentional action
+    saveTeamPositions(newPositions);
   };
 
   // Find sibling groups (pairs of players linked as siblings)
@@ -234,7 +287,7 @@ export const DraftConfig = ({ teams, players, onConfigComplete, onBack }: DraftC
     return pairs.map(p => p.id);
   }, [teams, teamPositions, validation.valid]);
 
-  // Handle position change for a team (with debounced sorting)
+  // Handle position change for a team (with debounced sorting and auto-save)
   const handlePositionChange = (teamId: string, value: string) => {
     const num = parseInt(value);
     const newPositions = {
@@ -252,6 +305,14 @@ export const DraftConfig = ({ teams, players, onConfigComplete, onBack }: DraftC
     sortTimeoutRef.current = setTimeout(() => {
       setSortPositions(newPositions);
     }, SORT_DEBOUNCE_MS);
+
+    // Debounce the auto-save
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+    saveTimeoutRef.current = setTimeout(() => {
+      saveTeamPositions(newPositions);
+    }, AUTO_SAVE_DEBOUNCE_MS);
   };
 
   // Check if a position has a duplicate
@@ -262,9 +323,12 @@ export const DraftConfig = ({ teams, players, onConfigComplete, onBack }: DraftC
 
   // Randomize draft order using Fisher-Yates shuffle
   const handleRandomizeOrder = () => {
-    // Clear any pending sort timeout
+    // Clear any pending timeouts
     if (sortTimeoutRef.current) {
       clearTimeout(sortTimeoutRef.current);
+    }
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
     }
 
     const teamIds = [...teams.map(t => t.id)];
@@ -284,6 +348,9 @@ export const DraftConfig = ({ teams, players, onConfigComplete, onBack }: DraftC
     // Update both immediately for randomize (intentional action)
     setTeamPositions(newPositions);
     setSortPositions(newPositions);
+
+    // Auto-save immediately for intentional action
+    saveTeamPositions(newPositions);
   };
 
   const handleStart = () => {
@@ -497,7 +564,7 @@ export const DraftConfig = ({ teams, players, onConfigComplete, onBack }: DraftC
                     name="format"
                     value={format.value}
                     checked={draftFormat === format.value}
-                    onChange={(e) => setDraftFormat(e.target.value as DraftFormat)}
+                    onChange={(e) => handleFormatChange(e.target.value as DraftFormat)}
                     className="accent-blue-600"
                   />
                   <div className="flex items-baseline gap-2">
@@ -512,9 +579,17 @@ export const DraftConfig = ({ teams, players, onConfigComplete, onBack }: DraftC
           {/* Draft Order */}
           <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
             <div className="flex justify-between items-center mb-2">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-                Draft Order
-              </h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  Draft Order
+                </h2>
+                {isSaving && (
+                  <span className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    Saving...
+                  </span>
+                )}
+              </div>
               <div className="inline-flex rounded-md border border-gray-300 dark:border-gray-600 overflow-hidden">
                 {canOrderByCoachKids && (
                   <button

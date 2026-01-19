@@ -965,7 +965,14 @@ function App() {
           <DraftConfig
             teams={teams}
             players={players}
+            divisionId={activeDivision?.id}
             onConfigComplete={handleConfigComplete}
+            onTeamsUpdate={async (updatedTeams) => {
+              setTeams(updatedTeams);
+              if (activeDivision && isApiMode()) {
+                await saveTeamsToApi(activeDivision.id, updatedTeams);
+              }
+            }}
             onBack={() => handleGoBack('config')}
           />
         )}
