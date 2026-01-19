@@ -14,7 +14,7 @@ from .helpers import (
     json_response,
     parse_json_body,
     require_auth,
-    get_league_from_request,
+    get_organization_from_request,
 )
 
 
@@ -23,7 +23,7 @@ from .helpers import (
 @require_auth
 def players_list_create(request):
     """List players or create a new one."""
-    league = get_league_from_request(request)
+    organization = get_organization_from_request(request)
 
     if request.method == "GET":
         # Get players, optionally filtered by division
@@ -33,9 +33,9 @@ def players_list_create(request):
         if division_id:
             queryset = queryset.filter(division_id=division_id)
 
-        # Apply league filtering for non-master-admins
-        if request.user.role != "master_admin" and league:
-            queryset = queryset.filter(division__league=league)
+        # Apply organization filtering for non-master-admins
+        if request.user.role != "master_admin" and organization:
+            queryset = queryset.filter(division__organization=organization)
         elif request.user.role != "master_admin":
             queryset = Player.objects.none()
 
@@ -53,8 +53,8 @@ def players_list_create(request):
     try:
         if request.user.role == "master_admin":
             division = Division.objects.get(id=division_id)
-        elif league:
-            division = Division.objects.get(id=division_id, league=league)
+        elif organization:
+            division = Division.objects.get(id=division_id, organization=organization)
         else:
             return json_response({"error": "Division not found"}, status=404)
     except Division.DoesNotExist:
@@ -94,13 +94,13 @@ def players_list_create(request):
 @require_auth
 def player_detail(request, pk):
     """Retrieve, update, or delete a player."""
-    league = get_league_from_request(request)
+    organization = get_organization_from_request(request)
 
     try:
         if request.user.role == "master_admin":
             player = Player.objects.get(id=pk)
-        elif league:
-            player = Player.objects.get(id=pk, division__league=league)
+        elif organization:
+            player = Player.objects.get(id=pk, division__organization=organization)
         else:
             return json_response({"error": "Not found"}, status=404)
     except Player.DoesNotExist:
@@ -154,7 +154,7 @@ def player_detail(request, pk):
 @require_auth
 def players_bulk_create(request):
     """Bulk create players."""
-    league = get_league_from_request(request)
+    organization = get_organization_from_request(request)
 
     data, parse_error = parse_json_body(request)
     if parse_error:
@@ -170,8 +170,8 @@ def players_bulk_create(request):
     try:
         if request.user.role == "master_admin":
             division = Division.objects.get(id=division_id)
-        elif league:
-            division = Division.objects.get(id=division_id, league=league)
+        elif organization:
+            division = Division.objects.get(id=division_id, organization=organization)
         else:
             return json_response({"error": "Division not found"}, status=404)
     except Division.DoesNotExist:
@@ -276,7 +276,7 @@ def players_bulk_create(request):
 @require_auth
 def players_delete_by_division(request):
     """Delete all players in a division."""
-    league = get_league_from_request(request)
+    organization = get_organization_from_request(request)
 
     division_id = request.GET.get("division_id")
     if not division_id:
@@ -289,8 +289,8 @@ def players_delete_by_division(request):
     try:
         if request.user.role == "master_admin":
             division = Division.objects.get(id=division_id)
-        elif league:
-            division = Division.objects.get(id=division_id, league=league)
+        elif organization:
+            division = Division.objects.get(id=division_id, organization=organization)
         else:
             return json_response({"error": "Division not found"}, status=404)
     except Division.DoesNotExist:

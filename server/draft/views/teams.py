@@ -12,7 +12,7 @@ from .helpers import (
     json_response,
     parse_json_body,
     require_auth,
-    get_league_from_request,
+    get_organization_from_request,
 )
 
 
@@ -21,7 +21,7 @@ from .helpers import (
 @require_auth
 def teams_list_create(request):
     """List teams or create a new one."""
-    league = get_league_from_request(request)
+    organization = get_organization_from_request(request)
 
     if request.method == "GET":
         # Get teams, optionally filtered by division
@@ -31,9 +31,9 @@ def teams_list_create(request):
         if division_id:
             queryset = queryset.filter(division_id=division_id)
 
-        # Apply league filtering for non-master-admins
-        if request.user.role != "master_admin" and league:
-            queryset = queryset.filter(division__league=league)
+        # Apply organization filtering for non-master-admins
+        if request.user.role != "master_admin" and organization:
+            queryset = queryset.filter(division__organization=organization)
         elif request.user.role != "master_admin":
             queryset = Team.objects.none()
 
@@ -65,13 +65,13 @@ def teams_list_create(request):
 @require_auth
 def team_detail(request, pk):
     """Retrieve or update a team."""
-    league = get_league_from_request(request)
+    organization = get_organization_from_request(request)
 
     try:
         if request.user.role == "master_admin":
             team = Team.objects.get(id=pk)
-        elif league:
-            team = Team.objects.get(id=pk, division__league=league)
+        elif organization:
+            team = Team.objects.get(id=pk, division__organization=organization)
         else:
             return json_response({"error": "Not found"}, status=404)
     except Team.DoesNotExist:
@@ -111,7 +111,7 @@ def team_detail(request, pk):
 @require_auth
 def teams_bulk_update(request):
     """Bulk update teams."""
-    league = get_league_from_request(request)
+    organization = get_organization_from_request(request)
 
     data, parse_error = parse_json_body(request)
     if parse_error:
@@ -135,8 +135,8 @@ def teams_bulk_update(request):
         try:
             if request.user.role == "master_admin":
                 team = Team.objects.get(id=team_id, division_id=division_id)
-            elif league:
-                team = Team.objects.get(id=team_id, division_id=division_id, division__league=league)
+            elif organization:
+                team = Team.objects.get(id=team_id, division_id=division_id, division__organization=organization)
             else:
                 continue
         except Team.DoesNotExist:
@@ -159,13 +159,13 @@ def teams_bulk_update(request):
 @require_auth
 def team_assign_coach_kid(request, pk):
     """Assign a player as coach's kid."""
-    league = get_league_from_request(request)
+    organization = get_organization_from_request(request)
 
     try:
         if request.user.role == "master_admin":
             team = Team.objects.get(id=pk)
-        elif league:
-            team = Team.objects.get(id=pk, division__league=league)
+        elif organization:
+            team = Team.objects.get(id=pk, division__organization=organization)
         else:
             return json_response({"error": "Not found"}, status=404)
     except Team.DoesNotExist:
@@ -203,14 +203,14 @@ def team_assign_coach_kid(request, pk):
 @require_auth
 def team_remove_coach_kid(request, pk, player_id):
     """Remove coach's kid assignment."""
-    league = get_league_from_request(request)
+    organization = get_organization_from_request(request)
 
     # Verify team access
     try:
         if request.user.role == "master_admin":
             team = Team.objects.get(id=pk)
-        elif league:
-            team = Team.objects.get(id=pk, division__league=league)
+        elif organization:
+            team = Team.objects.get(id=pk, division__organization=organization)
         else:
             return json_response({"error": "Not found"}, status=404)
     except Team.DoesNotExist:

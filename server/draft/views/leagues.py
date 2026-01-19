@@ -11,7 +11,11 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_http_methods
 
-from ..models import League, LeagueMembership, LeagueInvitation
+from ..models import Organization, OrganizationMembership, OrganizationInvitation
+# Legacy aliases for this file
+League = Organization
+LeagueMembership = OrganizationMembership
+LeagueInvitation = OrganizationInvitation
 from ..transformers import transform_league_member, transform_invitation
 from ..input_validators import (
     validate_invitation_data,
@@ -60,13 +64,13 @@ def league_members_list(request, league_id):
         return error
 
     # Verify user is a member
-    if not LeagueMembership.objects.filter(user=request.user, league=league).exists():
+    if not LeagueMembership.objects.filter(user=request.user, organization=league).exists():
         return json_response(
             {"error": "You are not a member of this league"},
             status=403
         )
 
-    memberships = LeagueMembership.objects.filter(league=league).select_related("user")
+    memberships = LeagueMembership.objects.filter(organization=league).select_related("user")
     return json_response([transform_league_member(m) for m in memberships])
 
 
@@ -84,7 +88,7 @@ def league_member_remove(request, league_id, user_id):
         return error
 
     try:
-        membership = LeagueMembership.objects.get(league=league, user_id=user_id)
+        membership = LeagueMembership.objects.get(organization=league, user_id=user_id)
     except LeagueMembership.DoesNotExist:
         return json_response({"error": "Member not found"}, status=404)
 
@@ -97,7 +101,7 @@ def league_member_remove(request, league_id, user_id):
 
     # Prevent removing last admin
     if membership.role == "admin":
-        admin_count = LeagueMembership.objects.filter(league=league, role="admin").count()
+        admin_count = LeagueMembership.objects.filter(organization=league, role="admin").count()
         if admin_count <= 1:
             return json_response(
                 {"error": "Cannot remove the last admin"},
@@ -122,7 +126,7 @@ def league_member_update_role(request, league_id, user_id):
         return error
 
     try:
-        membership = LeagueMembership.objects.get(league=league, user_id=user_id)
+        membership = LeagueMembership.objects.get(organization=league, user_id=user_id)
     except LeagueMembership.DoesNotExist:
         return json_response({"error": "Member not found"}, status=404)
 
@@ -138,7 +142,7 @@ def league_member_update_role(request, league_id, user_id):
 
     # Prevent demoting self if last admin
     if membership.user == request.user and membership.role == "admin" and new_role != "admin":
-        admin_count = LeagueMembership.objects.filter(league=league, role="admin").count()
+        admin_count = LeagueMembership.objects.filter(organization=league, role="admin").count()
         if admin_count <= 1:
             return json_response(
                 {"error": "Cannot demote yourself as the last admin"},
@@ -170,7 +174,7 @@ def league_invitations_list_create(request, league_id):
 
     if request.method == "GET":
         invitations = LeagueInvitation.objects.filter(
-            league=league,
+            organization=league,
             accepted_at__isnull=True,
             is_link_invite=False,
         ).select_related("invited_by")
@@ -193,7 +197,7 @@ def league_invitations_list_create(request, league_id):
     role = cleaned["role"]
 
     # Check if already a member
-    if LeagueMembership.objects.filter(league=league, user__email__iexact=email).exists():
+    if LeagueMembership.objects.filter(organization=league, user__email__iexact=email).exists():
         return json_response(
             {"error": "This user is already a member of the league"},
             status=400
@@ -201,7 +205,7 @@ def league_invitations_list_create(request, league_id):
 
     # Check for existing pending invitation
     existing = LeagueInvitation.objects.filter(
-        league=league,
+        organization=league,
         email__iexact=email,
         accepted_at__isnull=True,
     ).first()
@@ -214,7 +218,7 @@ def league_invitations_list_create(request, league_id):
     # Create invitation
     token = secrets.token_urlsafe(32)
     invitation = LeagueInvitation.objects.create(
-        league=league,
+        organization=league,
         email=email,
         token=token,
         invited_by=request.user,
@@ -270,7 +274,7 @@ def league_invitation_cancel(request, league_id, pk):
         return error
 
     try:
-        invitation = LeagueInvitation.objects.get(id=pk, league=league)
+        invitation = LeagueInvitation.objects.get(id=pk, organization=league)
     except LeagueInvitation.DoesNotExist:
         return json_response({"error": "Invitation not found"}, status=404)
 
@@ -301,7 +305,7 @@ def accept_invitation(request):
 
     if league:
         # Join via link
-        if LeagueMembership.objects.filter(user=request.user, league=league).exists():
+        if LeagueMembership.objects.filter(user=request.user, organization=league).exists():
             return json_response(
                 {"error": "You are already a member of this league"},
                 status=400
@@ -309,7 +313,7 @@ def accept_invitation(request):
 
         LeagueMembership.objects.create(
             user=request.user,
-            league=league,
+            organization=league,
             role="member",
         )
         return json_response({

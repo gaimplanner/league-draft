@@ -13,7 +13,10 @@ from django.utils.text import slugify
 from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
 from django.views.decorators.http import require_http_methods
 
-from ..models import League, LeagueMembership
+from ..models import Organization, OrganizationMembership
+# Legacy aliases
+League = Organization
+LeagueMembership = OrganizationMembership
 from ..transformers import transform_user
 from ..input_validators import (
     validate_register_data,
@@ -93,7 +96,7 @@ def register_view(request):
     if league:
         LeagueMembership.objects.create(
             user=user,
-            league=league,
+            organization=league,
             role="admin",
         )
 

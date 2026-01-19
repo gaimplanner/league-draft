@@ -1,52 +1,61 @@
 """
-Management command to create Demo League with seed data.
+Management command to create Demo Organization with seed data.
 """
 
 from django.core.management.base import BaseCommand
-from draft.models import League, User, Division, Team
+from draft.models import Organization, OrganizationMembership, User, Division, Team
 
 
 class Command(BaseCommand):
-    help = "Create Demo League with seed data"
+    help = "Create Demo Organization with seed data"
 
     def add_arguments(self, parser):
         parser.add_argument(
             "--reset",
             action="store_true",
-            help="Delete existing Demo League data before creating new data",
+            help="Delete existing Demo Organization data before creating new data",
         )
 
     def handle(self, *args, **options):
         if options["reset"]:
             self._reset_demo_data()
 
-        # Create or get Demo League
-        league, created = League.objects.get_or_create(
+        # Create or get Demo Organization
+        org, created = Organization.objects.get_or_create(
             slug="demo",
             defaults={"name": "Demo League"},
         )
         if created:
-            self.stdout.write(self.style.SUCCESS(f"Created league: {league.name}"))
+            self.stdout.write(self.style.SUCCESS(f"Created organization: {org.name}"))
         else:
-            self.stdout.write(f"Found existing league: {league.name}")
+            self.stdout.write(f"Found existing organization: {org.name}")
 
         # Create demo user
         demo_email = "demo@example.com"
-        if not User.objects.filter(email=demo_email).exists():
+        user = User.objects.filter(email=demo_email).first()
+        if not user:
             user = User.objects.create_user(
                 email=demo_email,
                 password="Demo1234!",  # Meets password requirements
                 first_name="Demo",
                 last_name="User",
-                league=league,
             )
             self.stdout.write(self.style.SUCCESS(f"Created user: {user.email}"))
         else:
             self.stdout.write(f"Found existing user: {demo_email}")
 
+        # Create membership if not exists
+        membership, m_created = OrganizationMembership.objects.get_or_create(
+            user=user,
+            organization=org,
+            defaults={"role": "admin"},
+        )
+        if m_created:
+            self.stdout.write(self.style.SUCCESS(f"Created membership for {user.email}"))
+
         # Create sample division
         division, created = Division.objects.get_or_create(
-            league=league,
+            organization=org,
             name="Demo Majors",
             defaults={
                 "preset": "majors",
@@ -72,8 +81,8 @@ class Command(BaseCommand):
 
         self.stdout.write(
             self.style.SUCCESS(
-                "\nDemo League setup complete!\n"
-                f"  League: {league.name} ({league.slug})\n"
+                "\nDemo Organization setup complete!\n"
+                f"  Organization: {org.name} ({org.slug})\n"
                 f"  Login: demo@example.com / Demo1234!"
             )
         )
@@ -81,13 +90,13 @@ class Command(BaseCommand):
     def _reset_demo_data(self):
         """Delete existing demo data."""
         try:
-            league = League.objects.get(slug="demo")
-            # Delete all divisions in the league (cascades to teams, players, etc.)
-            Division.objects.filter(league=league).delete()
-            # Delete all users in the league
-            User.objects.filter(league=league).delete()
-            # Delete the league itself
-            league.delete()
-            self.stdout.write(self.style.WARNING("Deleted existing Demo League data"))
-        except League.DoesNotExist:
-            self.stdout.write("No existing Demo League found to reset")
+            org = Organization.objects.get(slug="demo")
+            # Delete all divisions in the organization (cascades to teams, players, etc.)
+            Division.objects.filter(organization=org).delete()
+            # Delete memberships
+            OrganizationMembership.objects.filter(organization=org).delete()
+            # Delete the organization itself
+            org.delete()
+            self.stdout.write(self.style.WARNING("Deleted existing Demo Organization data"))
+        except Organization.DoesNotExist:
+            self.stdout.write("No existing Demo Organization found to reset")
