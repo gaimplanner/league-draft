@@ -77,7 +77,13 @@ export const useDraft = (_divisionId?: string) => {
       draftStateId.current = null;
     }
 
-    setPhase(division.phase);
+    // If draft is complete, ensure we go to complete phase even if division.phase
+    // hasn't been updated yet (race condition fix)
+    if (division.draftState?.isDraftComplete) {
+      setPhase('complete');
+    } else {
+      setPhase(division.phase);
+    }
   }, []);
 
   const resetDraft = useCallback(async (
