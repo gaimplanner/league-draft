@@ -178,6 +178,11 @@ def division_reset(request, pk):
     # Delete draft state if exists
     if hasattr(division, "draft_state"):
         division.draft_state.delete()
+        # Clear cached relationship so transform_division doesn't see deleted object
+        try:
+            del division.draft_state
+        except AttributeError:
+            pass
 
     # Reset all players
     division.players.update(
