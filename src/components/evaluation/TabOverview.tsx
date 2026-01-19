@@ -63,7 +63,7 @@ export function TabOverview({
                 Registration Data Found
               </span>
               <span className="text-blue-600 dark:text-blue-400 ml-2">
-                ({workbook.registrationData.length} players with coach/teammate requests, school, grade)
+                ({workbook.registrationData.length} rows in sheet, will be matched to {workbook.allBibs.length} eval players)
               </span>
             </div>
           </div>
