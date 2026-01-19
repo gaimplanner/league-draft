@@ -321,9 +321,10 @@ function App() {
               managerName: teamName,
               assistantName: teamColumnAssignment.assistantName,
             });
-            // Track assistant coach name if present
-            if (teamColumnAssignment.assistantName && !team.assistantCoaches.includes(teamColumnAssignment.assistantName)) {
-              team.assistantCoaches.push(teamColumnAssignment.assistantName);
+            // Set head coach and assistant coach names
+            team.headCoach = teamName;
+            if (teamColumnAssignment.assistantName) {
+              team.assistantCoach = teamColumnAssignment.assistantName;
             }
           } else {
             // Legacy format - process individual player assignments
@@ -341,6 +342,8 @@ function App() {
                   if (!team!.coachKids.includes(player.id)) {
                     team!.coachKids.push(player.id);
                   }
+                  // Set head coach from manager's last name
+                  team!.headCoach = player.lastName;
                 } else {
                   updatedPlayers[playerIndex] = {
                     ...player,
@@ -350,9 +353,8 @@ function App() {
                   if (!team!.coachKids.includes(player.id)) {
                     team!.coachKids.push(player.id);
                   }
-                  if (!team!.assistantCoaches.includes(player.lastName)) {
-                    team!.assistantCoaches.push(player.lastName);
-                  }
+                  // Set assistant coach (single value, last one wins)
+                  team!.assistantCoach = player.lastName;
                 }
               }
             });
@@ -405,15 +407,17 @@ function App() {
   const handleEvaluationComplete = async (
     importedPlayers: Player[],
     teamNames: string[],
-    assistantCoaches: string[][]
+    assistantCoaches: string[]
   ) => {
     if (!activeDivision) return;
 
     // Update teams with names and assistant coaches from evaluation
+    // Team name is the head coach's name, which also serves as the display name
     let updatedTeams = activeDivision.teams.map((team, i) => ({
       ...team,
       name: teamNames[i] || team.name,
-      assistantCoaches: assistantCoaches[i] || [],
+      headCoach: teamNames[i] || team.headCoach,
+      assistantCoach: assistantCoaches[i] || team.assistantCoach,
     }));
 
     // Build mapping from temporary team IDs (team-0, team-1) to actual division team IDs

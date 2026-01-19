@@ -169,6 +169,7 @@ export const parseCSVWithMapping = (
 
     // Parse draft rules (optional)
     const isCoachKid = getMappedValue('isCoachKid').toUpperCase() === 'TRUE';
+    const coachTeam = getMappedValue('coachTeam') || undefined; // Team name for coach kid assignment
     const sibling = getMappedValue('sibling') || undefined;
 
     // Parse team assignments from CSV (for coach import)
@@ -177,6 +178,17 @@ export const parseCSVWithMapping = (
 
     // Generate player ID here so we can use it for coach assignments
     const playerId = `player-${index}-${Date.now()}`;
+
+    // If player is marked as coach kid with a team assignment, record it
+    if (isCoachKid && coachTeam) {
+      coachAssignments.push({
+        playerIndex: index,
+        playerId,
+        playerName: fullName,
+        teamName: coachTeam,
+        role: 'manager', // Treat as manager's kid for team matching
+      });
+    }
 
     // Parse new "Team" column format: "Manager, Assistant"
     const teamColumn = getMappedValue('teamColumn');

@@ -245,12 +245,13 @@ function transformTeamFromApi(data: Record<string, unknown>): Team {
     // Extract divisionId from API response (Issue #27 - data shape mismatch)
     divisionId: (data.division_id as string | null) ?? undefined,
     name: data.name as string,
+    headCoach: (data.head_coach as string) || '',
+    assistantCoach: (data.assistant_coach as string) || '',
     roster,
     // Use safe parsing for numeric fields (Issue #3)
     totalScore: safeParseNumber(data.total_score),
     draftPosition: safeParseNumber(data.draft_position),
     coachKids,
-    assistantCoaches: data.assistant_coaches as string[] || [],
     ageBreakdown: data.age_breakdown as Record<string, number> || {},
   };
 }
@@ -844,16 +845,18 @@ export const api = {
     id: string,
     updates: Partial<{
       name: string;
+      headCoach: string;
+      assistantCoach: string;
       draftPosition: number;
-      assistantCoaches: string[];
       totalScore: number;
       ageBreakdown: Record<string, number>;
     }>
   ): Promise<Team> {
     const body: Record<string, unknown> = {};
     if (updates.name !== undefined) body.name = updates.name;
+    if (updates.headCoach !== undefined) body.head_coach = updates.headCoach;
+    if (updates.assistantCoach !== undefined) body.assistant_coach = updates.assistantCoach;
     if (updates.draftPosition !== undefined) body.draft_position = updates.draftPosition;
-    if (updates.assistantCoaches !== undefined) body.assistant_coaches = updates.assistantCoaches;
     if (updates.totalScore !== undefined) body.total_score = updates.totalScore;
     if (updates.ageBreakdown !== undefined) body.age_breakdown = updates.ageBreakdown;
 

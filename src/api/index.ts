@@ -80,8 +80,9 @@ export async function saveTeamsToApi(_divisionId: string, teams: Team[]): Promis
     for (const team of teams) {
       const result = await api.updateTeam(team.id, {
         name: team.name,
+        headCoach: team.headCoach,
+        assistantCoach: team.assistantCoach,
         draftPosition: team.draftPosition,
-        assistantCoaches: team.assistantCoaches,
       });
       updated.push(result);
     }

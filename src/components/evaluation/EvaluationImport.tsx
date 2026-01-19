@@ -9,7 +9,7 @@ import { DetectionModal } from './DetectionModal';
 
 interface EvaluationImportProps {
   teamCount: number;
-  onComplete: (players: Player[], teamNames: string[], assistantCoaches: string[][]) => void;
+  onComplete: (players: Player[], teamNames: string[], assistantCoaches: string[]) => void;
   onCancel: () => void;
 }
 

@@ -19,7 +19,7 @@ interface PlayerReviewTableProps {
   onSiblingLink: (playerId: string, siblingId: string) => void;
   onSiblingUnlink: (playerId: string) => void;
   onTeamNameUpdate: (teamId: string, name: string) => void;
-  onAssistantCoachesUpdate: (teamId: string, assistantCoaches: string) => void;
+  onAssistantCoachUpdate: (teamId: string, assistantCoach: string) => void;
   onRunAutoDetection: () => void;
 }
 
@@ -44,7 +44,7 @@ export function PlayerReviewTable({
   onSiblingLink,
   onSiblingUnlink,
   onTeamNameUpdate,
-  onAssistantCoachesUpdate,
+  onAssistantCoachUpdate,
   onRunAutoDetection,
 }: PlayerReviewTableProps) {
   const [search, setSearch] = useState('');
@@ -301,14 +301,14 @@ export function PlayerReviewTable({
 
                     {/* Team Body */}
                     <div className="px-3 py-2 space-y-2">
-                      {/* Assistant Coaches */}
+                      {/* Assistant Coach */}
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">Asst.</span>
                         <input
                           type="text"
-                          value={team.assistantCoaches.join(', ')}
-                          onChange={(e) => onAssistantCoachesUpdate(team.id, e.target.value)}
-                          placeholder="Names..."
+                          value={team.assistantCoach || ''}
+                          onChange={(e) => onAssistantCoachUpdate(team.id, e.target.value)}
+                          placeholder="Name..."
                           className="flex-1 px-2 py-1 text-xs border border-gray-200 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 placeholder-gray-400"
                         />
                       </div>

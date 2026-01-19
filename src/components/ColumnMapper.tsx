@@ -41,6 +41,7 @@ const OPTIONAL_FIELDS: { field: AppField; label: string }[] = [
   { field: 'officialAdjust', label: 'Official Adjust' },
   // Draft rules
   { field: 'isCoachKid', label: "Coach's Kid" },
+  { field: 'coachTeam', label: "Coach's Team" },
   { field: 'sibling', label: 'Sibling' },
   // Team assignments from CSV
   { field: 'teamColumn', label: 'Team (Manager, Assistant)' },
@@ -141,12 +142,14 @@ export const ColumnMapper = ({ csvData, onMappingComplete }: ColumnMapperProps) 
       ) {
         autoMapping[header] = 'isDNE';
       } else if (
-        (lowerHeader.includes('coach') && !lowerHeader.includes('manager') && !lowerHeader.includes('assistant')) ||
+        (lowerHeader.includes('coach') && lowerHeader.includes('kid') && !lowerHeader.includes('team')) ||
         lowerHeader === 'coaches kid' ||
         lowerHeader === 'coach kid' ||
         lowerHeader === 'coachkid'
       ) {
         autoMapping[header] = 'isCoachKid';
+      } else if (lowerHeader === 'coach team' || lowerHeader === 'coachteam' || lowerHeader === "coach's team") {
+        autoMapping[header] = 'coachTeam';
       } else if (lowerHeader.includes('sibling') || lowerHeader.includes('brother') || lowerHeader.includes('sister')) {
         autoMapping[header] = 'sibling';
       } else if (lowerHeader === 'team' || lowerHeader === 'teams') {

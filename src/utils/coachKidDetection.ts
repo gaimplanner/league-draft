@@ -58,24 +58,20 @@ export function autoDetectCoachKids(
         continue; // Don't check assistant coaches if already matched head coach
       }
 
-      // Check if matches any assistant coach
-      if (team.assistantCoaches && team.assistantCoaches.length > 0) {
-        for (const assistantCoach of team.assistantCoaches) {
-          const assistantLastName = assistantCoach.trim().toLowerCase();
-          if (!assistantLastName) continue;
+      // Check if matches assistant coach
+      if (team.assistantCoach) {
+        const assistantLastName = team.assistantCoach.trim().toLowerCase();
 
-          // EXACT match only (case-insensitive)
-          if (lastName === assistantLastName) {
-            matches.push({
-              playerId: player.id,
-              teamId: team.id,
-              playerName: player.name,
-              teamName: team.name,
-              reason: `Last name "${player.lastName}" matches assistant coach "${assistantCoach}" on team "${team.name}"`,
-              alreadyMarked: alreadyMarkedForThisTeam,
-            });
-            break; // Found a match, no need to check other assistant coaches
-          }
+        // EXACT match only (case-insensitive)
+        if (lastName === assistantLastName) {
+          matches.push({
+            playerId: player.id,
+            teamId: team.id,
+            playerName: player.name,
+            teamName: team.name,
+            reason: `Last name "${player.lastName}" matches assistant coach "${team.assistantCoach}" on team "${team.name}"`,
+            alreadyMarked: alreadyMarkedForThisTeam,
+          });
         }
       }
     }

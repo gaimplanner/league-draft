@@ -51,8 +51,8 @@ export function useEvaluationImport(initialTeamCount: number = 8) {
   const [teamNames, setTeamNames] = useState<string[]>(() =>
     Array.from({ length: initialTeamCount }, (_, i) => `Team ${i + 1}`)
   );
-  const [assistantCoaches, setAssistantCoaches] = useState<string[][]>(() =>
-    Array.from({ length: initialTeamCount }, () => [])
+  const [assistantCoaches, setAssistantCoaches] = useState<string[]>(() =>
+    Array.from({ length: initialTeamCount }, () => '')
   );
 
   // Detection modal state
@@ -79,7 +79,7 @@ export function useEvaluationImport(initialTeamCount: number = 8) {
     setState(initialState);
     setTeamCount(initialTeamCount);
     setTeamNames(Array.from({ length: initialTeamCount }, (_, i) => `Team ${i + 1}`));
-    setAssistantCoaches(Array.from({ length: initialTeamCount }, () => []));
+    setAssistantCoaches(Array.from({ length: initialTeamCount }, () => ''));
     setShowDetectionModal(false);
     setCoachKidMatches([]);
     setSiblingMatches([]);
@@ -268,7 +268,7 @@ export function useEvaluationImport(initialTeamCount: number = 8) {
     // Adjust assistant coaches array
     setAssistantCoaches(prev => {
       if (newCount > prev.length) {
-        return [...prev, ...Array.from({ length: newCount - prev.length }, () => [])];
+        return [...prev, ...Array.from({ length: newCount - prev.length }, () => '')];
       } else if (newCount < prev.length) {
         return prev.slice(0, newCount);
       }
@@ -294,17 +294,12 @@ export function useEvaluationImport(initialTeamCount: number = 8) {
   }, []);
 
   /**
-   * Update assistant coaches for a team (comma-separated string)
+   * Update assistant coach for a team (single value)
    */
-  const updateAssistantCoaches = useCallback((index: number, coachesText: string) => {
-    const coaches = coachesText
-      .split(',')
-      .map(name => name.trim())
-      .filter(name => name.length > 0);
-
+  const updateAssistantCoaches = useCallback((index: number, coachName: string) => {
     setAssistantCoaches(prev => {
       const updated = [...prev];
-      updated[index] = coaches;
+      updated[index] = coachName.trim();
       return updated;
     });
   }, []);
@@ -346,7 +341,7 @@ export function useEvaluationImport(initialTeamCount: number = 8) {
     // Detect coach's kids by matching last names to team names and assistant coaches
     for (let teamIndex = 0; teamIndex < teamNames.length; teamIndex++) {
       const headCoach = teamNames[teamIndex].trim().toLowerCase();
-      const assistants = assistantCoaches[teamIndex] || [];
+      const assistant = (assistantCoaches[teamIndex] || '').trim().toLowerCase();
 
       // Skip default team names like "Team 1"
       if (headCoach.startsWith('team ')) continue;
@@ -371,19 +366,16 @@ export function useEvaluationImport(initialTeamCount: number = 8) {
           continue;
         }
 
-        // Check assistant coaches
-        for (const assistant of assistants) {
-          if (assistant.trim().toLowerCase() === lastName) {
-            matches.push({
-              bib: player.bib,
-              playerName: `${player.firstName} ${player.lastName}`,
-              teamIndex,
-              teamName: teamNames[teamIndex],
-              reason: `Last name "${player.lastName}" matches assistant coach "${assistant}"`,
-              alreadyMarked,
-            });
-            break;
-          }
+        // Check assistant coach match
+        if (assistant && assistant === lastName) {
+          matches.push({
+            bib: player.bib,
+            playerName: `${player.firstName} ${player.lastName}`,
+            teamIndex,
+            teamName: teamNames[teamIndex],
+            reason: `Last name "${player.lastName}" matches assistant coach "${assistantCoaches[teamIndex]}"`,
+            alreadyMarked,
+          });
         }
       }
     }

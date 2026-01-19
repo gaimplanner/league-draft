@@ -85,13 +85,13 @@ def team_detail(request, pk):
     if parse_error:
         return json_response({"error": parse_error}, status=400)
 
-    # During/after draft, only allow name and assistant_coaches changes
+    # During/after draft, only allow name and coach changes
     if team.division.phase in ("draft", "complete"):
-        allowed_fields = {"name", "assistant_coaches"}
+        allowed_fields = {"name", "head_coach", "assistant_coach"}
         requested_fields = set(data.keys())
         if not requested_fields.issubset(allowed_fields):
             return json_response(
-                {"error": "During draft, only team name and assistant coaches can be modified."},
+                {"error": "During draft, only team name and coaches can be modified."},
                 status=400
             )
 

@@ -445,17 +445,17 @@ def validate_team_update_data(data: Dict[str, Any]) -> Tuple[Optional[Dict], Opt
     if "name" in data:
         cleaned["name"] = str(data["name"]).strip() if data["name"] else ""
 
+    if "head_coach" in data:
+        cleaned["head_coach"] = str(data["head_coach"]).strip() if data["head_coach"] else ""
+
+    if "assistant_coach" in data:
+        cleaned["assistant_coach"] = str(data["assistant_coach"]).strip() if data["assistant_coach"] else ""
+
     if "draft_position" in data:
         try:
             cleaned["draft_position"] = int(data["draft_position"])
         except (ValueError, TypeError):
             errors["draft_position"] = ["Draft position must be an integer"]
-
-    if "assistant_coaches" in data:
-        if not isinstance(data["assistant_coaches"], list):
-            errors["assistant_coaches"] = ["Assistant coaches must be a list"]
-        else:
-            cleaned["assistant_coaches"] = data["assistant_coaches"]
 
     if "total_score" in data:
         try:

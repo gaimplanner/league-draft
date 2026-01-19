@@ -94,9 +94,10 @@ def transform_team(team, include_roster: bool = True) -> dict:
         "id": str(team.id),
         "division_id": str(team.division_id),
         "name": team.name,
+        "head_coach": team.head_coach,
+        "assistant_coach": team.assistant_coach,
         "draft_position": team.draft_position,
         "total_score": team.total_score,
-        "assistant_coaches": team.assistant_coaches,
         "age_breakdown": team.age_breakdown,
     }
 

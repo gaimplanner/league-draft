@@ -81,15 +81,12 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
     onTeamsUpdate(updatedTeams);
   };
 
-  const handleAssistantCoachesUpdate = (teamId: string, assistantCoachesText: string) => {
-    // Security: Sanitize each assistant coach name
-    const assistantCoaches = assistantCoachesText
-      .split(',')
-      .map(name => sanitizeTeamName(name)) // Reuse sanitization function
-      .filter(name => name.length > 0);
+  const handleAssistantCoachUpdate = (teamId: string, assistantCoachText: string) => {
+    // Security: Sanitize assistant coach name
+    const assistantCoach = sanitizeTeamName(assistantCoachText);
 
     const updatedTeams = teams.map(t =>
-      t.id === teamId ? { ...t, assistantCoaches } : t
+      t.id === teamId ? { ...t, assistantCoach } : t
     );
     onTeamsUpdate(updatedTeams);
   };
@@ -373,6 +370,24 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
           </div>
         </div>
 
+        {/* Re-import notice - show when players have pre-assigned coach kids or siblings */}
+        {(players.some(p => p.isCoachKid) || players.some(p => p.siblingId || p.sibling)) && (
+          <div className="mb-4 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-300 dark:border-yellow-700 rounded-lg">
+            <div className="flex items-start gap-3">
+              <CheckCircle2 className="w-5 h-5 text-yellow-600 dark:text-yellow-400 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="font-medium text-yellow-800 dark:text-yellow-200">
+                  Coach Kid and Sibling Assignments Detected
+                </p>
+                <p className="text-sm text-yellow-700 dark:text-yellow-300 mt-1">
+                  We found {players.filter(p => p.isCoachKid).length} coach's kid{players.filter(p => p.isCoachKid).length !== 1 ? 's' : ''} and {players.filter(p => p.siblingId || p.sibling).length} sibling assignment{players.filter(p => p.siblingId || p.sibling).length !== 1 ? 's' : ''} from your import.
+                  Please review and confirm these assignments in the Teams panel below, or use "Find Coaches' Kids and Siblings" to re-detect.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Legend for bumped rounds */}
         {players.some(p => p.lockedToRound && p.lockedToRound !== p.projectedRound) && (
           <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg flex items-center gap-2 text-sm text-blue-700 dark:text-blue-300">
@@ -397,7 +412,7 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
           onSiblingLink={handleSiblingLink}
           onSiblingUnlink={handleSiblingUnlink}
           onTeamNameUpdate={handleTeamNameUpdate}
-          onAssistantCoachesUpdate={handleAssistantCoachesUpdate}
+          onAssistantCoachUpdate={handleAssistantCoachUpdate}
           onRunAutoDetection={handleAutoDetect}
         />
       </div>

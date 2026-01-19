@@ -344,12 +344,13 @@ class Team(models.Model):
     division = models.ForeignKey(
         Division, on_delete=models.CASCADE, related_name="teams"
     )
-    name = models.CharField(max_length=100, blank=True)
+    name = models.CharField(max_length=100, blank=True)  # Display/sponsor name
     draft_position = models.IntegerField()
     total_score = models.FloatField(default=0)
 
-    # Assistant coaches stored as JSON array
-    assistant_coaches = models.JSONField(default=list)
+    # Coach assignments - persist with division
+    head_coach = models.CharField(max_length=100, blank=True)  # Manager's name
+    assistant_coach = models.CharField(max_length=100, blank=True)  # Single assistant
 
     # Age breakdown stored as JSON: {"10": 3, "11": 4, "12": 2}
     age_breakdown = models.JSONField(default=dict)

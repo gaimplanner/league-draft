@@ -9,14 +9,14 @@ interface PlayerSummaryTableProps {
   totalWeight: number;
   teamCount: number;
   teamNames: string[];
-  assistantCoaches: string[][];
+  assistantCoaches: string[];
   onAdjustChange: (bib: string, adjustment: number) => void;
   onWeightChange: (fieldId: string, weight: number) => void;
   onToggleField: (fieldId: string, enabled: boolean) => void;
   onResetWeights: () => void;
   onTeamCountChange: (count: number) => void;
   onTeamNameChange: (index: number, name: string) => void;
-  onAssistantCoachesChange: (index: number, coaches: string) => void;
+  onAssistantCoachesChange: (index: number, coach: string) => void;
   onToggleCoachKid: (bib: string, isCoachKid: boolean, teamIndex: number | null) => void;
   onSetCoachKidTeam: (bib: string, teamIndex: number | null) => void;
   onRunAutoDetection: () => void;
@@ -290,13 +290,13 @@ export function PlayerSummaryTable({
                       </div>
                       <div>
                         <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
-                          Assistant Coaches (comma-separated)
+                          Assistant Coach
                         </label>
                         <input
                           type="text"
-                          value={(assistantCoaches[index] || []).join(', ')}
+                          value={assistantCoaches[index] || ''}
                           onChange={(e) => onAssistantCoachesChange(index, e.target.value)}
-                          placeholder="Smith, Jones"
+                          placeholder="Smith"
                           className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400"
                         />
                       </div>

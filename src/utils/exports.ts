@@ -29,13 +29,11 @@ export function generatePublicRosters(teams: Team[], _players: Player[]): string
         .map(p => `  ${p.lastName}, ${p.firstName}`)
         .join('\n');
 
-      // Get manager name (team name is usually the coach's last name)
-      const managerName = team.name ? `Coach ${team.name}` : 'TBD';
+      // Get manager name (headCoach or fallback to team name)
+      const managerName = team.headCoach ? `Coach ${team.headCoach}` : (team.name ? `Coach ${team.name}` : 'TBD');
 
-      // Get assistant coaches
-      const assistantCoaches = team.assistantCoaches && team.assistantCoaches.length > 0
-        ? team.assistantCoaches.map(c => `Coach ${c}`).join(', ')
-        : 'None';
+      // Get assistant coach
+      const assistantCoach = team.assistantCoach ? `Coach ${team.assistantCoach}` : 'None';
 
       return `
 ${headerLine}
@@ -43,7 +41,7 @@ ${headerLine}
 ${headerLine}
 
 Manager: ${managerName}
-Assistant Coaches: ${assistantCoaches}
+Assistant Coach: ${assistantCoach}
 
 ROSTER:
 ${dividerLine}
@@ -347,4 +345,87 @@ export async function copyToClipboard(content: string): Promise<boolean> {
       return false;
     }
   }
+}
+
+/**
+ * Export players to CSV format that preserves coach kid and sibling mappings.
+ * This export can be re-imported with mappings pre-populated for user confirmation.
+ *
+ * Columns:
+ * - BIB, First Name, Last Name, Age, Total Score, Proj. Round
+ * - Coach Kid (TRUE/FALSE), Coach Team (team name for coach kid assignment)
+ * - Sibling (sibling's full name)
+ * - All-Star (TRUE/FALSE), DNE (TRUE/FALSE)
+ */
+export function exportPlayersForReimport(players: Player[], teams: Team[]): string {
+  const headers = [
+    'BIB',
+    'First Name',
+    'Last Name',
+    'Little League Age',
+    'Total Score',
+    'Fielding Subtotal',
+    'Hitting Subtotal',
+    'Pitching Subtotal',
+    'Catch Score',
+    'Running Score',
+    'Official Adjust',
+    'Coach Kid',
+    'Coach Team',
+    'Sibling',
+    'All-Star',
+    'DNE',
+  ];
+
+  const rows = players.map(player => {
+    // Find the team name if this player is a coach kid
+    let coachTeamName = '';
+    if (player.isCoachKid && player.coachTeamId) {
+      const team = teams.find(t => t.id === player.coachTeamId);
+      coachTeamName = team ? (team.headCoach || team.name || '') : '';
+    }
+
+    // Find sibling name
+    let siblingName = '';
+    if (player.siblingId) {
+      const sibling = players.find(p => p.id === player.siblingId);
+      siblingName = sibling ? sibling.name : (player.sibling || '');
+    } else if (player.sibling) {
+      siblingName = player.sibling;
+    }
+
+    return [
+      player.bib,
+      player.firstName,
+      player.lastName,
+      player.littleLeagueAge.toString(),
+      player.totalScore.toFixed(1),
+      player.fieldingSubtotal.toFixed(1),
+      player.hittingSubtotal.toFixed(1),
+      player.pitchingSubtotal.toFixed(1),
+      player.catchScore.toFixed(1),
+      player.runningScore.toFixed(1),
+      player.officialAdjust.toFixed(1),
+      player.isCoachKid ? 'TRUE' : 'FALSE',
+      coachTeamName,
+      siblingName,
+      player.isAllStar ? 'TRUE' : 'FALSE',
+      player.isDNE ? 'TRUE' : 'FALSE',
+    ];
+  });
+
+  // CSV escape function
+  const escapeCSV = (value: string): string => {
+    if (value.includes(',') || value.includes('"') || value.includes('\n')) {
+      return `"${value.replace(/"/g, '""')}"`;
+    }
+    return value;
+  };
+
+  const csvContent = [
+    headers.map(escapeCSV).join(','),
+    ...rows.map(row => row.map(escapeCSV).join(','))
+  ].join('\n');
+
+  return csvContent;
 }

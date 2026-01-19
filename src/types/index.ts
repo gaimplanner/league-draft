@@ -195,12 +195,13 @@ export interface Player {
 export interface Team {
   id: string;
   divisionId?: string; // ID of the division this team belongs to (from API)
-  name: string;
+  name: string; // Display/sponsor name (optional)
+  headCoach: string; // Manager's name - persists with division
+  assistantCoach: string; // Single assistant - persists with division
   roster: Player[];
   totalScore: number;
   draftPosition: number; // 1-8
   coachKids: string[]; // player IDs
-  assistantCoaches: string[]; // assistant coach last names
   ageBreakdown: Record<string, number>; // { "10": 3, "11": 4, "12": 2 } - count per age (string keys from JSON)
 }
 
@@ -297,6 +298,7 @@ export type AppField =
   | 'isAllStar'
   | 'isDNE'
   | 'isCoachKid'
+  | 'coachTeam' // Team name for coach kid assignment (headCoach name)
   | 'sibling'
   | 'managerTeam'
   | 'assistantTeam'
@@ -441,11 +443,12 @@ export function createInitialDivision(
   const teams: Team[] = Array.from({ length: teamCount }, (_, i) => ({
     id: `${id}-team-${i + 1}`,
     name: '', // Empty to show placeholder text
+    headCoach: '',
+    assistantCoach: '',
     roster: [],
     totalScore: 0,
     draftPosition: i + 1,
     coachKids: [],
-    assistantCoaches: [],
     ageBreakdown: {},
   }));
 
