@@ -662,6 +662,9 @@ export function useEvaluationImport(initialTeamCount: number = 8) {
     .filter((fw) => fw.enabled)
     .reduce((sum, fw) => sum + fw.weight, 0);
 
+  // Get registration data from parsed workbook
+  const registrationData = state.workbook?.registrationData || null;
+
   return {
     // State
     state,
@@ -670,6 +673,7 @@ export function useEvaluationImport(initialTeamCount: number = 8) {
     teamCount,
     teamNames,
     assistantCoaches,
+    registrationData,
 
     // Detection modal state
     showDetectionModal,

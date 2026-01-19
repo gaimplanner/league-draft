@@ -11,6 +11,7 @@ import {
   ArrowLeftRight,
 } from 'lucide-react';
 import { Division, Player, Team } from '../types';
+import { RegistrationRecord } from '../types/evaluation';
 import { EvaluationImport } from './evaluation';
 import { NameMatchResolver, TeamBuilderResults } from './teamBuilder';
 import { TradeModal } from './TradeModal';
@@ -92,10 +93,60 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete }: TeamBuilderFlo
   // Step 1: Import
   // -----------------------------------------------------------------------------
 
+  // Helper to convert RegistrationRecord to RegistrationData format
+  const convertRegistrationRecords = useCallback((
+    records: RegistrationRecord[],
+    evalPlayerList: { bib: string; firstName: string; lastName: string }[]
+  ) => {
+    // Convert to RegistrationData format expected by teamBuilderParser
+    const rows = records.map(r => ({
+      firstName: r.firstName,
+      lastName: r.lastName,
+      fullName: `${r.firstName} ${r.lastName}`,
+      coachRequest: r.coachRequest || '',
+      teammateRequests: r.teammateRequests || [],
+      school: r.school || '',
+      grade: r.grade ?? null,
+      address: r.address || '',
+      rawTeammateRequestsString: (r.teammateRequests || []).join(', '),
+    }));
+
+    setRegistrationData({ rows, headers: [], warnings: [] });
+
+    // Match registration to eval data
+    const matched: RegistrationPlayer[] = rows.map((row, index) => {
+      const match = matchRegistrationToEval(
+        { ...row, fullName: `${row.firstName} ${row.lastName}` },
+        evalPlayerList
+      );
+      match.registrationIndex = index;
+
+      return {
+        registrationIndex: index,
+        firstName: row.firstName,
+        lastName: row.lastName,
+        fullName: row.fullName,
+        coachRequest: row.coachRequest,
+        teammateRequests: row.teammateRequests,
+        school: row.school,
+        grade: row.grade,
+        address: row.address,
+        match,
+        evalBib: match.evalBib,
+      };
+    });
+
+    setRegistrationPlayers(matched);
+    setUnmatchedPlayers(matched.filter(p => p.match.matchType === 'none'));
+
+    console.log(`Converted ${records.length} registration records, ${matched.filter(p => p.match.matchType !== 'none').length} matched`);
+  }, []);
+
   const handleEvalImportComplete = useCallback((
     players: Player[],
     teamNames: string[],
-    assistantCoaches: string[]
+    assistantCoaches: string[],
+    parsedRegistrationData?: RegistrationRecord[]
   ) => {
     setEvalPlayers(players);
 
@@ -108,9 +159,20 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete }: TeamBuilderFlo
     }));
     setTeams(updatedTeams);
 
+    // If registration data was parsed from the same Excel file, process it
+    if (parsedRegistrationData && parsedRegistrationData.length > 0) {
+      const evalPlayerList = players.map(p => ({
+        bib: p.bib,
+        firstName: p.firstName,
+        lastName: p.lastName,
+      }));
+      convertRegistrationRecords(parsedRegistrationData, evalPlayerList);
+      console.log(`Auto-loaded ${parsedRegistrationData.length} registration records from Excel`);
+    }
+
     // Move to resolution step
     setStep('resolution');
-  }, [division.teams]);
+  }, [division.teams, convertRegistrationRecords]);
 
   // Handle Registration Data file upload (separate from eval)
   const handleRegistrationFileUpload = useCallback(async (file: File) => {

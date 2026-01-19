@@ -241,11 +241,23 @@ export const DEFAULT_CATEGORY_WEIGHTS: CategoryWeight[] = [
   { category: 'baserunning', weight: 10, enabled: true },
 ];
 
+// Registration data from "Registration Data" tab
+export interface RegistrationRecord {
+  firstName: string;
+  lastName: string;
+  coachRequest?: string;       // Coach preference
+  teammateRequests?: string[]; // Friend requests (parsed from comma-separated)
+  school?: string;             // School name
+  grade?: number;              // Grade level
+  address?: string;            // Street address for sibling detection
+}
+
 // Imported workbook structure
 export interface ImportedWorkbook {
   filename: string;
   tabs: ImportedTab[];
   allBibs: string[]; // Union of all BIB#s found across tabs
+  registrationData?: RegistrationRecord[]; // Optional registration data
 }
 
 // Single tab data

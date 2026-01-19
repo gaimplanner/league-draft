@@ -5,6 +5,7 @@ import {
   TabRow,
   findTabConfig,
   EvaluationTabConfig,
+  RegistrationRecord,
 } from '../types/evaluation';
 
 /**
@@ -21,9 +22,17 @@ export async function parseExcelFile(file: File): Promise<ImportedWorkbook> {
 
         const tabs: ImportedTab[] = [];
         const allBibs = new Set<string>();
+        let registrationData: RegistrationRecord[] | undefined;
 
         for (const sheetName of workbook.SheetNames) {
           const sheet = workbook.Sheets[sheetName];
+
+          // Check for Registration Data tab
+          if (sheetName.toLowerCase() === 'registration data') {
+            registrationData = parseRegistrationDataSheet(sheet);
+            continue;
+          }
+
           const parsedTab = parseSheet(sheet, sheetName);
 
           if (parsedTab) {
@@ -44,6 +53,7 @@ export async function parseExcelFile(file: File): Promise<ImportedWorkbook> {
             }
             return a.localeCompare(b);
           }),
+          registrationData,
         });
       } catch (error) {
         reject(new Error(`Failed to parse Excel file: ${error}`));
@@ -56,6 +66,109 @@ export async function parseExcelFile(file: File): Promise<ImportedWorkbook> {
 
     reader.readAsArrayBuffer(file);
   });
+}
+
+/**
+ * Parse Registration Data tab which contains coach requests, teammate requests, school info
+ */
+function parseRegistrationDataSheet(sheet: XLSX.WorkSheet): RegistrationRecord[] {
+  const data = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' }) as unknown[][];
+  if (data.length < 2) return [];
+
+  const headers = (data[0] as string[]).map(h => String(h).toLowerCase().trim());
+
+  // Find column indices
+  const firstNameIdx = headers.findIndex(h => h.includes('first') && h.includes('name'));
+  const lastNameIdx = headers.findIndex(h => h.includes('last') && h.includes('name'));
+  const coachRequestIdx = headers.findIndex(h => h.includes('coach') && h.includes('request'));
+  const teammateRequestIdx = headers.findIndex(h => h.includes('teammate') && h.includes('request'));
+  const gradeIdx = headers.findIndex(h => h.includes('grade'));
+  const addressIdx = headers.findIndex(h => h.includes('street') && h.includes('address'));
+
+  // Find school - look for "school name", prefer column without "little league" prefix
+  let schoolIdx = headers.findIndex(h =>
+    h.includes('school') && h.includes('name') && !h.includes('little league')
+  );
+  if (schoolIdx === -1) {
+    // Fallback to any "school name" column (like "Little League School Name")
+    schoolIdx = headers.findIndex(h => h.includes('school') && h.includes('name'));
+  }
+
+  // Log detected columns for debugging
+  console.log('Registration Data columns detected:', {
+    firstNameIdx,
+    lastNameIdx,
+    coachRequestIdx,
+    teammateRequestIdx,
+    schoolIdx,
+    gradeIdx,
+    addressIdx,
+    headers: headers.join(' | '),
+  });
+
+  if (firstNameIdx === -1 || lastNameIdx === -1) {
+    console.warn('Registration Data: Could not find First Name / Last Name columns');
+    return [];
+  }
+
+  const records: RegistrationRecord[] = [];
+
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i] as (string | number)[];
+    const firstName = row[firstNameIdx] ? String(row[firstNameIdx]).trim() : '';
+    const lastName = row[lastNameIdx] ? String(row[lastNameIdx]).trim() : '';
+
+    if (!firstName && !lastName) continue;
+
+    const record: RegistrationRecord = {
+      firstName,
+      lastName,
+    };
+
+    // Coach request
+    if (coachRequestIdx !== -1 && row[coachRequestIdx]) {
+      record.coachRequest = String(row[coachRequestIdx]).trim();
+    }
+
+    // Teammate requests - parse comma/space separated
+    if (teammateRequestIdx !== -1 && row[teammateRequestIdx]) {
+      const rawRequests = String(row[teammateRequestIdx]).trim();
+      if (rawRequests) {
+        // Split by comma, then trim each name
+        record.teammateRequests = rawRequests
+          .split(/[,;]/)
+          .map(name => name.trim())
+          .filter(name => name.length > 0);
+      }
+    }
+
+    // School
+    if (schoolIdx !== -1 && row[schoolIdx]) {
+      const schoolValue = String(row[schoolIdx]).trim();
+      // Extract just the school name if it includes address
+      const schoolMatch = schoolValue.match(/^([^,]+)/);
+      record.school = schoolMatch ? schoolMatch[1].trim() : schoolValue;
+    }
+
+    // Grade - extract number from string like "1st", "2nd", "3rd"
+    if (gradeIdx !== -1 && row[gradeIdx]) {
+      const gradeStr = String(row[gradeIdx]).trim();
+      const gradeMatch = gradeStr.match(/(\d+)/);
+      if (gradeMatch) {
+        record.grade = parseInt(gradeMatch[1]);
+      }
+    }
+
+    // Address for sibling detection
+    if (addressIdx !== -1 && row[addressIdx]) {
+      record.address = String(row[addressIdx]).trim();
+    }
+
+    records.push(record);
+  }
+
+  console.log(`Parsed ${records.length} registration records`);
+  return records;
 }
 
 /**

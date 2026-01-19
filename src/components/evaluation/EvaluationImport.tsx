@@ -1,5 +1,6 @@
 import { ArrowLeft } from 'lucide-react';
 import { Player } from '../../types';
+import { RegistrationRecord } from '../../types/evaluation';
 import { useEvaluationImport } from '../../hooks/useEvaluationImport';
 import { WorkbookUpload } from './WorkbookUpload';
 import { TabOverview } from './TabOverview';
@@ -9,7 +10,7 @@ import { DetectionModal } from './DetectionModal';
 
 interface EvaluationImportProps {
   teamCount: number;
-  onComplete: (players: Player[], teamNames: string[], assistantCoaches: string[]) => void;
+  onComplete: (players: Player[], teamNames: string[], assistantCoaches: string[], registrationData?: RegistrationRecord[]) => void;
   onCancel: () => void;
 }
 
@@ -49,11 +50,12 @@ export function EvaluationImport({ teamCount, onComplete, onCancel }: Evaluation
     toggleAllStar,
     getPlayers,
     exportCSV,
+    registrationData,
   } = useEvaluationImport(teamCount);
 
   const handleContinueToDraft = () => {
     const players = getPlayers();
-    onComplete(players, teamNames, assistantCoaches);
+    onComplete(players, teamNames, assistantCoaches, registrationData || undefined);
   };
 
   const handleBack = () => {
