@@ -173,11 +173,22 @@ export function PlayerReviewTable({
       const numValue = parseFloat(editValue);
 
       // Security: Validate score bounds
-      if (isNaN(numValue) || numValue < 0 || numValue > 100) {
-        // Invalid value - revert to original, don't update
-        setEditingCell(null);
-        setEditValue('');
-        return;
+      // Adjustment field allows negative values and has different bounds
+      if (editingCell.field === 'officialAdjust') {
+        if (isNaN(numValue) || numValue < -50 || numValue > 50) {
+          // Invalid adjustment - revert to original, don't update
+          setEditingCell(null);
+          setEditValue('');
+          return;
+        }
+      } else {
+        // Score fields: must be 0-100
+        if (isNaN(numValue) || numValue < 0 || numValue > 100) {
+          // Invalid value - revert to original, don't update
+          setEditingCell(null);
+          setEditValue('');
+          return;
+        }
       }
 
       // Round to 2 decimal places to prevent floating point issues
