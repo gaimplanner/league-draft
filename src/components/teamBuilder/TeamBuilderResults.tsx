@@ -272,10 +272,8 @@ export const TeamBuilderResults = ({
           {result.teamSummaries.map((team) => {
             const isExpanded = expandedTeamId === team.teamId;
             const teamPlayers = getTeamPlayers(team.teamId);
-            const balanceClass = Math.abs(team.meanDeltaPercent) <= 10
+            const balanceClass = team.meanDeltaPercent >= 0
               ? 'text-green-600 dark:text-green-400'
-              : Math.abs(team.meanDeltaPercent) <= 15
-              ? 'text-amber-600 dark:text-amber-400'
               : 'text-red-600 dark:text-red-400';
 
             return (
