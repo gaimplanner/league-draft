@@ -85,6 +85,16 @@ def team_detail(request, pk):
     if parse_error:
         return json_response({"error": parse_error}, status=400)
 
+    # During/after draft, only allow name and assistant_coaches changes
+    if team.division.phase in ("draft", "complete"):
+        allowed_fields = {"name", "assistant_coaches"}
+        requested_fields = set(data.keys())
+        if not requested_fields.issubset(allowed_fields):
+            return json_response(
+                {"error": "During draft, only team name and assistant coaches can be modified."},
+                status=400
+            )
+
     cleaned, errors = validate_team_update_data(data)
     if errors:
         return json_response(errors, status=400)
@@ -161,6 +171,13 @@ def team_assign_coach_kid(request, pk):
     except Team.DoesNotExist:
         return json_response({"error": "Not found"}, status=404)
 
+    # Protect during/after draft
+    if team.division.phase in ("draft", "complete"):
+        return json_response(
+            {"error": "Cannot modify coach's kids during or after draft. Use Reset Draft to start over."},
+            status=400
+        )
+
     data, parse_error = parse_json_body(request)
     if parse_error:
         return json_response({"error": parse_error}, status=400)
@@ -191,13 +208,20 @@ def team_remove_coach_kid(request, pk, player_id):
     # Verify team access
     try:
         if request.user.role == "master_admin":
-            Team.objects.get(id=pk)
+            team = Team.objects.get(id=pk)
         elif league:
-            Team.objects.get(id=pk, division__league=league)
+            team = Team.objects.get(id=pk, division__league=league)
         else:
             return json_response({"error": "Not found"}, status=404)
     except Team.DoesNotExist:
         return json_response({"error": "Not found"}, status=404)
+
+    # Protect during/after draft
+    if team.division.phase in ("draft", "complete"):
+        return json_response(
+            {"error": "Cannot modify coach's kids during or after draft. Use Reset Draft to start over."},
+            status=400
+        )
 
     try:
         player = Player.objects.get(id=player_id)

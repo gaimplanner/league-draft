@@ -11,13 +11,31 @@ class DraftService:
     @classmethod
     @transaction.atomic
     def start_draft(
-        cls, division_id: UUID, draft_format: str, draft_order: list[UUID]
+        cls, division_id: UUID, draft_format: str, draft_order: list[UUID],
+        force_restart: bool = False
     ) -> DraftState:
-        """Start a new draft for a division."""
-        # Delete any existing draft state (allows re-starting draft)
-        DraftState.objects.filter(division_id=division_id).delete()
+        """Start a new draft for a division.
 
+        Args:
+            division_id: Division to start draft for
+            draft_format: 'straight', 'snake', or 'recalculated'
+            draft_order: List of team UUIDs in draft order
+            force_restart: If True, allows restarting an in-progress draft.
+                          If False (default), raises error if draft exists with picks.
+        """
         division = Division.objects.get(id=division_id)
+
+        # Check for existing draft state
+        existing_draft = DraftState.objects.filter(division_id=division_id).first()
+        if existing_draft:
+            picks_count = existing_draft.picks.count()
+            if picks_count > 0 and not force_restart:
+                raise ValueError(
+                    f"Draft already in progress with {picks_count} picks made. "
+                    "Use 'Reset Draft' to start over, or resume the existing draft."
+                )
+            # Delete existing draft state (either no picks or force_restart=True)
+            existing_draft.delete()
         current_team = Team.objects.get(id=draft_order[0])
 
         # Convert UUIDs to strings for JSON storage

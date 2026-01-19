@@ -134,6 +134,16 @@ def division_detail(request, pk):
                 status=403
             )
 
+    # Protect division during/after draft - only allow phase changes
+    if division.phase in ("draft", "complete"):
+        allowed_fields = {"phase"}
+        requested_fields = set(data.keys())
+        if not requested_fields.issubset(allowed_fields):
+            return json_response(
+                {"error": f"Cannot modify division during or after draft. Only phase changes allowed. Use Reset Draft to start over."},
+                status=400
+            )
+
     cleaned, errors = validate_division_update_data(data)
     if errors:
         return json_response(errors, status=400)

@@ -60,6 +60,13 @@ def players_list_create(request):
     except Division.DoesNotExist:
         return json_response({"error": "Division not found"}, status=404)
 
+    # Protect division during/after draft
+    if division.phase in ("draft", "complete"):
+        return json_response(
+            {"error": "Cannot add players during or after draft. Use Reset Draft to start over."},
+            status=400
+        )
+
     cleaned, errors = validate_player_data(data)
     if errors:
         return json_response(errors, status=400)
@@ -103,10 +110,22 @@ def player_detail(request, pk):
         return json_response(transform_player(player))
 
     if request.method == "DELETE":
+        # Protect division during/after draft
+        if player.division.phase in ("draft", "complete"):
+            return json_response(
+                {"error": "Cannot delete players during or after draft. Use Reset Draft to start over."},
+                status=400
+            )
         player.delete()
         return json_response({}, status=204)
 
     # PUT or PATCH - update
+    # Protect division during/after draft
+    if player.division.phase in ("draft", "complete"):
+        return json_response(
+            {"error": "Cannot modify players during or after draft. Use Reset Draft to start over."},
+            status=400
+        )
     data, parse_error = parse_json_body(request)
     if parse_error:
         return json_response({"error": parse_error}, status=400)
@@ -157,6 +176,13 @@ def players_bulk_create(request):
             return json_response({"error": "Division not found"}, status=404)
     except Division.DoesNotExist:
         return json_response({"error": "Division not found"}, status=404)
+
+    # Protect division during/after draft
+    if division.phase in ("draft", "complete"):
+        return json_response(
+            {"error": "Cannot add players during or after draft. Use Reset Draft to start over."},
+            status=400
+        )
 
     created_players = []
 
@@ -262,13 +288,20 @@ def players_delete_by_division(request):
     # Verify division access
     try:
         if request.user.role == "master_admin":
-            Division.objects.get(id=division_id)
+            division = Division.objects.get(id=division_id)
         elif league:
-            Division.objects.get(id=division_id, league=league)
+            division = Division.objects.get(id=division_id, league=league)
         else:
             return json_response({"error": "Division not found"}, status=404)
     except Division.DoesNotExist:
         return json_response({"error": "Division not found"}, status=404)
+
+    # Protect division during/after draft
+    if division.phase in ("draft", "complete"):
+        return json_response(
+            {"error": "Cannot delete players during or after draft. Use Reset Draft to start over."},
+            status=400
+        )
 
     count, _ = Player.objects.filter(division_id=division_id).delete()
     return json_response({"deleted": count})
