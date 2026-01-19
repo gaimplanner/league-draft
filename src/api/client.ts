@@ -722,6 +722,7 @@ export const api = {
     maxPerAge?: number;
     scoringWeights?: ScoringWeights;
     scoringMode?: ScoringMode;
+    coaches?: Array<{ headCoach: string; assistantCoach: string }>;
   }): Promise<Division> {
     const response = await fetchWithCSRFRetry(`${API_BASE_URL}/divisions/`, {
       ...getDefaultOptions('POST'),
@@ -736,6 +737,7 @@ export const api = {
         max_per_age: params.maxPerAge ?? 0,
         scoring_weights: params.scoringWeights,
         scoring_mode: params.scoringMode ?? 'pre-weighted',
+        coaches: params.coaches,
       }),
     });
     const data = await handleResponse<Record<string, unknown>>(response);

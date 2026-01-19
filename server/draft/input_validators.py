@@ -333,6 +333,11 @@ def validate_division_create_data(data: Dict[str, Any]) -> Tuple[Optional[Dict],
     if mode not in valid_division_modes:
         errors["mode"] = [f"Invalid mode. Must be one of: {', '.join(valid_division_modes)}"]
 
+    # Coaches (optional array of { headCoach, assistantCoach })
+    coaches = data.get("coaches", [])
+    if coaches and not isinstance(coaches, list):
+        errors["coaches"] = ["Coaches must be a list"]
+
     if errors:
         return None, errors
 
@@ -346,6 +351,7 @@ def validate_division_create_data(data: Dict[str, Any]) -> Tuple[Optional[Dict],
         "scoring_weights": data.get("scoring_weights", {}),
         "scoring_mode": scoring_mode,
         "mode": mode,
+        "coaches": coaches if isinstance(coaches, list) else [],
     }, None
 
 

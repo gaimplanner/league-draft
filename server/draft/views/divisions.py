@@ -64,6 +64,7 @@ def divisions_list_create(request):
     age_range = cleaned.pop("age_range")
     scoring_weights = cleaned.pop("scoring_weights", None) or DEFAULT_SCORING_WEIGHTS
     team_count = cleaned["team_count"]
+    coaches = cleaned.pop("coaches", None) or []
 
     # Determine if this is an org division or personal division
     # If user has an org selected AND is admin, create org division
@@ -111,11 +112,16 @@ def divisions_list_create(request):
             **cleaned,
         )
 
-    # Create teams
+    # Create teams with optional coach info
     for i in range(team_count):
+        coach_info = coaches[i] if i < len(coaches) else {}
+        head_coach = coach_info.get("head_coach", "") or coach_info.get("headCoach", "")
+        assistant_coach = coach_info.get("assistant_coach", "") or coach_info.get("assistantCoach", "")
         Team.objects.create(
             division=division,
-            name="",
+            name=head_coach,  # Team name defaults to head coach name
+            head_coach=head_coach,
+            assistant_coach=assistant_coach,
             draft_position=i + 1,
         )
 

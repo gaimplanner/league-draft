@@ -260,6 +260,7 @@ function App() {
     ageRange: DivisionAgeRange;
     enforceAgeLimit: boolean;
     maxPerAge: number;
+    coaches: Array<{ headCoach: string; assistantCoach: string }>;
   }) => {
     const division = await createDivision(config);
     if (division) {

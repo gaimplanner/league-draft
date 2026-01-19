@@ -1,6 +1,11 @@
 import { useState } from 'react';
-import { ArrowLeft, Check, AlertCircle, AlertTriangle, Users, Wand2 } from 'lucide-react';
+import { ArrowLeft, Check, AlertCircle, AlertTriangle, Users, Wand2, ChevronDown, ChevronUp } from 'lucide-react';
 import { DivisionPreset, DIVISION_PRESETS, DivisionAgeRange, DivisionMode } from '../types';
+
+export interface CoachConfig {
+  headCoach: string;
+  assistantCoach: string;
+}
 
 interface DivisionCreatorProps {
   onCancel: () => void;
@@ -12,6 +17,7 @@ interface DivisionCreatorProps {
     ageRange: DivisionAgeRange;
     enforceAgeLimit: boolean;
     maxPerAge: number;
+    coaches: CoachConfig[];
   }) => void;
   existingNames?: string[];
 }
@@ -33,6 +39,10 @@ export const DivisionCreator = ({ onCancel, onCreate, existingNames = [] }: Divi
   const [ageMax, setAgeMax] = useState(12);
   const [enforceAgeLimit, setEnforceAgeLimit] = useState(true);
   const [maxPerAge, setMaxPerAge] = useState(8);
+  const [showCoaches, setShowCoaches] = useState(false);
+  const [coaches, setCoaches] = useState<CoachConfig[]>(() =>
+    Array.from({ length: 10 }, () => ({ headCoach: '', assistantCoach: '' }))
+  );
 
   // Check if name already exists (case-insensitive)
   const nameAlreadyExists = existingNames.some(
@@ -70,6 +80,14 @@ export const DivisionCreator = ({ onCancel, onCreate, existingNames = [] }: Divi
     setStep('mode');
   };
 
+  const updateCoach = (index: number, field: 'headCoach' | 'assistantCoach', value: string) => {
+    setCoaches(prev => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: value };
+      return updated;
+    });
+  };
+
   const handleCreate = () => {
     if (!name.trim() || !selectedPreset || !selectedMode) return;
 
@@ -81,6 +99,7 @@ export const DivisionCreator = ({ onCancel, onCreate, existingNames = [] }: Divi
       ageRange: { min: ageMin, max: ageMax },
       enforceAgeLimit,
       maxPerAge: enforceAgeLimit ? maxPerAge : 0,
+      coaches: coaches.slice(0, teamCount),
     });
   };
 
@@ -304,6 +323,61 @@ export const DivisionCreator = ({ onCancel, onCreate, existingNames = [] }: Divi
                     onChange={(e) => setMaxPerAge(parseInt(e.target.value) || 8)}
                     className="w-24 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
+                </div>
+              )}
+            </div>
+
+            {/* Coaches Section (Collapsible) */}
+            <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setShowCoaches(!showCoaches)}
+                className="w-full px-4 py-3 flex items-center justify-between bg-gray-50 dark:bg-gray-900/50 hover:bg-gray-100 dark:hover:bg-gray-900/70 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <Users className="w-4 h-4 text-gray-500" />
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Team Coaches
+                  </span>
+                  <span className="text-xs text-gray-500 dark:text-gray-500">
+                    (Optional)
+                  </span>
+                </div>
+                {showCoaches ? (
+                  <ChevronUp className="w-4 h-4 text-gray-500" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-gray-500" />
+                )}
+              </button>
+
+              {showCoaches && (
+                <div className="p-4 space-y-3 border-t border-gray-200 dark:border-gray-700">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                    Pre-fill coach names now or add them later during player import.
+                  </p>
+                  <div className="grid gap-3">
+                    {Array.from({ length: teamCount }).map((_, index) => (
+                      <div key={index} className="flex items-center gap-3">
+                        <span className="text-sm font-medium text-gray-500 dark:text-gray-400 w-16">
+                          Team {index + 1}
+                        </span>
+                        <input
+                          type="text"
+                          value={coaches[index]?.headCoach || ''}
+                          onChange={(e) => updateCoach(index, 'headCoach', e.target.value)}
+                          placeholder="Head Coach"
+                          className="flex-1 px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                        <input
+                          type="text"
+                          value={coaches[index]?.assistantCoach || ''}
+                          onChange={(e) => updateCoach(index, 'assistantCoach', e.target.value)}
+                          placeholder="Assistant Coach"
+                          className="flex-1 px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>

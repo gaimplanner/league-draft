@@ -67,6 +67,7 @@ export function useDivisions() {
     ageRange: DivisionAgeRange;
     enforceAgeLimit: boolean;
     maxPerAge: number;
+    coaches?: Array<{ headCoach: string; assistantCoach: string }>;
   }): Promise<Division | null> => {
     // Check for duplicate name
     if (divisionNameExists(config.name)) {
@@ -83,6 +84,7 @@ export function useDivisions() {
         teamCount: config.teamCount,
         enforceAgeLimit: config.enforceAgeLimit,
         maxPerAge: config.maxPerAge,
+        coaches: config.coaches,
       });
 
       // Add to summaries
