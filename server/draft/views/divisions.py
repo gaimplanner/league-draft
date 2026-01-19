@@ -3,6 +3,7 @@ Division views (replaces DRF DivisionViewSet).
 """
 
 from django.db import models
+from django.db.models import Q
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_http_methods
@@ -14,7 +15,7 @@ from .helpers import (
     json_response,
     parse_json_body,
     require_auth,
-    get_league_from_request,
+    get_organization_from_request,
 )
 
 
@@ -33,23 +34,25 @@ DEFAULT_SCORING_WEIGHTS = {
 @require_auth
 def divisions_list_create(request):
     """List divisions or create a new one."""
-    league = get_league_from_request(request)
+    organization = get_organization_from_request(request)
 
     if request.method == "GET":
-        # List divisions
+        # List divisions - include org divisions and personal divisions
         if request.user.role == "master_admin":
             divisions = Division.objects.all()
-        elif league:
-            divisions = Division.objects.for_league(league)
         else:
-            divisions = Division.objects.none()
+            # User sees: org divisions (if in an org) + their personal divisions
+            if organization:
+                divisions = Division.objects.filter(
+                    Q(organization=organization) | Q(owner=request.user)
+                )
+            else:
+                # No org selected - show only personal divisions
+                divisions = Division.objects.filter(owner=request.user)
 
         return json_response([transform_division_summary(d) for d in divisions])
 
     # POST - create division
-    if not league:
-        return json_response({"error": "You must belong to a league to create divisions"}, status=403)
-
     data, parse_error = parse_json_body(request)
     if parse_error:
         return json_response({"error": parse_error}, status=400)
@@ -62,25 +65,51 @@ def divisions_list_create(request):
     scoring_weights = cleaned.pop("scoring_weights", None) or DEFAULT_SCORING_WEIGHTS
     team_count = cleaned["team_count"]
 
-    # Clean up any empty divisions with the same name (in the same league)
+    # Determine if this is an org division or personal division
+    # If user has an org selected AND is admin, create org division
+    # Otherwise, create personal division
+    is_org_division = organization and request.user.is_org_admin(organization)
+
+    # Clean up any empty divisions with the same name
     name = cleaned.get("name")
     if name:
-        empty_divisions = Division.objects.filter(
-            league=league,
-            name__iexact=name,
-        ).annotate(
-            player_count=models.Count("players")
-        ).filter(player_count=0)
+        if is_org_division:
+            empty_divisions = Division.objects.filter(
+                organization=organization,
+                name__iexact=name,
+            ).annotate(
+                player_count=models.Count("players")
+            ).filter(player_count=0)
+        else:
+            empty_divisions = Division.objects.filter(
+                owner=request.user,
+                organization__isnull=True,
+                name__iexact=name,
+            ).annotate(
+                player_count=models.Count("players")
+            ).filter(player_count=0)
         empty_divisions.delete()
 
     # Create division
-    division = Division.objects.create(
-        league=league,
-        age_range_min=age_range["min"],
-        age_range_max=age_range["max"],
-        scoring_weights=scoring_weights,
-        **cleaned,
-    )
+    if is_org_division:
+        division = Division.objects.create(
+            organization=organization,
+            owner=None,
+            age_range_min=age_range["min"],
+            age_range_max=age_range["max"],
+            scoring_weights=scoring_weights,
+            **cleaned,
+        )
+    else:
+        # Personal division
+        division = Division.objects.create(
+            organization=None,
+            owner=request.user,
+            age_range_min=age_range["min"],
+            age_range_max=age_range["max"],
+            scoring_weights=scoring_weights,
+            **cleaned,
+        )
 
     # Create teams
     for i in range(team_count):
@@ -98,16 +127,20 @@ def divisions_list_create(request):
 @require_auth
 def division_detail(request, pk):
     """Retrieve, update, or delete a division."""
-    league = get_league_from_request(request)
+    organization = get_organization_from_request(request)
 
     # Get division with access control
     try:
         if request.user.role == "master_admin":
             division = Division.objects.get(id=pk)
-        elif league:
-            division = Division.objects.get(id=pk, league=league)
         else:
-            return json_response({"error": "Not found"}, status=404)
+            # User can access: org divisions (if member) or their own personal divisions
+            if organization:
+                division = Division.objects.get(
+                    Q(id=pk) & (Q(organization=organization) | Q(owner=request.user))
+                )
+            else:
+                division = Division.objects.get(id=pk, owner=request.user)
     except Division.DoesNotExist:
         return json_response({"error": "Not found"}, status=404)
 
@@ -118,6 +151,14 @@ def division_detail(request, pk):
         return json_response(transform_division_summary(division))
 
     if request.method == "DELETE":
+        # Only owner or org admin can delete
+        can_delete = (
+            request.user.role == "master_admin" or
+            division.owner == request.user or
+            (division.organization and request.user.is_org_admin(division.organization))
+        )
+        if not can_delete:
+            return json_response({"error": "Permission denied"}, status=403)
         division.delete()
         return json_response({}, status=204)
 
@@ -126,13 +167,14 @@ def division_detail(request, pk):
     if parse_error:
         return json_response({"error": parse_error}, status=400)
 
-    # Security: Check if phase is being updated - require admin role
-    if "phase" in data:
-        if request.user.role != "master_admin" and not request.user.is_league_admin(division.league):
-            return json_response(
-                {"error": "Only league admins can change division phase"},
-                status=403
-            )
+    # Check permissions for updates
+    can_update = (
+        request.user.role == "master_admin" or
+        division.owner == request.user or
+        (division.organization and request.user.is_org_admin(division.organization))
+    )
+    if not can_update:
+        return json_response({"error": "Permission denied"}, status=403)
 
     # Protect division during/after draft - only allow phase changes
     if division.phase in ("draft", "complete"):
@@ -140,7 +182,7 @@ def division_detail(request, pk):
         requested_fields = set(data.keys())
         if not requested_fields.issubset(allowed_fields):
             return json_response(
-                {"error": f"Cannot modify division during or after draft. Only phase changes allowed. Use Reset Draft to start over."},
+                {"error": "Cannot modify division during or after draft. Only phase changes allowed. Use Reset Draft to start over."},
                 status=400
             )
 
@@ -164,24 +206,32 @@ def division_detail(request, pk):
 @csrf_protect
 @require_auth
 def division_reset(request, pk):
-    """Reset a division's draft state - admin only."""
-    league = get_league_from_request(request)
+    """Reset a division's draft state - owner or admin only."""
+    organization = get_organization_from_request(request)
 
     # Get division with access control
     try:
         if request.user.role == "master_admin":
             division = Division.objects.get(id=pk)
-        elif league:
-            division = Division.objects.get(id=pk, league=league)
         else:
-            return json_response({"error": "Not found"}, status=404)
+            if organization:
+                division = Division.objects.get(
+                    Q(id=pk) & (Q(organization=organization) | Q(owner=request.user))
+                )
+            else:
+                division = Division.objects.get(id=pk, owner=request.user)
     except Division.DoesNotExist:
         return json_response({"error": "Not found"}, status=404)
 
-    # Verify user is admin of the league
-    if request.user.role != "master_admin" and not request.user.is_league_admin(division.league):
+    # Verify user can reset this division
+    can_reset = (
+        request.user.role == "master_admin" or
+        division.owner == request.user or
+        (division.organization and request.user.is_org_admin(division.organization))
+    )
+    if not can_reset:
         return json_response(
-            {"error": "Only league admins can reset drafts"},
+            {"error": "Only division owner or organization admin can reset drafts"},
             status=403
         )
 

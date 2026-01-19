@@ -4,16 +4,27 @@
 
 export type UserRole = 'master_admin' | 'user';
 
-export type LeagueMembershipRole = 'admin' | 'member';
+// Organization membership roles (coach can view draft, viewer is read-only)
+export type OrganizationMembershipRole = 'admin' | 'coach' | 'viewer';
 
-export interface LeagueMembership {
+// Legacy alias for backwards compatibility
+export type LeagueMembershipRole = OrganizationMembershipRole;
+
+export interface OrganizationMembership {
   id: string;
+  organizationId: string;
+  organizationName: string;
+  organizationSlug: string;
+  role: OrganizationMembershipRole;
+  createdAt: string;
+  // Legacy aliases for backwards compatibility
   leagueId: string;
   leagueName: string;
   leagueSlug: string;
-  role: LeagueMembershipRole;
-  createdAt: string;
 }
+
+// Legacy alias
+export type LeagueMembership = OrganizationMembership;
 
 export interface User {
   id: string;
@@ -21,15 +32,20 @@ export interface User {
   firstName: string;
   lastName: string;
   role: UserRole;
-  leagues: LeagueMembership[];
+  organizations: OrganizationMembership[];
+  // Legacy alias for backwards compatibility
+  leagues: OrganizationMembership[];
 }
 
-export interface League {
+export interface Organization {
   id: string;
   name: string;
   slug: string;
   createdAt: string;
 }
+
+// Legacy alias
+export type League = Organization;
 
 export interface LoginCredentials {
   email: string;
@@ -41,6 +57,9 @@ export interface RegisterData {
   password: string;
   firstName?: string;
   lastName?: string;
+  organizationName?: string;
+  organizationSlug?: string;
+  // Legacy aliases
   leagueName?: string;
   leagueSlug?: string;
 }
@@ -57,23 +76,26 @@ export interface ChangePasswordData {
 }
 
 // -----------------------------------------------------------------------------
-// League Member Types
+// Organization Member Types
 // -----------------------------------------------------------------------------
 
-export interface LeagueMember {
+export interface OrganizationMember {
   id: string;
   userId: string;
   email: string;
   firstName: string;
   lastName: string;
-  role: LeagueMembershipRole;
+  role: OrganizationMembershipRole;
   joinedAt: string;
 }
 
-export interface LeagueInvitation {
+// Legacy alias
+export type LeagueMember = OrganizationMember;
+
+export interface OrganizationInvitation {
   id: string;
   email: string | null;
-  role: LeagueMembershipRole;
+  role: OrganizationMembershipRole;
   invitedByEmail: string;
   isLinkInvite: boolean;
   createdAt: string;
@@ -83,6 +105,9 @@ export interface LeagueInvitation {
   isPending: boolean;
 }
 
+// Legacy alias
+export type LeagueInvitation = OrganizationInvitation;
+
 export interface JoinLinkStatus {
   enabled: boolean;
   token: string | null;
@@ -90,17 +115,23 @@ export interface JoinLinkStatus {
 }
 
 export interface JoinLinkInfo {
-  leagueName: string;
-  leagueSlug: string;
+  organizationName: string;
+  organizationSlug: string;
   type?: 'join_link' | 'email_invitation';
   invitedBy?: string | null;
-  role?: LeagueMembershipRole;
+  role?: OrganizationMembershipRole;
+  // Legacy aliases
+  leagueName?: string;
+  leagueSlug?: string;
 }
 
 export interface AcceptInvitationResult {
   message: string;
-  leagueId: string;
-  leagueName: string;
+  organizationId: string;
+  organizationName: string;
+  // Legacy aliases
+  leagueId?: string;
+  leagueName?: string;
 }
 
 // -----------------------------------------------------------------------------
@@ -347,6 +378,11 @@ export interface Division {
   createdAt: string; // ISO date string
   updatedAt?: string; // ISO date string (from API)
   completedAt?: string; // ISO date string
+
+  // Organization or personal workspace ownership
+  organizationId?: string; // If part of an organization
+  ownerId?: string; // If personal workspace
+  isPersonal: boolean; // True if personal workspace (no organization)
 }
 
 export interface DivisionSummary {
@@ -358,6 +394,11 @@ export interface DivisionSummary {
   phase: AppPhase;
   createdAt: string;
   completedAt?: string;
+
+  // Organization or personal workspace ownership
+  organizationId?: string;
+  ownerId?: string;
+  isPersonal: boolean;
 }
 
 // Preset configurations for common divisions
@@ -424,5 +465,6 @@ export function createInitialDivision(
     scoringMode: 'pre-weighted', // Default to pre-weighted since most CSVs have this format
     phase: 'upload',
     createdAt: new Date().toISOString(),
+    isPersonal: true, // Default to personal workspace
   };
 }

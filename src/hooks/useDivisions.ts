@@ -92,6 +92,9 @@ export function useDivisions() {
         phase: division.phase,
         createdAt: division.createdAt,
         completedAt: division.completedAt,
+        organizationId: division.organizationId,
+        ownerId: division.ownerId,
+        isPersonal: division.isPersonal,
       }]);
       setDivisionIds(prev => [...prev, division.id]);
       setActiveDivision(division);
@@ -160,6 +163,9 @@ export function useDivisions() {
             phase: division.phase,
             createdAt: division.createdAt,
             completedAt: division.completedAt,
+            organizationId: division.organizationId,
+            ownerId: division.ownerId,
+            isPersonal: division.isPersonal,
           } : s
         ));
       } else {

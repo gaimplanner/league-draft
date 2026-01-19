@@ -256,14 +256,14 @@ export function MembersTab({ leagueId, leagueName, isAdmin, currentUserId }: Mem
                       <button
                         onClick={() => handleUpdateRole(
                           member.userId,
-                          member.role === 'admin' ? 'member' : 'admin'
+                          member.role === 'admin' ? 'viewer' : 'admin'
                         )}
                         className={`p-2 rounded-lg transition-colors ${
                           member.role === 'admin'
                             ? 'text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/20'
                             : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-600'
                         }`}
-                        title={member.role === 'admin' ? 'Demote to member' : 'Promote to admin'}
+                        title={member.role === 'admin' ? 'Demote to viewer' : 'Promote to admin'}
                       >
                         {member.role === 'admin' ? (
                           <ShieldOff className="w-4 h-4" />

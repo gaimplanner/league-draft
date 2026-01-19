@@ -9,28 +9,38 @@ the existing API contract.
 from typing import Optional
 
 
-def transform_league_membership(membership) -> dict:
-    """Transform a LeagueMembership to dict."""
+def transform_organization_membership(membership) -> dict:
+    """Transform an OrganizationMembership to dict."""
     return {
         "id": str(membership.id),
-        "league_id": str(membership.league.id),
-        "league_name": membership.league.name,
-        "league_slug": membership.league.slug,
+        "organization_id": str(membership.organization.id),
+        "organization_name": membership.organization.name,
+        "organization_slug": membership.organization.slug,
         "role": membership.role,
         "created_at": membership.created_at.isoformat(),
+        # Legacy fields for backwards compatibility
+        "league_id": str(membership.organization.id),
+        "league_name": membership.organization.name,
+        "league_slug": membership.organization.slug,
     }
 
 
+# Alias for backwards compatibility
+transform_league_membership = transform_organization_membership
+
+
 def transform_user(user) -> dict:
-    """Transform a User to dict with leagues."""
-    memberships = user.memberships.select_related("league").all()
+    """Transform a User to dict with organizations."""
+    memberships = user.memberships.select_related("organization").all()
     return {
         "id": str(user.id),
         "email": user.email,
         "first_name": user.first_name,
         "last_name": user.last_name,
         "role": user.role,
-        "leagues": [transform_league_membership(m) for m in memberships],
+        "organizations": [transform_organization_membership(m) for m in memberships],
+        # Legacy field for backwards compatibility
+        "leagues": [transform_organization_membership(m) for m in memberships],
     }
 
 
@@ -153,7 +163,7 @@ def transform_draft_state(draft_state) -> dict:
 
 def transform_division_summary(division) -> dict:
     """Transform a Division to summary dict (for list view)."""
-    return {
+    result = {
         "id": str(division.id),
         "name": division.name,
         "preset": division.preset,
@@ -163,6 +173,18 @@ def transform_division_summary(division) -> dict:
         "created_at": division.created_at.isoformat(),
         "completed_at": division.completed_at.isoformat() if division.completed_at else None,
     }
+
+    # Include organization or owner info
+    if division.organization_id:
+        result["organization_id"] = str(division.organization_id)
+        result["is_personal"] = False
+    elif division.owner_id:
+        result["owner_id"] = str(division.owner_id)
+        result["is_personal"] = True
+    else:
+        result["is_personal"] = True
+
+    return result
 
 
 def transform_division(division, include_all: bool = False) -> dict:
@@ -193,6 +215,16 @@ def transform_division(division, include_all: bool = False) -> dict:
         "completed_at": division.completed_at.isoformat() if division.completed_at else None,
     }
 
+    # Include organization or owner info
+    if division.organization_id:
+        result["organization_id"] = str(division.organization_id)
+        result["is_personal"] = False
+    elif division.owner_id:
+        result["owner_id"] = str(division.owner_id)
+        result["is_personal"] = True
+    else:
+        result["is_personal"] = True
+
     if include_all:
         result["teams"] = [transform_team(t) for t in division.teams.all()]
         result["players"] = [transform_player(p) for p in division.players.all()]
@@ -202,8 +234,8 @@ def transform_division(division, include_all: bool = False) -> dict:
     return result
 
 
-def transform_league_member(membership) -> dict:
-    """Transform a LeagueMembership to member info dict."""
+def transform_organization_member(membership) -> dict:
+    """Transform an OrganizationMembership to member info dict."""
     return {
         "id": str(membership.id),
         "user_id": str(membership.user.id),
@@ -215,8 +247,12 @@ def transform_league_member(membership) -> dict:
     }
 
 
+# Alias for backwards compatibility
+transform_league_member = transform_organization_member
+
+
 def transform_invitation(invitation) -> dict:
-    """Transform a LeagueInvitation to dict."""
+    """Transform an OrganizationInvitation to dict."""
     return {
         "id": str(invitation.id),
         "email": invitation.email,
@@ -231,12 +267,16 @@ def transform_invitation(invitation) -> dict:
     }
 
 
-def transform_league(league) -> dict:
-    """Transform a League to dict."""
+def transform_organization(organization) -> dict:
+    """Transform an Organization to dict."""
     return {
-        "id": str(league.id),
-        "name": league.name,
-        "slug": league.slug,
-        "created_at": league.created_at.isoformat(),
-        "member_count": league.memberships.count(),
+        "id": str(organization.id),
+        "name": organization.name,
+        "slug": organization.slug,
+        "created_at": organization.created_at.isoformat(),
+        "member_count": organization.memberships.count(),
     }
+
+
+# Alias for backwards compatibility
+transform_league = transform_organization

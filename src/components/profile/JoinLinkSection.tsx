@@ -133,7 +133,7 @@ export function JoinLinkSection({ leagueId }: JoinLinkSectionProps) {
       </div>
 
       <p className="text-sm text-gray-500 dark:text-gray-400">
-        Share this link to allow anyone to join your league as a member.
+        Share this link to allow anyone to join your organization as a viewer.
       </p>
 
       {error && (

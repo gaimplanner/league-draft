@@ -210,8 +210,10 @@ export function JoinPage({ token, onJoinComplete, onCancel }: JoinPageProps) {
               <>Join </>
             )}
             <span className="font-semibold text-gray-900 dark:text-white">{linkInfo?.leagueName}</span>
-            {linkInfo?.role === 'admin' && (
-              <span className="ml-1 text-purple-600 dark:text-purple-400">(as admin)</span>
+            {linkInfo?.role && linkInfo.role !== 'viewer' && (
+              <span className={`ml-1 ${linkInfo.role === 'admin' ? 'text-purple-600 dark:text-purple-400' : 'text-blue-600 dark:text-blue-400'}`}>
+                (as {linkInfo.role})
+              </span>
             )}
           </p>
         </div>

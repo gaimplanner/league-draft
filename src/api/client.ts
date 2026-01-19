@@ -21,13 +21,18 @@ import type {
   RegisterData,
   ProfileUpdateData,
   ChangePasswordData,
-  LeagueMember,
-  LeagueInvitation,
-  LeagueMembershipRole,
+  OrganizationMember,
+  OrganizationInvitation,
+  OrganizationMembershipRole,
   JoinLinkStatus,
   JoinLinkInfo,
   AcceptInvitationResult,
 } from '../types';
+
+// Legacy type aliases
+type LeagueMember = OrganizationMember;
+type LeagueInvitation = OrganizationInvitation;
+type LeagueMembershipRole = OrganizationMembershipRole;
 
 // API base URL - defaults to local dev server
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
@@ -359,35 +364,50 @@ function transformDivisionFromApi(data: Record<string, unknown>): Division {
     updatedAt: (data.updated_at as string | null) ?? undefined,
     // Convert null to undefined (Issue #8)
     completedAt: (data.completed_at as string | null) ?? undefined,
+    // Organization/personal workspace fields
+    organizationId: (data.organization_id as string | null) ?? undefined,
+    ownerId: (data.owner_id as string | null) ?? undefined,
+    isPersonal: data.is_personal as boolean ?? true,
   };
 }
 
 /**
- * Transform league membership from API to frontend
+ * Transform organization membership from API to frontend
  */
-function transformLeagueMembershipFromApi(data: Record<string, unknown>): import('../types').LeagueMembership {
+function transformOrganizationMembershipFromApi(data: Record<string, unknown>): import('../types').OrganizationMembership {
   return {
     id: data.id as string,
-    leagueId: data.league_id as string,
-    leagueName: data.league_name as string,
-    leagueSlug: data.league_slug as string,
-    role: data.role as import('../types').LeagueMembershipRole,
+    // New organization fields
+    organizationId: (data.organization_id || data.league_id) as string,
+    organizationName: (data.organization_name || data.league_name) as string,
+    organizationSlug: (data.organization_slug || data.league_slug) as string,
+    role: data.role as import('../types').OrganizationMembershipRole,
     createdAt: data.created_at as string,
+    // Legacy aliases for backwards compatibility
+    leagueId: (data.organization_id || data.league_id) as string,
+    leagueName: (data.organization_name || data.league_name) as string,
+    leagueSlug: (data.organization_slug || data.league_slug) as string,
   };
 }
+
+// Legacy alias (exported for backwards compatibility)
+export const transformLeagueMembershipFromApi = transformOrganizationMembershipFromApi;
 
 /**
  * Transform user data from API to frontend
  */
 function transformUserFromApi(data: Record<string, unknown>): User {
-  const leagues = (data.leagues as Record<string, unknown>[] || []).map(transformLeagueMembershipFromApi);
+  // Support both organizations and leagues (backwards compat)
+  const memberships = (data.organizations as Record<string, unknown>[] || data.leagues as Record<string, unknown>[] || [])
+    .map(transformOrganizationMembershipFromApi);
   return {
     id: data.id as string,
     email: data.email as string,
     firstName: data.first_name as string,
     lastName: data.last_name as string,
     role: data.role as User['role'],
-    leagues,
+    organizations: memberships,
+    leagues: memberships, // Legacy alias
   };
 }
 
@@ -406,6 +426,10 @@ function transformDivisionSummaryFromApi(data: Record<string, unknown>): Divisio
     createdAt: data.created_at as string,
     // Convert null to undefined (Issue #8)
     completedAt: (data.completed_at as string | null) ?? undefined,
+    // Organization/personal workspace fields
+    organizationId: (data.organization_id as string | null) ?? undefined,
+    ownerId: (data.owner_id as string | null) ?? undefined,
+    isPersonal: data.is_personal as boolean ?? true,
   };
 }
 
@@ -1063,7 +1087,7 @@ export const api = {
     return data.map(transformLeagueInvitationFromApi);
   },
 
-  async createInvitation(leagueId: string, email: string, role: LeagueMembershipRole = 'member'): Promise<LeagueInvitation> {
+  async createInvitation(leagueId: string, email: string, role: OrganizationMembershipRole = 'viewer'): Promise<LeagueInvitation> {
     const response = await fetchWithCSRFRetry(`${API_BASE_URL}/leagues/${leagueId}/invitations/`, {
       ...getDefaultOptions('POST'),
       method: 'POST',
@@ -1088,10 +1112,15 @@ export const api = {
       body: JSON.stringify({ token }),
     });
     const data = await handleResponse<Record<string, unknown>>(response);
+    const orgId = (data.organization_id || data.league_id) as string;
+    const orgName = (data.organization_name || data.league_name) as string;
     return {
       message: data.message as string,
-      leagueId: data.league_id as string,
-      leagueName: data.league_name as string,
+      organizationId: orgId,
+      organizationName: orgName,
+      // Legacy aliases
+      leagueId: orgId,
+      leagueName: orgName,
     };
   },
 
@@ -1138,12 +1167,17 @@ export const api = {
   async getJoinLinkInfo(token: string): Promise<JoinLinkInfo> {
     const response = await fetch(`${API_BASE_URL}/leagues/join/${token}/`, getDefaultOptions());
     const data = await handleResponse<Record<string, unknown>>(response);
+    const orgName = (data.organization_name || data.league_name) as string;
+    const orgSlug = (data.organization_slug || data.league_slug) as string;
     return {
-      leagueName: data.league_name as string,
-      leagueSlug: data.league_slug as string,
+      organizationName: orgName,
+      organizationSlug: orgSlug,
       type: data.type as 'join_link' | 'email_invitation' | undefined,
       invitedBy: data.invited_by as string | null | undefined,
-      role: data.role as LeagueMembershipRole | undefined,
+      role: data.role as OrganizationMembershipRole | undefined,
+      // Legacy aliases
+      leagueName: orgName,
+      leagueSlug: orgSlug,
     };
   },
 };

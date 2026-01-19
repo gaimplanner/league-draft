@@ -55,8 +55,8 @@ def require_auth(view_func):
     return wrapper
 
 
-def require_league_admin(view_func):
-    """Decorator that requires league admin role."""
+def require_org_admin(view_func):
+    """Decorator that requires organization admin role."""
     @wraps(view_func)
     def wrapper(request, *args, **kwargs):
         if not request.user.is_authenticated:
@@ -66,21 +66,31 @@ def require_league_admin(view_func):
         if request.user.role == "master_admin":
             return view_func(request, *args, **kwargs)
 
-        # Check if user has league context and is admin
-        league = getattr(request, "league", None)
-        if not league:
-            return json_response({"error": "No league context"}, status=400)
+        # Check if user has organization context and is admin
+        organization = getattr(request, "organization", None)
+        if not organization:
+            return json_response({"error": "No organization context"}, status=400)
 
-        if not request.user.is_league_admin(league):
-            return json_response({"error": "Only league admins can perform this action"}, status=403)
+        if not request.user.is_org_admin(organization):
+            return json_response({"error": "Only organization admins can perform this action"}, status=403)
 
         return view_func(request, *args, **kwargs)
     return wrapper
 
 
+# Alias for backwards compatibility
+require_league_admin = require_org_admin
+
+
+def get_organization_from_request(request):
+    """Get the organization from the request (set by TenantMiddleware)."""
+    return getattr(request, "organization", None)
+
+
+# Alias for backwards compatibility
 def get_league_from_request(request):
     """Get the league from the request (set by TenantMiddleware)."""
-    return getattr(request, "league", None)
+    return get_organization_from_request(request)
 
 
 def get_client_ip(request) -> str:

@@ -1,5 +1,5 @@
 """
-Middleware for tenant (league) isolation.
+Middleware for tenant (organization) isolation.
 """
 
 from django.utils.deprecation import MiddlewareMixin
@@ -7,39 +7,45 @@ from django.utils.deprecation import MiddlewareMixin
 
 class TenantMiddleware(MiddlewareMixin):
     """
-    Injects tenant (league) from authenticated user into request.
+    Injects tenant (organization) from authenticated user into request.
 
-    Users can belong to multiple leagues. The active league is determined by:
-    1. X-League-ID header (if provided and user has membership)
-    2. First league membership (if only one league)
+    Users can belong to multiple organizations. The active organization is determined by:
+    1. X-Organization-ID header (if provided and user has membership)
+    2. X-League-ID header (legacy, for backwards compatibility)
+    3. First organization membership (if only one organization)
 
-    Master admin users can access any league via X-League-ID header.
+    Master admin users can access any organization via header.
     """
 
     def process_request(self, request):
-        request.league = None
+        request.organization = None
+        request.league = None  # Backwards compatibility alias
 
         if hasattr(request, "user") and request.user.is_authenticated:
-            from .models import League
+            from .models import Organization
 
-            league_id = request.headers.get("X-League-ID")
+            # Check both new and legacy headers
+            org_id = request.headers.get("X-Organization-ID") or request.headers.get("X-League-ID")
 
             if request.user.role == "master_admin":
-                # Master admin can access any league via header
-                if league_id:
+                # Master admin can access any organization via header
+                if org_id:
                     try:
-                        request.league = League.objects.get(id=league_id)
-                    except League.DoesNotExist:
+                        request.organization = Organization.objects.get(id=org_id)
+                    except Organization.DoesNotExist:
                         pass
             else:
-                # Regular users - get league from membership
-                if league_id:
-                    # User specified a league - verify they have membership
-                    membership = request.user.memberships.filter(league_id=league_id).first()
+                # Regular users - get organization from membership
+                if org_id:
+                    # User specified an organization - verify they have membership
+                    membership = request.user.memberships.filter(organization_id=org_id).first()
                     if membership:
-                        request.league = membership.league
+                        request.organization = membership.organization
                 else:
-                    # No league specified - use first membership if only one league
-                    memberships = request.user.memberships.select_related("league").all()
+                    # No organization specified - use first membership if only one
+                    memberships = request.user.memberships.select_related("organization").all()
                     if memberships.count() == 1:
-                        request.league = memberships.first().league
+                        request.organization = memberships.first().organization
+
+            # Backwards compatibility alias
+            request.league = request.organization

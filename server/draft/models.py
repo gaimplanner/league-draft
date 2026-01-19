@@ -4,11 +4,11 @@ from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, Permis
 
 
 # -----------------------------------------------------------------------------
-# Tenant (League) Model
+# Tenant (Organization) Model
 # -----------------------------------------------------------------------------
 
 
-class League(models.Model):
+class Organization(models.Model):
     """Tenant model - represents a Little League organization."""
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -21,11 +21,15 @@ class League(models.Model):
     join_link_enabled = models.BooleanField(default=False)
 
     class Meta:
-        db_table = "leagues"
+        db_table = "organizations"
         ordering = ["-created_at"]
 
     def __str__(self):
         return self.name
+
+
+# Alias for backwards compatibility during migration
+League = Organization
 
 
 # -----------------------------------------------------------------------------
@@ -80,31 +84,45 @@ class User(AbstractBaseUser, PermissionsMixin):
     def __str__(self):
         return self.email
 
+    def get_organizations(self):
+        """Get all organizations the user is a member of."""
+        return Organization.objects.filter(memberships__user=self)
+
+    # Alias for backwards compatibility
     def get_leagues(self):
-        """Get all leagues the user is a member of."""
-        return League.objects.filter(memberships__user=self)
+        return self.get_organizations()
 
-    def get_membership(self, league):
-        """Get membership for a specific league."""
-        return self.memberships.filter(league=league).first()
+    def get_membership(self, organization):
+        """Get membership for a specific organization."""
+        return self.memberships.filter(organization=organization).first()
 
-    def is_league_admin(self, league):
-        """Check if user is admin of a specific league."""
-        membership = self.get_membership(league)
+    def is_org_admin(self, organization):
+        """Check if user is admin of a specific organization."""
+        membership = self.get_membership(organization)
         return membership and membership.role == "admin"
 
+    # Alias for backwards compatibility
+    def is_league_admin(self, organization):
+        return self.is_org_admin(organization)
+
+    def get_org_role(self, organization):
+        """Get user's role in an organization."""
+        membership = self.get_membership(organization)
+        return membership.role if membership else None
+
 
 # -----------------------------------------------------------------------------
-# League Membership Model
+# Organization Membership Model
 # -----------------------------------------------------------------------------
 
 
-class LeagueMembership(models.Model):
-    """Membership linking users to leagues with roles."""
+class OrganizationMembership(models.Model):
+    """Membership linking users to organizations with roles."""
 
     ROLE_CHOICES = [
         ("admin", "Admin"),
-        ("member", "Member"),
+        ("coach", "Coach"),
+        ("viewer", "Viewer"),
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -113,39 +131,46 @@ class LeagueMembership(models.Model):
         on_delete=models.CASCADE,
         related_name="memberships",
     )
-    league = models.ForeignKey(
-        League,
+    organization = models.ForeignKey(
+        Organization,
         on_delete=models.CASCADE,
         related_name="memberships",
     )
-    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default="member")
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default="viewer")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        db_table = "league_memberships"
-        unique_together = [("user", "league")]
+        db_table = "organization_memberships"
         ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(fields=['user', 'organization'], name='unique_org_membership'),
+        ]
 
     def __str__(self):
-        return f"{self.user.email} - {self.league.name} ({self.role})"
+        return f"{self.user.email} - {self.organization.name} ({self.role})"
+
+
+# Alias for backwards compatibility during migration
+LeagueMembership = OrganizationMembership
 
 
 # -----------------------------------------------------------------------------
-# League Invitation Model
+# Organization Invitation Model
 # -----------------------------------------------------------------------------
 
 
-class LeagueInvitation(models.Model):
-    """Invitation to join a league (email or link-based)."""
+class OrganizationInvitation(models.Model):
+    """Invitation to join an organization (email or link-based)."""
 
     ROLE_CHOICES = [
         ("admin", "Admin"),
-        ("member", "Member"),
+        ("coach", "Coach"),
+        ("viewer", "Viewer"),
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    league = models.ForeignKey(
-        League,
+    organization = models.ForeignKey(
+        Organization,
         on_delete=models.CASCADE,
         related_name="invitations",
     )
@@ -157,20 +182,20 @@ class LeagueInvitation(models.Model):
         null=True,
         related_name="sent_invitations",
     )
-    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default="member")
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default="viewer")
     is_link_invite = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     expires_at = models.DateTimeField()
     accepted_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
-        db_table = "league_invitations"
+        db_table = "organization_invitations"
         ordering = ["-created_at"]
 
     def __str__(self):
         if self.email:
-            return f"Invitation to {self.email} for {self.league.name}"
-        return f"Link invitation for {self.league.name}"
+            return f"Invitation to {self.email} for {self.organization.name}"
+        return f"Link invitation for {self.organization.name}"
 
     @property
     def is_expired(self):
@@ -182,6 +207,10 @@ class LeagueInvitation(models.Model):
         return self.accepted_at is None and not self.is_expired
 
 
+# Alias for backwards compatibility during migration
+LeagueInvitation = OrganizationInvitation
+
+
 # -----------------------------------------------------------------------------
 # Tenant-aware QuerySet and Manager
 # -----------------------------------------------------------------------------
@@ -190,10 +219,14 @@ class LeagueInvitation(models.Model):
 class TenantQuerySet(models.QuerySet):
     """QuerySet that supports tenant filtering."""
 
-    def for_league(self, league):
-        if league is None:
+    def for_organization(self, organization):
+        if organization is None:
             return self.none()
-        return self.filter(league=league)
+        return self.filter(organization=organization)
+
+    # Alias for backwards compatibility
+    def for_league(self, organization):
+        return self.for_organization(organization)
 
 
 class TenantManager(models.Manager):
@@ -202,8 +235,12 @@ class TenantManager(models.Manager):
     def get_queryset(self):
         return TenantQuerySet(self.model, using=self._db)
 
-    def for_league(self, league):
-        return self.get_queryset().for_league(league)
+    def for_organization(self, organization):
+        return self.get_queryset().for_organization(organization)
+
+    # Alias for backwards compatibility
+    def for_league(self, organization):
+        return self.for_organization(organization)
 
 
 # -----------------------------------------------------------------------------
@@ -236,13 +273,25 @@ class Division(models.Model):
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    league = models.ForeignKey(
-        League,
+
+    # Organization (null for personal workspaces)
+    organization = models.ForeignKey(
+        Organization,
         on_delete=models.CASCADE,
         related_name="divisions",
-        null=True,  # Temporary for migration
+        null=True,
         blank=True,
     )
+
+    # Owner for personal workspaces (when organization is null)
+    owner = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="personal_divisions",
+        null=True,
+        blank=True,
+    )
+
     name = models.CharField(max_length=100)
     preset = models.CharField(max_length=20, choices=PRESET_CHOICES)
     age_range_min = models.IntegerField()
@@ -272,6 +321,15 @@ class Division(models.Model):
 
     def __str__(self):
         return self.name
+
+    # Backwards compatibility alias
+    @property
+    def league(self):
+        return self.organization
+
+    @league.setter
+    def league(self, value):
+        self.organization = value
 
 
 # -----------------------------------------------------------------------------

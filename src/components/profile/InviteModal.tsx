@@ -12,7 +12,7 @@ interface InviteModalProps {
 
 export function InviteModal({ leagueId, leagueName, onClose, onInviteSent }: InviteModalProps) {
   const [email, setEmail] = useState('');
-  const [role, setRole] = useState<LeagueMembershipRole>('member');
+  const [role, setRole] = useState<LeagueMembershipRole>('viewer');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -112,11 +112,12 @@ export function InviteModal({ leagueId, leagueName, onClose, onInviteSent }: Inv
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               disabled={loading}
             >
-              <option value="member">Member</option>
+              <option value="viewer">Viewer</option>
+              <option value="coach">Coach</option>
               <option value="admin">Admin</option>
             </select>
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              Admins can invite other members, manage the league, and configure drafts.
+              Viewer: Read-only access. Coach: Can view draft progress. Admin: Full control.
             </p>
           </div>
 
