@@ -812,6 +812,101 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete }: TeamBuilderFlo
               </p>
             </div>
 
+            {/* Data Comparison Summary */}
+            {registrationData && (
+              <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                  Data Comparison
+                </h3>
+                <div className="grid grid-cols-3 gap-4">
+                  {/* Registration Data */}
+                  <div className="text-center p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                    <div className="text-3xl font-bold text-blue-600 dark:text-blue-400">
+                      {registrationPlayers.length}
+                    </div>
+                    <div className="text-sm text-blue-700 dark:text-blue-300 font-medium">
+                      Registration
+                    </div>
+                    <div className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                      (from Registration Data tab)
+                    </div>
+                  </div>
+
+                  {/* Eval Data */}
+                  <div className="text-center p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                    <div className="text-3xl font-bold text-green-600 dark:text-green-400">
+                      {evalPlayers.length}
+                    </div>
+                    <div className="text-sm text-green-700 dark:text-green-300 font-medium">
+                      Evaluated
+                    </div>
+                    <div className="text-xs text-green-600 dark:text-green-400 mt-1">
+                      (from Summary/Eval tabs)
+                    </div>
+                  </div>
+
+                  {/* Matched */}
+                  <div className="text-center p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
+                    <div className="text-3xl font-bold text-purple-600 dark:text-purple-400">
+                      {registrationPlayers.filter(p => p.match.matchType === 'exact').length}
+                    </div>
+                    <div className="text-sm text-purple-700 dark:text-purple-300 font-medium">
+                      Matched
+                    </div>
+                    <div className="text-xs text-purple-600 dark:text-purple-400 mt-1">
+                      (auto-linked by name)
+                    </div>
+                  </div>
+                </div>
+
+                {/* Delta Details */}
+                {(unmatchedPlayers.length > 0 || evalPlayers.length > registrationPlayers.filter(p => p.match.matchType === 'exact').length) && (
+                  <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                    <div className="grid grid-cols-2 gap-4">
+                      {/* In Registration but not Eval (DNE candidates) */}
+                      {unmatchedPlayers.length > 0 && (
+                        <div className="p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg">
+                          <div className="text-sm font-medium text-amber-800 dark:text-amber-200 mb-2">
+                            In Registration, Not Evaluated ({unmatchedPlayers.length})
+                          </div>
+                          <div className="text-xs text-amber-700 dark:text-amber-300 space-y-1 max-h-32 overflow-y-auto">
+                            {unmatchedPlayers.map(p => (
+                              <div key={p.registrationIndex}>• {p.fullName}</div>
+                            ))}
+                          </div>
+                          <div className="text-xs text-amber-600 dark:text-amber-400 mt-2 italic">
+                            These players can be marked as DNE below
+                          </div>
+                        </div>
+                      )}
+
+                      {/* In Eval but not Registration (orphaned eval records) */}
+                      {(() => {
+                        const matchedBibs = new Set(registrationPlayers.filter(p => p.evalBib).map(p => p.evalBib));
+                        const unmatchedEval = evalPlayers.filter(p => !matchedBibs.has(p.bib));
+                        if (unmatchedEval.length === 0) return null;
+                        return (
+                          <div className="p-3 bg-gray-100 dark:bg-gray-700/50 rounded-lg">
+                            <div className="text-sm font-medium text-gray-800 dark:text-gray-200 mb-2">
+                              Evaluated, Not Registered ({unmatchedEval.length})
+                            </div>
+                            <div className="text-xs text-gray-600 dark:text-gray-400 space-y-1 max-h-32 overflow-y-auto">
+                              {unmatchedEval.map(p => (
+                                <div key={p.bib}>• {p.firstName} {p.lastName} (BIB {p.bib})</div>
+                              ))}
+                            </div>
+                            <div className="text-xs text-gray-500 dark:text-gray-500 mt-2 italic">
+                              May be name mismatches or withdrawn players
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Name matching */}
             {unmatchedPlayers.length > 0 && (
               <NameMatchResolver
