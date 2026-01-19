@@ -49,6 +49,11 @@ from .leagues import (
     join_link_view,
     public_join_link_view,
 )
+from .team_builder import (
+    team_builder_run,
+    team_builder_apply,
+    team_builder_update_requests,
+)
 
 __all__ = [
     # Auth
@@ -92,4 +97,8 @@ __all__ = [
     "accept_invitation",
     "join_link_view",
     "public_join_link_view",
+    # Team Builder
+    "team_builder_run",
+    "team_builder_apply",
+    "team_builder_update_requests",
 ]

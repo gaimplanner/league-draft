@@ -288,3 +288,57 @@ def transform_organization(organization) -> dict:
 
 # Alias for backwards compatibility
 transform_league = transform_organization
+
+
+def transform_team_builder_result(result) -> dict:
+    """Transform TeamBuilderResult to dict for JSON response."""
+    return {
+        "assignments": [
+            {
+                "playerId": str(a.player_id),
+                "teamId": str(a.team_id),
+                "reason": a.reason,
+                "round": a.round,
+                "pick": a.pick,
+            }
+            for a in result.assignments
+        ],
+        "teamSummaries": [
+            {
+                "teamId": str(s.team_id),
+                "teamName": s.team_name,
+                "coachName": s.coach_name,
+                "rosterCount": s.roster_count,
+                "totalScore": s.total_score,
+                "meanDeltaPercent": s.mean_delta_percent,
+            }
+            for s in result.team_summaries
+        ],
+        "playerHappiness": [
+            {
+                "playerId": str(h.player_id),
+                "score": h.score,
+                "coachRequestHonored": h.coach_request_honored,
+                "teammateRequestsTotal": h.teammate_requests_total,
+                "teammateRequestsHonored": h.teammate_requests_honored,
+                "twoWayRequestsTotal": h.two_way_requests_total,
+                "twoWayRequestsHonored": h.two_way_requests_honored,
+            }
+            for h in result.player_happiness
+        ],
+        "stats": {
+            "totalPlayers": result.stats.total_players,
+            "averageHappiness": result.stats.average_happiness,
+            "lockedPlayers": result.stats.locked_players,
+            "topTalentPlayers": result.stats.top_talent_players,
+            "requestBasedPlayers": result.stats.request_based_players,
+            "balanceBasedPlayers": result.stats.balance_based_players,
+            "twoWayRequestsTotal": result.stats.two_way_requests_total,
+            "twoWayRequestsHonored": result.stats.two_way_requests_honored,
+            "oneWayRequestsTotal": result.stats.one_way_requests_total,
+            "oneWayRequestsHonored": result.stats.one_way_requests_honored,
+            "coachRequestsTotal": result.stats.coach_requests_total,
+            "coachRequestsHonored": result.stats.coach_requests_honored,
+        },
+        "warnings": result.warnings,
+    }

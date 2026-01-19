@@ -872,3 +872,84 @@ def validate_member_role_data(data: Dict[str, Any]) -> Tuple[Optional[Dict], Opt
         return None, {"role": [f"Invalid role. Must be one of: {', '.join(valid_roles)}"]}
 
     return {"role": role}, None
+
+
+# -----------------------------------------------------------------------------
+# Team Builder Validators
+# -----------------------------------------------------------------------------
+
+
+def validate_team_builder_config(data: Dict[str, Any]) -> Tuple[Optional[Dict], Optional[Dict]]:
+    """
+    Validate team builder configuration.
+
+    Returns:
+        (cleaned_data, None) on success
+        (None, errors) on failure
+    """
+    errors = {}
+    result = {}
+
+    # balanceTolerance -> balance_tolerance (0.05 to 0.25)
+    if "balanceTolerance" in data:
+        bt = data["balanceTolerance"]
+        if not isinstance(bt, (int, float)):
+            errors["balanceTolerance"] = ["Must be a number"]
+        elif bt < 0.05 or bt > 0.25:
+            errors["balanceTolerance"] = ["Must be between 0.05 and 0.25"]
+        else:
+            result["balance_tolerance"] = float(bt)
+
+    # topTalentRounds -> top_talent_rounds (1 to 5)
+    if "topTalentRounds" in data:
+        ttr = data["topTalentRounds"]
+        if not isinstance(ttr, int):
+            errors["topTalentRounds"] = ["Must be an integer"]
+        elif ttr < 1 or ttr > 5:
+            errors["topTalentRounds"] = ["Must be between 1 and 5"]
+        else:
+            result["top_talent_rounds"] = ttr
+
+    # maxRosterSize -> max_roster_size (8 to 20)
+    if "maxRosterSize" in data:
+        mrs = data["maxRosterSize"]
+        if not isinstance(mrs, int):
+            errors["maxRosterSize"] = ["Must be an integer"]
+        elif mrs < 8 or mrs > 20:
+            errors["maxRosterSize"] = ["Must be between 8 and 20"]
+        else:
+            result["max_roster_size"] = mrs
+
+    # prioritizeBalance -> prioritize_balance (boolean)
+    if "prioritizeBalance" in data:
+        pb = data["prioritizeBalance"]
+        if not isinstance(pb, bool):
+            errors["prioritizeBalance"] = ["Must be a boolean"]
+        else:
+            result["prioritize_balance"] = pb
+
+    if errors:
+        return None, errors
+
+    return result, None
+
+
+def validate_team_builder_run(data: Dict[str, Any]) -> Tuple[Optional[Dict], Optional[Dict]]:
+    """
+    Validate team builder run request.
+
+    Returns:
+        (cleaned_data, None) on success
+        (None, errors) on failure
+    """
+    result = {}
+
+    # Config is optional
+    config_data = data.get("config", {})
+    if config_data:
+        config_result, config_errors = validate_team_builder_config(config_data)
+        if config_errors:
+            return None, {"config": config_errors}
+        result["config"] = config_result
+
+    return result, None

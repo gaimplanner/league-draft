@@ -48,6 +48,10 @@ from .views import (
     accept_invitation,
     join_link_view,
     public_join_link_view,
+    # Team Builder
+    team_builder_run,
+    team_builder_apply,
+    team_builder_update_requests,
 )
 
 urlpatterns = [
@@ -107,4 +111,9 @@ urlpatterns = [
 
     # Public join link info
     path("api/leagues/join/<str:token>/", public_join_link_view, name="public-join-link"),
+
+    # Team Builder
+    path("api/team-builder/<uuid:division_id>/run/", team_builder_run, name="team-builder-run"),
+    path("api/team-builder/<uuid:division_id>/apply/", team_builder_apply, name="team-builder-apply"),
+    path("api/team-builder/<uuid:division_id>/update-requests/", team_builder_update_requests, name="team-builder-update-requests"),
 ]
