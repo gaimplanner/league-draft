@@ -577,6 +577,145 @@ function findPlayerByName<T extends { firstName: string; lastName: string; fullN
 }
 
 // -----------------------------------------------------------------------------
+// Coach Request Resolution
+// -----------------------------------------------------------------------------
+
+export interface CoachInfo {
+  teamId: string;
+  teamName: string;
+  coachName: string; // Head coach name
+  assistantCoach?: string;
+}
+
+export interface CoachRequestMatch {
+  rawRequest: string;
+  matchedTeamId: string | null;
+  matchedCoachName: string | null;
+  matchType: 'exact' | 'fuzzy' | 'none';
+  matchScore: number;
+  suggestedMatches?: Array<{
+    teamId: string;
+    coachName: string;
+    score: number;
+  }>;
+}
+
+/**
+ * Resolve a coach request string to a team ID.
+ * Matches against head coach and assistant coach names.
+ */
+export function resolveCoachRequest(
+  request: string,
+  coaches: CoachInfo[]
+): CoachRequestMatch {
+  if (!request || request.trim() === '') {
+    return {
+      rawRequest: request,
+      matchedTeamId: null,
+      matchedCoachName: null,
+      matchType: 'none',
+      matchScore: 0,
+    };
+  }
+
+  const normalizedRequest = request.toLowerCase().trim();
+
+  // Try exact match on coach name (head or assistant)
+  for (const coach of coaches) {
+    const headCoachName = coach.coachName.toLowerCase().trim();
+    const assistantName = (coach.assistantCoach || '').toLowerCase().trim();
+
+    // Exact full name match
+    if (headCoachName === normalizedRequest || assistantName === normalizedRequest) {
+      return {
+        rawRequest: request,
+        matchedTeamId: coach.teamId,
+        matchedCoachName: coach.coachName,
+        matchType: 'exact',
+        matchScore: 1,
+      };
+    }
+
+    // Last name match (extract last word from coach name)
+    const headLastName = headCoachName.split(/\s+/).pop() || '';
+    const assistantLastName = assistantName.split(/\s+/).pop() || '';
+
+    if (headLastName === normalizedRequest || assistantLastName === normalizedRequest) {
+      return {
+        rawRequest: request,
+        matchedTeamId: coach.teamId,
+        matchedCoachName: coach.coachName,
+        matchType: 'exact',
+        matchScore: 1,
+      };
+    }
+  }
+
+  // Try fuzzy matching
+  const candidates = coaches.map(coach => {
+    const headScore = nameSimilarity(normalizedRequest, coach.coachName.toLowerCase());
+    const assistantScore = coach.assistantCoach
+      ? nameSimilarity(normalizedRequest, coach.assistantCoach.toLowerCase())
+      : 0;
+
+    // Also try last name only matching
+    const headLastName = coach.coachName.split(/\s+/).pop() || '';
+    const lastNameScore = nameSimilarity(normalizedRequest, headLastName.toLowerCase()) * 0.9;
+
+    const bestScore = Math.max(headScore, assistantScore, lastNameScore);
+
+    return {
+      teamId: coach.teamId,
+      coachName: coach.coachName,
+      score: bestScore,
+    };
+  });
+
+  candidates.sort((a, b) => b.score - a.score);
+
+  const bestCandidate = candidates[0];
+  if (bestCandidate && bestCandidate.score >= 0.7) {
+    return {
+      rawRequest: request,
+      matchedTeamId: bestCandidate.teamId,
+      matchedCoachName: bestCandidate.coachName,
+      matchType: 'fuzzy',
+      matchScore: bestCandidate.score,
+      suggestedMatches: candidates.slice(0, 3).filter(c => c.score >= 0.4),
+    };
+  }
+
+  // No good match
+  return {
+    rawRequest: request,
+    matchedTeamId: null,
+    matchedCoachName: null,
+    matchType: 'none',
+    matchScore: 0,
+    suggestedMatches: candidates.slice(0, 3).filter(c => c.score >= 0.3),
+  };
+}
+
+/**
+ * Resolve all coach requests for a list of players.
+ * Returns a map of player ID to resolved coach team ID.
+ */
+export function resolveAllCoachRequests(
+  players: Array<{ id: string; coachRequest: string }>,
+  coaches: CoachInfo[]
+): Map<string, CoachRequestMatch> {
+  const results = new Map<string, CoachRequestMatch>();
+
+  for (const player of players) {
+    if (player.coachRequest && player.coachRequest.trim() !== '') {
+      results.set(player.id, resolveCoachRequest(player.coachRequest, coaches));
+    }
+  }
+
+  return results;
+}
+
+// -----------------------------------------------------------------------------
 // Sibling Detection by Address
 // -----------------------------------------------------------------------------
 
