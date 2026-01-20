@@ -1912,6 +1912,7 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams }:
             {requestsFirstResult && requestsFirstResult.suggestedTrades.length > 0 && (
               <TradeSuggestions
                 suggestedTrades={requestsFirstResult.suggestedTrades}
+                players={finalPlayers}
                 onApplyTrade={handleApplyTrade}
                 onApplyAll={handleApplyAllTrades}
                 onDismissTrade={handleDismissTrade}

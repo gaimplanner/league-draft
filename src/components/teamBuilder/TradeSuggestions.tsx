@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
   ArrowLeftRight,
   Check,
@@ -8,11 +8,17 @@ import {
   AlertCircle,
   TrendingUp,
   Zap,
+  Users,
+  GraduationCap,
+  User,
+  Scale,
+  Info,
 } from 'lucide-react';
-import { TradeCandidate } from '../../types';
+import { TradeCandidate, Player } from '../../types';
 
 interface TradeSuggestionsProps {
   suggestedTrades: TradeCandidate[];
+  players: Player[];  // Full player data for trade evaluation
   onApplyTrade: (trade: TradeCandidate) => void;
   onApplyAll: () => void;
   onDismissTrade: (tradeId: string) => void;
@@ -26,6 +32,7 @@ interface TradeSuggestionsProps {
  */
 export const TradeSuggestions = ({
   suggestedTrades,
+  players,
   onApplyTrade,
   onApplyAll,
   onDismissTrade,
@@ -33,6 +40,10 @@ export const TradeSuggestions = ({
   dismissedTradeIds,
 }: TradeSuggestionsProps) => {
   const [isExpanded, setIsExpanded] = useState(true);
+  const [expandedTradeId, setExpandedTradeId] = useState<string | null>(null);
+
+  // Create player lookup map
+  const playerMap = useMemo(() => new Map(players.map(p => [p.id, p])), [players]);
 
   // Filter to pending trades only
   const pendingTrades = suggestedTrades.filter(
@@ -133,6 +144,10 @@ export const TradeSuggestions = ({
                   key={trade.id}
                   trade={trade}
                   status="pending"
+                  isExpanded={expandedTradeId === trade.id}
+                  onToggleExpand={() => setExpandedTradeId(expandedTradeId === trade.id ? null : trade.id)}
+                  player1={playerMap.get(trade.player1Id)}
+                  player2={playerMap.get(trade.player2Id)}
                   onApply={() => onApplyTrade(trade)}
                   onDismiss={() => onDismissTrade(trade.id)}
                 />
@@ -151,6 +166,10 @@ export const TradeSuggestions = ({
                   key={trade.id}
                   trade={trade}
                   status="applied"
+                  isExpanded={expandedTradeId === trade.id}
+                  onToggleExpand={() => setExpandedTradeId(expandedTradeId === trade.id ? null : trade.id)}
+                  player1={playerMap.get(trade.player1Id)}
+                  player2={playerMap.get(trade.player2Id)}
                 />
               ))}
             </div>
@@ -167,6 +186,10 @@ export const TradeSuggestions = ({
                   key={trade.id}
                   trade={trade}
                   status="dismissed"
+                  isExpanded={expandedTradeId === trade.id}
+                  onToggleExpand={() => setExpandedTradeId(expandedTradeId === trade.id ? null : trade.id)}
+                  player1={playerMap.get(trade.player1Id)}
+                  player2={playerMap.get(trade.player2Id)}
                 />
               ))}
             </div>
@@ -177,15 +200,23 @@ export const TradeSuggestions = ({
   );
 };
 
-// Trade card component
+// Trade card component with expandable evaluator
 const TradeCard = ({
   trade,
   status,
+  isExpanded,
+  onToggleExpand,
+  player1,
+  player2,
   onApply,
   onDismiss,
 }: {
   trade: TradeCandidate;
   status: 'pending' | 'applied' | 'dismissed';
+  isExpanded: boolean;
+  onToggleExpand: () => void;
+  player1?: Player;
+  player2?: Player;
   onApply?: () => void;
   onDismiss?: () => void;
 }) => {
@@ -196,10 +227,24 @@ const TradeCard = ({
   };
 
   return (
-    <div className={`border rounded-lg p-3 ${statusStyles[status]}`}>
-      <div className="flex items-center justify-between">
+    <div className={`border rounded-lg overflow-hidden ${statusStyles[status]}`}>
+      {/* Main trade row */}
+      <div className="p-3 flex items-center justify-between">
         {/* Trade visualization */}
         <div className="flex items-center gap-3 flex-1">
+          {/* Evaluate button */}
+          <button
+            onClick={onToggleExpand}
+            className={`p-1.5 rounded-lg transition-colors ${
+              isExpanded
+                ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400'
+                : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
+            }`}
+            title="Evaluate trade"
+          >
+            <Info className="w-4 h-4" />
+          </button>
+
           {/* From team & player */}
           <div className="flex-1 text-right">
             <div className="text-sm font-medium text-gray-900 dark:text-white">
@@ -274,6 +319,122 @@ const TradeCard = ({
               <X className="w-4 h-4" />
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Expanded trade evaluator */}
+      {isExpanded && (
+        <div className="border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 p-4">
+          <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
+            <Scale className="w-4 h-4" />
+            Trade Evaluation
+          </h4>
+
+          <div className="grid grid-cols-2 gap-4">
+            {/* Player 1 details */}
+            <PlayerTradeDetails
+              player={player1}
+              playerName={trade.player1Name}
+              currentTeam={trade.fromTeamName}
+              movingTo={trade.toTeamName}
+              direction="leaving"
+            />
+
+            {/* Player 2 details */}
+            <PlayerTradeDetails
+              player={player2}
+              playerName={trade.player2Name}
+              currentTeam={trade.toTeamName}
+              movingTo={trade.fromTeamName}
+              direction="leaving"
+            />
+          </div>
+
+          {/* Trade benefit summary */}
+          <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+            <div className="text-sm font-medium text-blue-800 dark:text-blue-200 flex items-center gap-2">
+              <TrendingUp className="w-4 h-4" />
+              Trade Benefit
+            </div>
+            <div className="text-xs text-blue-700 dark:text-blue-300 mt-1 space-y-1">
+              <p>• Balance improvement: <span className="font-semibold">+{trade.balanceImprovement.toFixed(1)}</span> points</p>
+              <p>• Both players have no requests or all requests already satisfied</p>
+              <p>• This trade will not affect anyone's happiness score</p>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Player details for trade evaluation
+const PlayerTradeDetails = ({
+  player,
+  playerName,
+  currentTeam,
+  movingTo,
+  direction: _direction,
+}: {
+  player?: Player;
+  playerName: string;
+  currentTeam: string;
+  movingTo: string;
+  direction: 'leaving' | 'joining';
+}) => {
+  const hasRequests = player && (
+    (player.teammateRequests && player.teammateRequests.length > 0) ||
+    player.coachRequest
+  );
+
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+      <div className="font-medium text-gray-900 dark:text-white text-sm mb-2">
+        {playerName}
+      </div>
+
+      <div className="space-y-2 text-xs">
+        {/* Score */}
+        <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+          <span className="font-medium">Score:</span>
+          <span className="font-semibold text-gray-900 dark:text-white">
+            {player?.totalScore?.toFixed(1) ?? 'N/A'}
+          </span>
+        </div>
+
+        {/* School */}
+        <div className="flex items-start gap-2 text-gray-600 dark:text-gray-400">
+          <GraduationCap className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+          <span>{player?.school || 'No school listed'}</span>
+        </div>
+
+        {/* Coach Request */}
+        {player?.coachRequest && (
+          <div className="flex items-start gap-2 text-gray-600 dark:text-gray-400">
+            <User className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+            <span>Coach: {player.coachRequest}</span>
+          </div>
+        )}
+
+        {/* Teammate Requests */}
+        {player?.teammateRequests && player.teammateRequests.length > 0 && (
+          <div className="flex items-start gap-2 text-gray-600 dark:text-gray-400">
+            <Users className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+            <span>Teammates: {player.teammateRequests.join(', ')}</span>
+          </div>
+        )}
+
+        {/* No requests indicator */}
+        {!hasRequests && (
+          <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
+            <Check className="w-3.5 h-3.5" />
+            <span>No requests (tradeable)</span>
+          </div>
+        )}
+
+        {/* Movement info */}
+        <div className="pt-2 mt-2 border-t border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400">
+          <span className="text-gray-400">→</span> Moving from <span className="font-medium">{currentTeam}</span> to <span className="font-medium">{movingTo}</span>
         </div>
       </div>
     </div>
