@@ -124,7 +124,7 @@ export function getSimulationStats(result: SimulationResult) {
   const totalPlayers = result.players.filter(p => p.isDrafted).length;
   const completeRounds = Math.floor(totalPlayers / teamCount);
 
-  // Calculate scores using only players from complete rounds
+  // Calculate scores using only players from complete rounds (all players)
   const teamScores = result.teams.map(team => {
     const completeRoundPlayers = team.roster.filter(
       p => p.draftedInRound !== undefined && p.draftedInRound <= completeRounds
@@ -132,15 +132,41 @@ export function getSimulationStats(result: SimulationResult) {
     return completeRoundPlayers.reduce((sum, p) => sum + p.totalScore, 0);
   });
 
+  // Calculate scores using only top 8 picks per team (primary comparison metric)
+  // This avoids skewing from 0-score players and late-round unknowns
+  const TOP_PICKS_COUNT = 8;
+  const teamTop8Scores = result.teams.map(team => {
+    // Get players sorted by draft pick order (earliest first)
+    const sortedRoster = [...team.roster].sort((a, b) => {
+      const pickA = a.draftedAtPick ?? Infinity;
+      const pickB = b.draftedAtPick ?? Infinity;
+      return pickA - pickB;
+    });
+    // Take top N picks
+    const topPicks = sortedRoster.slice(0, TOP_PICKS_COUNT);
+    return topPicks.reduce((sum, p) => sum + p.totalScore, 0);
+  });
+
   const highest = Math.max(...teamScores);
   const lowest = Math.min(...teamScores);
   const spread = highest - lowest;
   const average = teamScores.reduce((a, b) => a + b, 0) / teamScores.length;
 
+  const top8Highest = Math.max(...teamTop8Scores);
+  const top8Lowest = Math.min(...teamTop8Scores);
+  const top8Spread = top8Highest - top8Lowest;
+  const top8Average = teamTop8Scores.reduce((a, b) => a + b, 0) / teamTop8Scores.length;
+
   return {
+    // All players stats
     highest,
     lowest,
     spread,
     average,
+    // Top 8 picks stats (primary comparison metric)
+    top8Highest,
+    top8Lowest,
+    top8Spread,
+    top8Average,
   };
 }

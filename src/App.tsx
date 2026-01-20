@@ -969,6 +969,7 @@ function App() {
             teams={teams}
             players={players}
             divisionId={activeDivision?.id}
+            rosterSize={activeDivision?.rosterSize || Math.ceil(players.length / teams.length) || 12}
             onConfigComplete={handleConfigComplete}
             onTeamsUpdate={async (updatedTeams) => {
               setTeams(updatedTeams);

@@ -23,7 +23,16 @@ interface FormatComparison {
   format: DraftFormat;
   label: string;
   result: SimulationResult;
-  stats: { highest: number; lowest: number; spread: number; average: number };
+  stats: {
+    highest: number;
+    lowest: number;
+    spread: number;
+    average: number;
+    top8Highest: number;
+    top8Lowest: number;
+    top8Spread: number;
+    top8Average: number;
+  };
 }
 
 type ModalPhase = 'options' | 'results' | 'comparison';
@@ -68,8 +77,9 @@ export const SimulationModal = ({
       return { format, label, result, stats };
     });
 
-    // Sort by spread (lowest first = most balanced)
-    comparisons.sort((a, b) => a.stats.spread - b.stats.spread);
+    // Sort by top 8 spread (lowest first = most balanced)
+    // Top 8 is primary metric to avoid skewing from 0-score and late-round players
+    comparisons.sort((a, b) => a.stats.top8Spread - b.stats.top8Spread);
     setComparisonResults(comparisons);
     setPhase('comparison');
   };
@@ -174,24 +184,65 @@ export const SimulationModal = ({
             <div className="space-y-6">
               {/* Stats Summary */}
               {stats && (
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 text-center">
-                    <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                      {stats.highest.toFixed(1)}
+                <div className="space-y-4">
+                  {/* Top 8 Picks - Primary Metric */}
+                  <div>
+                    <div className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wide">
+                      Top 8 Picks (Primary)
                     </div>
-                    <div className="text-sm text-gray-600 dark:text-gray-400">Highest</div>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="bg-blue-50 dark:bg-blue-900/30 rounded-lg p-4 text-center border border-blue-200 dark:border-blue-800">
+                        <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                          {stats.top8Highest.toFixed(1)}
+                        </div>
+                        <div className="text-sm text-gray-600 dark:text-gray-400">Highest</div>
+                      </div>
+                      <div className="bg-blue-50 dark:bg-blue-900/30 rounded-lg p-4 text-center border border-blue-200 dark:border-blue-800">
+                        <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                          {stats.top8Lowest.toFixed(1)}
+                        </div>
+                        <div className="text-sm text-gray-600 dark:text-gray-400">Lowest</div>
+                      </div>
+                      <div className="bg-blue-50 dark:bg-blue-900/30 rounded-lg p-4 text-center border border-blue-200 dark:border-blue-800">
+                        <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                          {stats.top8Spread.toFixed(1)}
+                        </div>
+                        <div className="text-sm text-gray-600 dark:text-gray-400">Spread</div>
+                      </div>
+                    </div>
                   </div>
-                  <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 text-center">
-                    <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                      {stats.lowest.toFixed(1)}
+
+                  {/* All Players - Secondary */}
+                  <div>
+                    <div className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wide">
+                      All Players
                     </div>
-                    <div className="text-sm text-gray-600 dark:text-gray-400">Lowest</div>
-                  </div>
-                  <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 text-center">
-                    <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                      {stats.spread.toFixed(1)}
+                    <div className="grid grid-cols-4 gap-3">
+                      <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3 text-center">
+                        <div className="text-lg font-bold text-gray-900 dark:text-white">
+                          {stats.highest.toFixed(1)}
+                        </div>
+                        <div className="text-xs text-gray-600 dark:text-gray-400">Highest</div>
+                      </div>
+                      <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3 text-center">
+                        <div className="text-lg font-bold text-gray-900 dark:text-white">
+                          {stats.lowest.toFixed(1)}
+                        </div>
+                        <div className="text-xs text-gray-600 dark:text-gray-400">Lowest</div>
+                      </div>
+                      <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3 text-center">
+                        <div className="text-lg font-bold text-gray-700 dark:text-gray-300">
+                          {stats.spread.toFixed(1)}
+                        </div>
+                        <div className="text-xs text-gray-600 dark:text-gray-400">Spread</div>
+                      </div>
+                      <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3 text-center">
+                        <div className="text-lg font-bold text-gray-900 dark:text-white">
+                          {stats.average.toFixed(1)}
+                        </div>
+                        <div className="text-xs text-gray-600 dark:text-gray-400">Average</div>
+                      </div>
                     </div>
-                    <div className="text-sm text-gray-600 dark:text-gray-400">Spread</div>
                   </div>
                 </div>
               )}
@@ -241,30 +292,65 @@ export const SimulationModal = ({
               {(() => {
                 const selected = comparisonResults[selectedComparisonIndex];
                 return (
-                  <div className="grid grid-cols-4 gap-3">
-                    <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3 text-center">
-                      <div className="text-xl font-bold text-gray-900 dark:text-white">
-                        {selected.stats.highest.toFixed(1)}
+                  <div className="space-y-3">
+                    {/* Top 8 Picks - Primary Metric */}
+                    <div>
+                      <div className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wide">
+                        Top 8 Picks (Primary)
                       </div>
-                      <div className="text-xs text-gray-600 dark:text-gray-400">Highest</div>
+                      <div className="grid grid-cols-3 gap-3">
+                        <div className="bg-blue-50 dark:bg-blue-900/30 rounded-lg p-3 text-center border border-blue-200 dark:border-blue-800">
+                          <div className="text-xl font-bold text-gray-900 dark:text-white">
+                            {selected.stats.top8Highest.toFixed(1)}
+                          </div>
+                          <div className="text-xs text-gray-600 dark:text-gray-400">Highest</div>
+                        </div>
+                        <div className="bg-blue-50 dark:bg-blue-900/30 rounded-lg p-3 text-center border border-blue-200 dark:border-blue-800">
+                          <div className="text-xl font-bold text-gray-900 dark:text-white">
+                            {selected.stats.top8Lowest.toFixed(1)}
+                          </div>
+                          <div className="text-xs text-gray-600 dark:text-gray-400">Lowest</div>
+                        </div>
+                        <div className="bg-blue-50 dark:bg-blue-900/30 rounded-lg p-3 text-center border border-blue-200 dark:border-blue-800">
+                          <div className="text-xl font-bold text-blue-600 dark:text-blue-400">
+                            {selected.stats.top8Spread.toFixed(1)}
+                          </div>
+                          <div className="text-xs text-gray-600 dark:text-gray-400">Spread</div>
+                        </div>
+                      </div>
                     </div>
-                    <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3 text-center">
-                      <div className="text-xl font-bold text-gray-900 dark:text-white">
-                        {selected.stats.lowest.toFixed(1)}
+
+                    {/* All Players - Secondary */}
+                    <div>
+                      <div className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wide">
+                        All Players
                       </div>
-                      <div className="text-xs text-gray-600 dark:text-gray-400">Lowest</div>
-                    </div>
-                    <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3 text-center">
-                      <div className="text-xl font-bold text-blue-600 dark:text-blue-400">
-                        {selected.stats.spread.toFixed(1)}
+                      <div className="grid grid-cols-4 gap-2">
+                        <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-2 text-center">
+                          <div className="text-base font-bold text-gray-900 dark:text-white">
+                            {selected.stats.highest.toFixed(1)}
+                          </div>
+                          <div className="text-[10px] text-gray-600 dark:text-gray-400">Highest</div>
+                        </div>
+                        <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-2 text-center">
+                          <div className="text-base font-bold text-gray-900 dark:text-white">
+                            {selected.stats.lowest.toFixed(1)}
+                          </div>
+                          <div className="text-[10px] text-gray-600 dark:text-gray-400">Lowest</div>
+                        </div>
+                        <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-2 text-center">
+                          <div className="text-base font-bold text-gray-700 dark:text-gray-300">
+                            {selected.stats.spread.toFixed(1)}
+                          </div>
+                          <div className="text-[10px] text-gray-600 dark:text-gray-400">Spread</div>
+                        </div>
+                        <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-2 text-center">
+                          <div className="text-base font-bold text-gray-900 dark:text-white">
+                            {selected.stats.average.toFixed(1)}
+                          </div>
+                          <div className="text-[10px] text-gray-600 dark:text-gray-400">Average</div>
+                        </div>
                       </div>
-                      <div className="text-xs text-gray-600 dark:text-gray-400">Spread</div>
-                    </div>
-                    <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3 text-center">
-                      <div className="text-xl font-bold text-gray-900 dark:text-white">
-                        {selected.stats.average.toFixed(1)}
-                      </div>
-                      <div className="text-xs text-gray-600 dark:text-gray-400">Average</div>
                     </div>
                   </div>
                 );

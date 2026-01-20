@@ -2,12 +2,14 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { ChevronRight, ChevronLeft, ChevronDown, ChevronUp, CheckCircle, AlertCircle, Users, UserCheck, Loader2 } from 'lucide-react';
 import { Team, Player, DraftFormat } from '../types';
 import { SimulationModal } from './SimulationModal';
+import { CoachKidPreviewGrid } from './CoachKidPreviewGrid';
 import { getTeamDisplayName } from '../utils/teamUtils';
 
 interface DraftConfigProps {
   teams: Team[];
   players: Player[];
   divisionId?: string;
+  rosterSize: number;
   onConfigComplete: (draftFormat: DraftFormat, draftOrder: string[], resolvedPlayers: Player[]) => void;
   onTeamsUpdate?: (teams: Team[]) => Promise<void>;
   onBack?: () => void;
@@ -54,7 +56,7 @@ const SORT_DEBOUNCE_MS = 800;
 // Debounce delay for auto-saving (ms)
 const AUTO_SAVE_DEBOUNCE_MS = 1500;
 
-export const DraftConfig = ({ teams, players, divisionId, onConfigComplete, onTeamsUpdate, onBack }: DraftConfigProps) => {
+export const DraftConfig = ({ teams, players, divisionId, rosterSize, onConfigComplete, onTeamsUpdate, onBack }: DraftConfigProps) => {
   const [draftFormat, setDraftFormat] = useState<DraftFormat | null>(null);
   // Store position by team ID (immediate updates for input display)
   const [teamPositions, setTeamPositions] = useState<Record<string, number | null>>({});
@@ -691,6 +693,18 @@ export const DraftConfig = ({ teams, players, divisionId, onConfigComplete, onTe
             )}
           </div>
         </div>
+
+        {/* Coach's Kid Preview Grid */}
+        {validation.valid && coachKids.length > 0 && (
+          <div className="mt-6">
+            <CoachKidPreviewGrid
+              teams={teams}
+              players={resolvedPlayers}
+              draftOrder={draftOrder}
+              rosterSize={rosterSize}
+            />
+          </div>
+        )}
       </div>
 
       {/* Simulation Modal */}

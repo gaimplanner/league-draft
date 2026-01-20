@@ -56,6 +56,9 @@ export const useDraft = (_divisionId?: string) => {
   // Track the current division ID
   const currentDivisionId = useRef<string | undefined>(_divisionId);
 
+  // Synchronous lock to prevent concurrent operations (prevents race conditions from rapid clicks)
+  const operationInProgress = useRef(false);
+
   // Load state from a division object (called when selecting a division)
   const loadDivisionState = useCallback((division: Division) => {
     currentDivisionId.current = division.id;
@@ -209,6 +212,11 @@ export const useDraft = (_divisionId?: string) => {
 
   const draftPlayer = useCallback(
     async (playerId: string) => {
+      // Synchronous lock check to prevent race conditions from rapid clicks
+      if (operationInProgress.current) {
+        return;
+      }
+
       // Guard against double-submit during API call (Issue #1)
       if (isLoading) {
         return;
@@ -230,6 +238,7 @@ export const useDraft = (_divisionId?: string) => {
       }
 
       try {
+        operationInProgress.current = true;
         setIsLoading(true);
         const result = await api.draftPlayer({
           draftStateId: draftStateId.current,
@@ -249,6 +258,7 @@ export const useDraft = (_divisionId?: string) => {
         console.error('Failed to draft player:', err);
         setError(getErrorMessage(err, 'Failed to draft player. Please try again.'));
       } finally {
+        operationInProgress.current = false;
         setIsLoading(false);
       }
     },
@@ -256,6 +266,11 @@ export const useDraft = (_divisionId?: string) => {
   );
 
   const undoLastPick = useCallback(async () => {
+    // Synchronous lock check to prevent race conditions from rapid clicks
+    if (operationInProgress.current) {
+      return;
+    }
+
     // Guard against concurrent operations (Issue #1)
     if (isLoading) {
       return;
@@ -267,6 +282,7 @@ export const useDraft = (_divisionId?: string) => {
     }
 
     try {
+      operationInProgress.current = true;
       setIsLoading(true);
       const result = await api.undoLastPick(draftStateId.current);
       setDraftState(result.draftState);
@@ -280,12 +296,18 @@ export const useDraft = (_divisionId?: string) => {
       console.error('Failed to undo pick:', err);
       setError(getErrorMessage(err, 'Failed to undo pick. Please try again.'));
     } finally {
+      operationInProgress.current = false;
       setIsLoading(false);
     }
   }, [phase, isLoading]);
 
   // Skip the current pick (team gets one fewer player)
   const skipPick = useCallback(async () => {
+    // Synchronous lock check to prevent race conditions from rapid clicks
+    if (operationInProgress.current) {
+      return;
+    }
+
     // Guard against concurrent operations (Issue #1)
     if (isLoading) {
       return;
@@ -302,6 +324,7 @@ export const useDraft = (_divisionId?: string) => {
     }
 
     try {
+      operationInProgress.current = true;
       setIsLoading(true);
       const result = await api.skipPick({
         draftStateId: draftStateId.current,
@@ -313,6 +336,7 @@ export const useDraft = (_divisionId?: string) => {
       console.error('Failed to skip pick:', err);
       setError(getErrorMessage(err, 'Failed to skip pick. Please try again.'));
     } finally {
+      operationInProgress.current = false;
       setIsLoading(false);
     }
   }, [draftState?.currentTeamId, isLoading]);
@@ -325,6 +349,11 @@ export const useDraft = (_divisionId?: string) => {
     player2Id: string,
     reason: string
   ) => {
+    // Synchronous lock check to prevent race conditions from rapid clicks
+    if (operationInProgress.current) {
+      return;
+    }
+
     // Guard against concurrent operations (Issue #1)
     if (isLoading) {
       return;
@@ -336,6 +365,7 @@ export const useDraft = (_divisionId?: string) => {
     }
 
     try {
+      operationInProgress.current = true;
       setIsLoading(true);
       const result = await api.createTrade({
         draftStateId: draftStateId.current,
@@ -353,6 +383,7 @@ export const useDraft = (_divisionId?: string) => {
       // Re-throw so TradeModal can handle it (e.g., re-enable submit button)
       throw err;
     } finally {
+      operationInProgress.current = false;
       setIsLoading(false);
     }
   }, [isLoading]);
