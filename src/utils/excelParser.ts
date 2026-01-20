@@ -7,7 +7,7 @@ import {
   EvaluationTabConfig,
   RegistrationRecord,
 } from '../types/evaluation';
-import { parseTeammateRequestsString } from './teamBuilderParser';
+import { parseTeammateRequestsString, isPlaceholderSchool } from './teamBuilderParser';
 
 /**
  * Parse an Excel file and extract structured tab data
@@ -163,7 +163,11 @@ function parseRegistrationDataSheet(sheet: XLSX.WorkSheet): RegistrationRecord[]
       const schoolValue = String(row[schoolIdx]).trim();
       // Extract just the school name if it includes address
       const schoolMatch = schoolValue.match(/^([^,]+)/);
-      record.school = schoolMatch ? schoolMatch[1].trim() : schoolValue;
+      const schoolName = schoolMatch ? schoolMatch[1].trim() : schoolValue;
+      // Filter out placeholder values like "Other/None of the Above"
+      if (!isPlaceholderSchool(schoolName)) {
+        record.school = schoolName;
+      }
     }
 
     // Grade - extract number from string like "1st", "2nd", "3rd"

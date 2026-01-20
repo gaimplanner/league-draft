@@ -327,13 +327,17 @@ function extractRegistrationRows(
     // Parse teammate requests
     const teammateRequests = parseTeammateRequestsString(rawTeammateRequests);
 
+    // Filter out placeholder school values
+    const normalizedSchool = school.trim();
+    const validSchool = isPlaceholderSchool(normalizedSchool) ? '' : normalizedSchool;
+
     rows.push({
       firstName: normalizeName(firstName),
       lastName: normalizeName(lastName),
       fullName: `${normalizeName(firstName)} ${normalizeName(lastName)}`,
       coachRequest: coachRequest.trim(),
       teammateRequests,
-      school: school.trim(),
+      school: validSchool,
       grade,
       address: address.trim(),
       littleLeagueAge,
@@ -347,6 +351,21 @@ function extractRegistrationRows(
 // -----------------------------------------------------------------------------
 // Name Normalization & Parsing
 // -----------------------------------------------------------------------------
+
+/**
+ * Check if a school name is a placeholder value that should be ignored.
+ * Examples: "Other/None of the Above", "N/A", "Not Listed", etc.
+ */
+export function isPlaceholderSchool(schoolName: string): boolean {
+  if (!schoolName || !schoolName.trim()) return true;
+  const lower = schoolName.toLowerCase().trim();
+  return /^(other|none|n\/a|na|not applicable|unknown|unspecified|prefer not)/.test(lower) ||
+         lower.includes('none of the above') ||
+         lower.includes('not listed') ||
+         lower.includes('prefer not to') ||
+         lower === '-' ||
+         lower === '--';
+}
 
 /**
  * Normalize a name: capitalize first letter, lowercase rest
