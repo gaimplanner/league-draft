@@ -441,6 +441,98 @@ export const DIVISION_PRESETS: Record<Exclude<DivisionPreset, 'custom'>, {
   },
 };
 
+// -----------------------------------------------------------------------------
+// Team Builder Request Resolution Types
+// -----------------------------------------------------------------------------
+
+/**
+ * Resolved request for the Team Builder request confirmation step.
+ * Tracks both auto-resolved and user-confirmed requests.
+ */
+export interface ResolvedRequest {
+  id: string;
+  playerId: string;                    // Player making the request
+  requestType: 'coach' | 'teammate';
+  rawRequestString: string;            // Original text from Excel
+  resolvedTargetId: string | null;     // Team ID (coach) or Player ID (teammate)
+  resolvedTargetName: string | null;
+  status: 'auto-confirmed' | 'needs-review' | 'user-confirmed' | 'unresolvable';
+  confidenceScore: number;             // 0-1 from fuzzy matching
+  isTwoWay: boolean;                   // For teammate requests: both players requested each other
+  suggestedMatches?: Array<{ id: string; name: string; score: number }>;
+}
+
+/**
+ * Configuration for the requests-first team builder algorithm.
+ */
+export interface RequestsFirstConfig {
+  // Request weights for scoring
+  twoWayTeammateWeight: number;      // Default: 100
+  oneWayTeammateWeight: number;      // Default: 50
+  coachRequestWeight: number;        // Default: 30
+  schoolClusterWeight: number;       // Default: 10
+
+  // Constraints
+  maxRosterSize: number;             // Default: 13
+  minRosterSize: number;             // Default: 10
+  forceEvenTeams: boolean;           // Default: false - if true, teams differ by at most 1 player
+
+  // Balance phase
+  balanceMode: 'auto-trade' | 'suggest-trade' | 'manual-only';
+  maxAutoTrades: number;             // Default: 10
+  targetBalanceSpread: number;       // Default: 0.10 (10%)
+
+  // Confirmation thresholds
+  autoConfirmThreshold: number;      // Default: 0.90
+  needsReviewThreshold: number;      // Default: 0.50
+}
+
+/**
+ * Default configuration for requests-first algorithm.
+ */
+export const DEFAULT_REQUESTS_FIRST_CONFIG: RequestsFirstConfig = {
+  twoWayTeammateWeight: 100,
+  oneWayTeammateWeight: 50,
+  coachRequestWeight: 30,
+  schoolClusterWeight: 10,
+  maxRosterSize: 13,
+  minRosterSize: 10,
+  forceEvenTeams: false,
+  balanceMode: 'suggest-trade',
+  maxAutoTrades: 10,
+  targetBalanceSpread: 0.10,
+  autoConfirmThreshold: 0.90,
+  needsReviewThreshold: 0.50,
+};
+
+/**
+ * A cluster of players connected by two-way requests.
+ * These players should ideally be placed on the same team.
+ */
+export interface RequestCluster {
+  id: string;
+  playerIds: string[];
+  preferredTeamIds: string[];  // From coach requests within the cluster
+  totalWeight: number;
+  warnings: string[];          // e.g., "Cluster too large for one team"
+}
+
+/**
+ * Candidate trade for balancing teams after requests-first assignment.
+ */
+export interface TradeCandidate {
+  id: string;
+  fromTeamId: string;
+  toTeamId: string;
+  player1Id: string;           // Moving from fromTeam to toTeam
+  player2Id: string;           // Moving from toTeam to fromTeam
+  balanceImprovement: number;  // How much this trade improves balance (higher is better)
+  player1Name: string;
+  player2Name: string;
+  fromTeamName: string;
+  toTeamName: string;
+}
+
 // Helper to create initial division state
 export function createInitialDivision(
   id: string,

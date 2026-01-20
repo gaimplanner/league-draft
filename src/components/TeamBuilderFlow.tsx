@@ -10,16 +10,19 @@ import {
   Play,
   ArrowLeftRight,
   Search,
+  ClipboardCheck,
 } from 'lucide-react';
-import { Division, Player, Team } from '../types';
+import { Division, Player, Team, ResolvedRequest, RequestsFirstConfig, DEFAULT_REQUESTS_FIRST_CONFIG, TradeCandidate } from '../types';
 import { RegistrationRecord } from '../types/evaluation';
 import { EvaluationImport } from './evaluation';
-import { NameMatchResolver, TeamBuilderResults } from './teamBuilder';
+import { NameMatchResolver, TeamBuilderResults, RequestConfirmation, TradeSuggestions } from './teamBuilder';
 import { TradeModal } from './TradeModal';
 import {
   runTeamBuilderAlgorithm,
+  runRequestsFirstAlgorithm,
   TeamBuilderConfig,
   TeamBuilderResult,
+  RequestsFirstResult,
   TeamBuilderPlayer,
   DEFAULT_TEAM_BUILDER_CONFIG,
   applyAssignments,
@@ -33,6 +36,7 @@ import {
   PlayerMatch,
   normalizeRequestData,
   NormalizationResult,
+  prepareRequestsForConfirmation,
 } from '../utils/teamBuilderParser';
 import * as XLSX from 'xlsx';
 
@@ -40,7 +44,9 @@ import * as XLSX from 'xlsx';
 // Types
 // -----------------------------------------------------------------------------
 
-type TeamBuilderStep = 'setup' | 'import' | 'resolution' | 'configure' | 'generate' | 'results';
+type TeamBuilderStep = 'setup' | 'import' | 'resolution' | 'confirm-requests' | 'configure' | 'generate' | 'results';
+
+type AlgorithmMode = 'balance-first' | 'requests-first';
 
 interface TeamBuilderFlowProps {
   division: Division;
@@ -91,11 +97,22 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams }:
 
   // Results
   const [algorithmResult, setAlgorithmResult] = useState<TeamBuilderResult | null>(null);
+  const [requestsFirstResult, setRequestsFirstResult] = useState<RequestsFirstResult | null>(null);
   const [finalPlayers, setFinalPlayers] = useState<Player[]>([]);
   const [finalTeams, setFinalTeams] = useState<Team[]>([]);
 
   // Swap modal
   const [showSwapModal, setShowSwapModal] = useState(false);
+
+  // Request confirmation state
+  const [resolvedRequests, setResolvedRequests] = useState<ResolvedRequest[]>([]);
+  const [algorithmMode, setAlgorithmMode] = useState<AlgorithmMode>('requests-first');
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [requestsFirstConfig, _setRequestsFirstConfig] = useState<RequestsFirstConfig>(DEFAULT_REQUESTS_FIRST_CONFIG);
+
+  // Trade suggestions state
+  const [appliedTradeIds, setAppliedTradeIds] = useState<Set<string>>(new Set());
+  const [dismissedTradeIds, setDismissedTradeIds] = useState<Set<string>>(new Set());
 
   // Player search for debugging request resolution
   const [playerSearchQuery, setPlayerSearchQuery] = useState('');
@@ -359,7 +376,7 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams }:
     setUnmatchedPlayers(prev => prev.filter(p => p.registrationIndex !== registrationIndex));
   }, [registrationPlayers, evalPlayers.length, teams.length]);
 
-  const handleProceedToConfigure = useCallback(() => {
+  const handleProceedToConfirmRequests = useCallback(() => {
     // Detect siblings by address before proceeding
     if (registrationData) {
       const siblingGroups = detectSiblingsByAddress(registrationData.rows);
@@ -397,8 +414,45 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams }:
       console.log('Normalization warnings:', normResult.warnings);
     }
 
+    // Prepare resolved requests for confirmation UI
+    const preparedRequests = prepareRequestsForConfirmation(normResult, requestsFirstConfig);
+    setResolvedRequests(preparedRequests);
+
+    // Go to request confirmation step
+    setStep('confirm-requests');
+  }, [registrationData, evalPlayers, registrationPlayers, teams, requestsFirstConfig]);
+
+  // Handle updating a request from the confirmation UI
+  const handleUpdateRequest = useCallback((
+    requestId: string,
+    targetId: string | null,
+    targetName: string | null
+  ) => {
+    setResolvedRequests(prev => prev.map(req => {
+      if (req.id !== requestId) return req;
+
+      if (targetId === null) {
+        return {
+          ...req,
+          status: 'unresolvable' as const,
+          resolvedTargetId: null,
+          resolvedTargetName: null,
+        };
+      }
+
+      return {
+        ...req,
+        status: 'user-confirmed' as const,
+        resolvedTargetId: targetId,
+        resolvedTargetName: targetName,
+      };
+    }));
+  }, []);
+
+  // Proceed from request confirmation to configure
+  const handleProceedToConfigure = useCallback(() => {
     setStep('configure');
-  }, [registrationData, evalPlayers, registrationPlayers, teams]);
+  }, []);
 
   // -----------------------------------------------------------------------------
   // Step 3: Configure
@@ -491,21 +545,117 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams }:
       };
     });
 
-    // Run algorithm
-    const result = runTeamBuilderAlgorithm(teamBuilderPlayers, teams, config);
-    setAlgorithmResult(result);
+    if (algorithmMode === 'requests-first') {
+      // Run requests-first algorithm
+      const result = runRequestsFirstAlgorithm(
+        teamBuilderPlayers,
+        teams,
+        resolvedRequests,
+        {
+          ...requestsFirstConfig,
+          maxRosterSize: config.maxRosterSize,
+          minRosterSize: config.minRosterSize,
+          forceEvenTeams: config.forceEvenTeams,
+        }
+      );
+      setRequestsFirstResult(result);
+      setAlgorithmResult(result);
 
-    // Apply assignments to get final state
-    const { players: updatedPlayers, teams: updatedTeams } = applyAssignments(
-      teamBuilderPlayers,
-      teams,
-      result.assignments
+      // Reset trade state
+      setAppliedTradeIds(new Set());
+      setDismissedTradeIds(new Set());
+
+      // Apply assignments to get final state
+      const { players: updatedPlayers, teams: updatedTeams } = applyAssignments(
+        teamBuilderPlayers,
+        teams,
+        result.assignments
+      );
+
+      setFinalPlayers(updatedPlayers);
+      setFinalTeams(updatedTeams);
+    } else {
+      // Run balance-first algorithm (original)
+      const result = runTeamBuilderAlgorithm(teamBuilderPlayers, teams, config);
+      setAlgorithmResult(result);
+      setRequestsFirstResult(null);
+
+      // Apply assignments to get final state
+      const { players: updatedPlayers, teams: updatedTeams } = applyAssignments(
+        teamBuilderPlayers,
+        teams,
+        result.assignments
+      );
+
+      setFinalPlayers(updatedPlayers);
+      setFinalTeams(updatedTeams);
+    }
+
+    setStep('results');
+  }, [evalPlayers, teams, registrationPlayers, config, normalizationResult, algorithmMode, resolvedRequests, requestsFirstConfig]);
+
+  // Handle applying a suggested trade
+  const handleApplyTrade = useCallback((trade: TradeCandidate) => {
+    if (!requestsFirstResult) return;
+
+    // Mark trade as applied
+    setAppliedTradeIds(prev => new Set([...prev, trade.id]));
+
+    // Update final players and teams
+    setFinalPlayers(prev => prev.map(p => {
+      if (p.id === trade.player1Id) {
+        return { ...p, draftedByTeamId: trade.toTeamId };
+      }
+      if (p.id === trade.player2Id) {
+        return { ...p, draftedByTeamId: trade.fromTeamId };
+      }
+      return p;
+    }));
+
+    setFinalTeams(prev => prev.map(team => {
+      if (team.id === trade.fromTeamId) {
+        // Remove player1, add player2
+        const player1 = finalPlayers.find(p => p.id === trade.player1Id);
+        const player2 = finalPlayers.find(p => p.id === trade.player2Id);
+        if (!player1 || !player2) return team;
+
+        const newRoster = team.roster.filter(p => p.id !== trade.player1Id);
+        newRoster.push({ ...player2, draftedByTeamId: trade.fromTeamId });
+        const newTotalScore = newRoster.reduce((sum, p) => sum + p.totalScore, 0);
+        return { ...team, roster: newRoster, totalScore: newTotalScore };
+      }
+      if (team.id === trade.toTeamId) {
+        // Remove player2, add player1
+        const player1 = finalPlayers.find(p => p.id === trade.player1Id);
+        const player2 = finalPlayers.find(p => p.id === trade.player2Id);
+        if (!player1 || !player2) return team;
+
+        const newRoster = team.roster.filter(p => p.id !== trade.player2Id);
+        newRoster.push({ ...player1, draftedByTeamId: trade.toTeamId });
+        const newTotalScore = newRoster.reduce((sum, p) => sum + p.totalScore, 0);
+        return { ...team, roster: newRoster, totalScore: newTotalScore };
+      }
+      return team;
+    }));
+  }, [requestsFirstResult, finalPlayers]);
+
+  // Handle applying all suggested trades
+  const handleApplyAllTrades = useCallback(() => {
+    if (!requestsFirstResult) return;
+
+    const pendingTrades = requestsFirstResult.suggestedTrades.filter(
+      t => !appliedTradeIds.has(t.id) && !dismissedTradeIds.has(t.id)
     );
 
-    setFinalPlayers(updatedPlayers);
-    setFinalTeams(updatedTeams);
-    setStep('results');
-  }, [evalPlayers, teams, registrationPlayers, config, normalizationResult]);
+    for (const trade of pendingTrades) {
+      handleApplyTrade(trade);
+    }
+  }, [requestsFirstResult, appliedTradeIds, dismissedTradeIds, handleApplyTrade]);
+
+  // Handle dismissing a trade
+  const handleDismissTrade = useCallback((tradeId: string) => {
+    setDismissedTradeIds(prev => new Set([...prev, tradeId]));
+  }, []);
 
   // -----------------------------------------------------------------------------
   // Step 5: Results
@@ -579,6 +729,7 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams }:
     { key: 'setup', label: 'Setup', icon: Settings },
     { key: 'import', label: 'Import', icon: Upload },
     { key: 'resolution', label: 'Resolution', icon: Users },
+    { key: 'confirm-requests', label: 'Confirm', icon: ClipboardCheck },
     { key: 'configure', label: 'Configure', icon: Wand2 },
     { key: 'generate', label: 'Generate', icon: Play },
     { key: 'results', label: 'Results', icon: BarChart3 },
@@ -1037,16 +1188,33 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams }:
                 Back
               </button>
               <button
-                onClick={handleProceedToConfigure}
+                onClick={handleProceedToConfirmRequests}
                 className="px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium"
               >
-                Continue to Configure
+                Continue to Confirm Requests
               </button>
             </div>
           </div>
         )}
 
-        {/* Step 3: Configure */}
+        {/* Step 3: Confirm Requests */}
+        {step === 'confirm-requests' && (
+          <RequestConfirmation
+            requests={resolvedRequests}
+            players={evalPlayers.map(p => ({
+              id: p.id,
+              firstName: p.firstName,
+              lastName: p.lastName,
+              bib: p.bib,
+            }))}
+            teams={teams}
+            onUpdateRequest={handleUpdateRequest}
+            onContinue={handleProceedToConfigure}
+            onBack={() => setStep('resolution')}
+          />
+        )}
+
+        {/* Step 4: Configure */}
         {step === 'configure' && (
           <div className="space-y-6">
             <div className="text-center mb-8">
@@ -1056,6 +1224,72 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams }:
               <p className="text-gray-600 dark:text-gray-400">
                 Review team coaches and algorithm settings.
               </p>
+            </div>
+
+            {/* Algorithm Mode Selection */}
+            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                Algorithm Mode
+              </h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                Choose how teams should be built. Requests-first prioritizes honoring friend requests over balance.
+              </p>
+              <div className="grid grid-cols-2 gap-4">
+                <div
+                  className={`p-4 rounded-lg border-2 cursor-pointer transition-colors ${
+                    algorithmMode === 'requests-first'
+                      ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-500'
+                      : 'bg-gray-50 dark:bg-gray-700/50 border-transparent hover:border-gray-300 dark:hover:border-gray-600'
+                  }`}
+                  onClick={() => setAlgorithmMode('requests-first')}
+                >
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${
+                      algorithmMode === 'requests-first'
+                        ? 'bg-purple-600'
+                        : 'border-2 border-gray-300 dark:border-gray-600'
+                    }`}>
+                      {algorithmMode === 'requests-first' && (
+                        <div className="w-2 h-2 rounded-full bg-white" />
+                      )}
+                    </div>
+                    <h4 className="font-semibold text-gray-900 dark:text-white">
+                      Requests First (Recommended)
+                    </h4>
+                  </div>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 ml-8">
+                    Prioritizes honoring friend requests. Two-way friends are placed together first,
+                    then other requests are honored. Balance is improved via suggested trades afterward.
+                  </p>
+                </div>
+                <div
+                  className={`p-4 rounded-lg border-2 cursor-pointer transition-colors ${
+                    algorithmMode === 'balance-first'
+                      ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-500'
+                      : 'bg-gray-50 dark:bg-gray-700/50 border-transparent hover:border-gray-300 dark:hover:border-gray-600'
+                  }`}
+                  onClick={() => setAlgorithmMode('balance-first')}
+                >
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${
+                      algorithmMode === 'balance-first'
+                        ? 'bg-purple-600'
+                        : 'border-2 border-gray-300 dark:border-gray-600'
+                    }`}>
+                      {algorithmMode === 'balance-first' && (
+                        <div className="w-2 h-2 rounded-full bg-white" />
+                      )}
+                    </div>
+                    <h4 className="font-semibold text-gray-900 dark:text-white">
+                      Balance First (Original)
+                    </h4>
+                  </div>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 ml-8">
+                    Prioritizes team balance. Spreads top talent first, then honors requests only
+                    if they don't impact balance too much. May result in lower request satisfaction.
+                  </p>
+                </div>
+              </div>
             </div>
 
             {/* Teams */}
@@ -1591,7 +1825,7 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams }:
             {/* Continue button */}
             <div className="flex justify-between">
               <button
-                onClick={() => setStep('resolution')}
+                onClick={() => setStep('confirm-requests')}
                 className="px-6 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-50 dark:hover:bg-gray-700"
               >
                 Back
@@ -1606,7 +1840,7 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams }:
           </div>
         )}
 
-        {/* Step 4: Generate */}
+        {/* Step 5: Generate */}
         {step === 'generate' && (
           <div className="space-y-6">
             <div className="text-center mb-8">
@@ -1665,7 +1899,7 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams }:
           </div>
         )}
 
-        {/* Step 5: Results */}
+        {/* Step 6: Results */}
         {step === 'results' && algorithmResult && (
           <div className="space-y-6">
             <TeamBuilderResults
@@ -1673,6 +1907,18 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams }:
               players={finalPlayers}
               onRerun={handleRerun}
             />
+
+            {/* Trade Suggestions (only for requests-first algorithm) */}
+            {requestsFirstResult && requestsFirstResult.suggestedTrades.length > 0 && (
+              <TradeSuggestions
+                suggestedTrades={requestsFirstResult.suggestedTrades}
+                onApplyTrade={handleApplyTrade}
+                onApplyAll={handleApplyAllTrades}
+                onDismissTrade={handleDismissTrade}
+                appliedTradeIds={appliedTradeIds}
+                dismissedTradeIds={dismissedTradeIds}
+              />
+            )}
 
             {/* Action buttons */}
             <div className="flex justify-between pt-6 border-t border-gray-200 dark:border-gray-700">

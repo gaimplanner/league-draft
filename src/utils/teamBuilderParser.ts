@@ -1714,3 +1714,461 @@ function calculateLittleLeagueAge(birthdate: Date): number {
 
   return age;
 }
+
+// -----------------------------------------------------------------------------
+// Request Confirmation Data Preparation
+// -----------------------------------------------------------------------------
+
+import { ResolvedRequest, RequestCluster, RequestsFirstConfig, DEFAULT_REQUESTS_FIRST_CONFIG } from '../types';
+
+/**
+ * Convert normalized request data into ResolvedRequest format for the confirmation UI.
+ * This determines which requests are auto-confirmed vs need review.
+ */
+export function prepareRequestsForConfirmation(
+  normalizationResult: NormalizationResult,
+  config: Partial<RequestsFirstConfig> = {}
+): ResolvedRequest[] {
+  const { autoConfirmThreshold, needsReviewThreshold } = {
+    ...DEFAULT_REQUESTS_FIRST_CONFIG,
+    ...config,
+  };
+
+  const resolvedRequests: ResolvedRequest[] = [];
+  let requestId = 0;
+
+  for (const player of normalizationResult.players) {
+    // Process coach request
+    if (player.rawCoachRequest && player.rawCoachRequest.trim()) {
+      const status = determineRequestStatus(
+        player.coachMatchScore,
+        player.coachRequestStatus,
+        autoConfirmThreshold,
+        needsReviewThreshold
+      );
+
+      resolvedRequests.push({
+        id: `req-${requestId++}`,
+        playerId: player.id,
+        requestType: 'coach',
+        rawRequestString: player.rawCoachRequest,
+        resolvedTargetId: player.resolvedCoachTeamId,
+        resolvedTargetName: player.resolvedCoachName,
+        status,
+        confidenceScore: player.coachMatchScore,
+        isTwoWay: false, // Coach requests can't be two-way
+        suggestedMatches: [], // Would be populated from match suggestions
+      });
+    }
+
+    // Process teammate requests
+    for (const resolution of player.teammateResolutions) {
+      if (!resolution.rawRequest || !resolution.rawRequest.trim()) continue;
+
+      const status = determineRequestStatus(
+        resolution.matchScore,
+        resolution.requestStatus,
+        autoConfirmThreshold,
+        needsReviewThreshold
+      );
+
+      resolvedRequests.push({
+        id: `req-${requestId++}`,
+        playerId: player.id,
+        requestType: 'teammate',
+        rawRequestString: resolution.rawRequest,
+        resolvedTargetId: resolution.resolvedPlayerId,
+        resolvedTargetName: resolution.resolvedPlayerName,
+        status,
+        confidenceScore: resolution.matchScore,
+        isTwoWay: resolution.isTwoWay,
+        suggestedMatches: resolution.suggestedMatches?.map(m => ({
+          id: m.playerId,
+          name: m.name,
+          score: m.score,
+        })),
+      });
+    }
+  }
+
+  return resolvedRequests;
+}
+
+/**
+ * Determine the confirmation status based on match score and resolution status.
+ */
+function determineRequestStatus(
+  matchScore: number,
+  resolutionStatus: 'resolved' | 'possible' | 'impossible' | 'none',
+  autoConfirmThreshold: number,
+  needsReviewThreshold: number
+): ResolvedRequest['status'] {
+  if (resolutionStatus === 'impossible' || resolutionStatus === 'none') {
+    return 'unresolvable';
+  }
+
+  if (resolutionStatus === 'resolved' && matchScore >= autoConfirmThreshold) {
+    return 'auto-confirmed';
+  }
+
+  if (matchScore >= needsReviewThreshold) {
+    return 'needs-review';
+  }
+
+  return 'unresolvable';
+}
+
+// -----------------------------------------------------------------------------
+// Request Cluster Building (Union-Find for Two-Way Groups)
+// -----------------------------------------------------------------------------
+
+/**
+ * Build clusters of players connected by two-way teammate requests.
+ * Uses Union-Find to group connected players.
+ */
+export function buildRequestClusters(
+  resolvedRequests: ResolvedRequest[],
+  _players: Array<{ id: string; firstName: string; lastName: string }>,
+  maxRosterSize: number = 13
+): RequestCluster[] {
+  // Filter to only confirmed/auto-confirmed two-way teammate requests
+  const twoWayRequests = resolvedRequests.filter(
+    req =>
+      req.requestType === 'teammate' &&
+      req.isTwoWay &&
+      req.resolvedTargetId &&
+      (req.status === 'auto-confirmed' || req.status === 'user-confirmed')
+  );
+
+  if (twoWayRequests.length === 0) {
+    return [];
+  }
+
+  // Union-Find data structure
+  const parent = new Map<string, string>();
+  const rank = new Map<string, number>();
+
+  const find = (x: string): string => {
+    if (!parent.has(x)) {
+      parent.set(x, x);
+      rank.set(x, 0);
+    }
+    if (parent.get(x) !== x) {
+      parent.set(x, find(parent.get(x)!));
+    }
+    return parent.get(x)!;
+  };
+
+  const union = (x: string, y: string) => {
+    const rootX = find(x);
+    const rootY = find(y);
+    if (rootX === rootY) return;
+
+    const rankX = rank.get(rootX) || 0;
+    const rankY = rank.get(rootY) || 0;
+
+    if (rankX < rankY) {
+      parent.set(rootX, rootY);
+    } else if (rankX > rankY) {
+      parent.set(rootY, rootX);
+    } else {
+      parent.set(rootY, rootX);
+      rank.set(rootX, rankX + 1);
+    }
+  };
+
+  // Build union-find from two-way requests
+  for (const req of twoWayRequests) {
+    union(req.playerId, req.resolvedTargetId!);
+  }
+
+  // Group players by their root
+  const clusterMap = new Map<string, Set<string>>();
+  const allPlayerIds = new Set<string>();
+
+  for (const req of twoWayRequests) {
+    allPlayerIds.add(req.playerId);
+    allPlayerIds.add(req.resolvedTargetId!);
+  }
+
+  for (const playerId of allPlayerIds) {
+    const root = find(playerId);
+    if (!clusterMap.has(root)) {
+      clusterMap.set(root, new Set());
+    }
+    clusterMap.get(root)!.add(playerId);
+  }
+
+  // Get coach requests for players to determine preferred teams
+  const playerCoachRequests = new Map<string, string>();
+  for (const req of resolvedRequests) {
+    if (
+      req.requestType === 'coach' &&
+      req.resolvedTargetId &&
+      (req.status === 'auto-confirmed' || req.status === 'user-confirmed')
+    ) {
+      playerCoachRequests.set(req.playerId, req.resolvedTargetId);
+    }
+  }
+
+  // Build clusters
+  const clusters: RequestCluster[] = [];
+  let clusterId = 0;
+
+  for (const [, playerIds] of clusterMap) {
+    const idsArray = Array.from(playerIds);
+    const warnings: string[] = [];
+
+    // Collect preferred teams from coach requests
+    const preferredTeamIds = new Set<string>();
+    for (const playerId of idsArray) {
+      const teamId = playerCoachRequests.get(playerId);
+      if (teamId) {
+        preferredTeamIds.add(teamId);
+      }
+    }
+
+    // Check if cluster is too large
+    if (idsArray.length > maxRosterSize) {
+      warnings.push(
+        `Cluster of ${idsArray.length} players exceeds max roster size of ${maxRosterSize}. ` +
+        `Will be split during assignment.`
+      );
+    }
+
+    // Calculate total weight based on number of two-way connections
+    // Each two-way pair within the cluster adds to the weight
+    let connectionCount = 0;
+    for (const req of twoWayRequests) {
+      if (playerIds.has(req.playerId) && playerIds.has(req.resolvedTargetId!)) {
+        connectionCount++;
+      }
+    }
+    // Divide by 2 since each connection is counted twice (A→B and B→A)
+    const totalWeight = (connectionCount / 2) * 100; // 100 points per two-way pair
+
+    clusters.push({
+      id: `cluster-${clusterId++}`,
+      playerIds: idsArray,
+      preferredTeamIds: Array.from(preferredTeamIds),
+      totalWeight,
+      warnings,
+    });
+  }
+
+  // Sort clusters by total weight (descending) and then by size (descending)
+  clusters.sort((a, b) => {
+    if (b.totalWeight !== a.totalWeight) {
+      return b.totalWeight - a.totalWeight;
+    }
+    return b.playerIds.length - a.playerIds.length;
+  });
+
+  return clusters;
+}
+
+/**
+ * Split a cluster that's too large for one team.
+ * Uses a greedy approach to keep the strongest connections together.
+ */
+export function splitOversizedCluster(
+  cluster: RequestCluster,
+  resolvedRequests: ResolvedRequest[],
+  maxSize: number
+): RequestCluster[] {
+  if (cluster.playerIds.length <= maxSize) {
+    return [cluster];
+  }
+
+  // Build a connection strength map between players
+  const connectionStrength = new Map<string, Map<string, number>>();
+
+  for (const req of resolvedRequests) {
+    if (
+      req.requestType === 'teammate' &&
+      req.resolvedTargetId &&
+      cluster.playerIds.includes(req.playerId) &&
+      cluster.playerIds.includes(req.resolvedTargetId)
+    ) {
+      const fromId = req.playerId;
+      const toId = req.resolvedTargetId;
+
+      if (!connectionStrength.has(fromId)) {
+        connectionStrength.set(fromId, new Map());
+      }
+      const current = connectionStrength.get(fromId)!.get(toId) || 0;
+      connectionStrength.get(fromId)!.set(toId, current + (req.isTwoWay ? 100 : 50));
+    }
+  }
+
+  // Greedy partitioning: start with the player who has the most connections
+  const result: RequestCluster[] = [];
+  const remaining = new Set(cluster.playerIds);
+  let subClusterId = 0;
+
+  while (remaining.size > 0) {
+    const subCluster = new Set<string>();
+
+    // Find the player with most connections to unassigned players
+    let bestStart: string | null = null;
+    let bestScore = -1;
+
+    for (const playerId of remaining) {
+      let score = 0;
+      const connections = connectionStrength.get(playerId);
+      if (connections) {
+        for (const [targetId, strength] of connections) {
+          if (remaining.has(targetId)) {
+            score += strength;
+          }
+        }
+      }
+      if (score > bestScore) {
+        bestScore = score;
+        bestStart = playerId;
+      }
+    }
+
+    // Start with this player
+    if (bestStart) {
+      subCluster.add(bestStart);
+      remaining.delete(bestStart);
+    } else if (remaining.size > 0) {
+      // Fallback: pick any remaining player
+      const first = remaining.values().next().value as string;
+      if (first) {
+        subCluster.add(first);
+        remaining.delete(first);
+      }
+    }
+
+    // Add connected players until we hit max size
+    while (subCluster.size < maxSize && remaining.size > 0) {
+      // Find the remaining player most connected to current subcluster
+      let bestNext: string | null = null;
+      let bestNextScore = -1;
+
+      for (const candidateId of remaining) {
+        let score = 0;
+        for (const memberId of subCluster) {
+          const memberConnections = connectionStrength.get(memberId);
+          if (memberConnections) {
+            score += memberConnections.get(candidateId) || 0;
+          }
+          const candidateConnections = connectionStrength.get(candidateId);
+          if (candidateConnections) {
+            score += candidateConnections.get(memberId) || 0;
+          }
+        }
+        if (score > bestNextScore) {
+          bestNextScore = score;
+          bestNext = candidateId;
+        }
+      }
+
+      if (bestNext && bestNextScore > 0) {
+        subCluster.add(bestNext);
+        remaining.delete(bestNext);
+      } else {
+        // No more connected players - break and start new cluster
+        break;
+      }
+    }
+
+    // Create the sub-cluster
+    const subClusterArray = Array.from(subCluster);
+    result.push({
+      id: `${cluster.id}-sub${subClusterId++}`,
+      playerIds: subClusterArray,
+      preferredTeamIds: cluster.preferredTeamIds, // Inherit preferences
+      totalWeight: cluster.totalWeight / Math.ceil(cluster.playerIds.length / maxSize),
+      warnings: [`Split from larger cluster of ${cluster.playerIds.length} players`],
+    });
+  }
+
+  return result;
+}
+
+/**
+ * Update resolved requests based on user confirmations.
+ * Returns a new array with updated statuses.
+ */
+export function applyUserConfirmations(
+  requests: ResolvedRequest[],
+  confirmations: Map<string, { targetId: string | null; targetName: string | null }>
+): ResolvedRequest[] {
+  return requests.map(req => {
+    const confirmation = confirmations.get(req.id);
+    if (!confirmation) return req;
+
+    if (confirmation.targetId === null) {
+      // User marked as unresolvable
+      return {
+        ...req,
+        status: 'unresolvable' as const,
+        resolvedTargetId: null,
+        resolvedTargetName: null,
+      };
+    }
+
+    return {
+      ...req,
+      status: 'user-confirmed' as const,
+      resolvedTargetId: confirmation.targetId,
+      resolvedTargetName: confirmation.targetName,
+    };
+  });
+}
+
+/**
+ * Get statistics about request confirmation status.
+ */
+export function getConfirmationStats(requests: ResolvedRequest[]): {
+  total: number;
+  autoConfirmed: number;
+  needsReview: number;
+  userConfirmed: number;
+  unresolvable: number;
+  coachRequests: number;
+  teammateRequests: number;
+  twoWayRequests: number;
+} {
+  const stats = {
+    total: requests.length,
+    autoConfirmed: 0,
+    needsReview: 0,
+    userConfirmed: 0,
+    unresolvable: 0,
+    coachRequests: 0,
+    teammateRequests: 0,
+    twoWayRequests: 0,
+  };
+
+  for (const req of requests) {
+    switch (req.status) {
+      case 'auto-confirmed':
+        stats.autoConfirmed++;
+        break;
+      case 'needs-review':
+        stats.needsReview++;
+        break;
+      case 'user-confirmed':
+        stats.userConfirmed++;
+        break;
+      case 'unresolvable':
+        stats.unresolvable++;
+        break;
+    }
+
+    if (req.requestType === 'coach') {
+      stats.coachRequests++;
+    } else {
+      stats.teammateRequests++;
+      if (req.isTwoWay) {
+        stats.twoWayRequests++;
+      }
+    }
+  }
+
+  return stats;
+}

@@ -12,7 +12,17 @@
  * Outputs assignments in draft-compatible format (simulated picks).
  */
 
-import { Player, Team, DraftPick } from '../types';
+import {
+  Player,
+  Team,
+  DraftPick,
+  ResolvedRequest,
+  RequestCluster,
+  RequestsFirstConfig,
+  DEFAULT_REQUESTS_FIRST_CONFIG,
+  TradeCandidate,
+} from '../types';
+import { buildRequestClusters, splitOversizedCluster } from './teamBuilderParser';
 
 // -----------------------------------------------------------------------------
 // Types
@@ -682,4 +692,830 @@ export function applyAssignments(
     players: Array.from(playerMap.values()),
     teams: Array.from(teamMap.values()),
   };
+}
+
+// -----------------------------------------------------------------------------
+// Requests-First Algorithm
+// -----------------------------------------------------------------------------
+
+/**
+ * Extended result type for requests-first algorithm.
+ */
+export interface RequestsFirstResult extends TeamBuilderResult {
+  clusters: RequestCluster[];
+  suggestedTrades: TradeCandidate[];
+}
+
+/**
+ * Run the requests-first team builder algorithm.
+ *
+ * This algorithm prioritizes request satisfaction over balance:
+ * 1. Place locked players (coach kids, siblings)
+ * 2. Build and place two-way request clusters
+ * 3. Place remaining players by request weight (two-way > one-way > coach)
+ * 4. Suggest trades to improve balance without breaking satisfied requests
+ */
+export function runRequestsFirstAlgorithm(
+  players: TeamBuilderPlayer[],
+  teams: Team[],
+  resolvedRequests: ResolvedRequest[],
+  config: Partial<RequestsFirstConfig> = {}
+): RequestsFirstResult {
+  const fullConfig = { ...DEFAULT_REQUESTS_FIRST_CONFIG, ...config };
+  const warnings: string[] = [];
+  const assignments: AssignmentResult[] = [];
+
+  // Initialize working copies
+  const workingTeams: TeamBuilderTeam[] = teams.map(t => ({
+    ...t,
+    assignedPlayerIds: [],
+    currentScore: 0,
+  }));
+
+  const unassignedPlayers = new Set(players.map(p => p.id));
+  const playerMap = new Map(players.map(p => [p.id, p]));
+
+  let currentRound = 1;
+  let currentPick = 1;
+
+  // Helper to assign a player
+  const assignPlayer = (
+    playerId: string,
+    teamId: string,
+    reason: AssignmentReason
+  ) => {
+    const player = playerMap.get(playerId);
+    const team = workingTeams.find(t => t.id === teamId);
+
+    if (!player || !team) {
+      warnings.push(`Failed to assign player ${playerId} to team ${teamId}`);
+      return false;
+    }
+
+    if (team.assignedPlayerIds.length >= fullConfig.maxRosterSize) {
+      warnings.push(`Team ${team.name || team.headCoach} is full, cannot assign ${player.name}`);
+      return false;
+    }
+
+    team.assignedPlayerIds.push(playerId);
+    team.currentScore += player.totalScore;
+    unassignedPlayers.delete(playerId);
+
+    assignments.push({
+      playerId,
+      teamId,
+      round: currentRound,
+      pick: currentPick,
+      reason,
+    });
+
+    currentPick++;
+    if (currentPick > teams.length) {
+      currentRound++;
+      currentPick = 1;
+    }
+
+    return true;
+  };
+
+  // Calculate target roster sizes for even teams
+  const numTeams = workingTeams.length;
+  const totalPlayers = players.length;
+  const baseRosterSize = Math.floor(totalPlayers / numTeams);
+  const extraPlayers = totalPlayers % numTeams;
+  // Some teams get baseRosterSize + 1, others get baseRosterSize
+  // Teams are filled in order, so first `extraPlayers` teams get the extra player
+
+  // Helper to get max size for a team when forceEvenTeams is enabled
+  const getMaxSizeForTeam = (teamIndex: number): number => {
+    if (!fullConfig.forceEvenTeams) {
+      return fullConfig.maxRosterSize;
+    }
+    // First `extraPlayers` teams get one extra player
+    return teamIndex < extraPlayers ? baseRosterSize + 1 : baseRosterSize;
+  };
+
+  // Helper to check if team can accept more players
+  const canAcceptPlayer = (team: TeamBuilderTeam): boolean => {
+    const teamIndex = workingTeams.indexOf(team);
+    const maxSize = getMaxSizeForTeam(teamIndex);
+    return team.assignedPlayerIds.length < maxSize;
+  };
+
+  // Helper to get team with lowest score that can accept
+  const getLowestScoreTeam = (): TeamBuilderTeam | null => {
+    const eligible = workingTeams.filter(canAcceptPlayer);
+    if (eligible.length === 0) return null;
+    return eligible.reduce((lowest, team) =>
+      team.currentScore < lowest.currentScore ? team : lowest
+    );
+  };
+
+  // Helper to get team with fewest players that can accept (for even distribution)
+  const getSmallestTeam = (): TeamBuilderTeam | null => {
+    const eligible = workingTeams.filter(canAcceptPlayer);
+    if (eligible.length === 0) return null;
+    return eligible.reduce((smallest, team) =>
+      team.assignedPlayerIds.length < smallest.assignedPlayerIds.length ? team : smallest
+    );
+  };
+
+  // Build request lookup maps
+  const playerRequests = new Map<string, ResolvedRequest[]>();
+  for (const req of resolvedRequests) {
+    if (!playerRequests.has(req.playerId)) {
+      playerRequests.set(req.playerId, []);
+    }
+    playerRequests.get(req.playerId)!.push(req);
+  }
+
+  // =========================================================================
+  // PHASE 0: Place locked players (coach kids, siblings)
+  // =========================================================================
+
+  // 0a: Coach kids
+  for (const player of players) {
+    if (!unassignedPlayers.has(player.id)) continue;
+
+    if (player.isCoachKid && player.coachTeamId) {
+      const team = workingTeams.find(t => t.id === player.coachTeamId);
+      if (team && canAcceptPlayer(team)) {
+        assignPlayer(player.id, team.id, 'coach-kid');
+      }
+    }
+  }
+
+  // 0b: Siblings - place with their locked sibling
+  const siblingGroups = new Map<string, string[]>();
+  for (const player of players) {
+    if (player.siblingId) {
+      const groupKey = [player.id, player.siblingId].sort().join('-');
+      if (!siblingGroups.has(groupKey)) {
+        siblingGroups.set(groupKey, []);
+      }
+      siblingGroups.get(groupKey)!.push(player.id);
+    }
+  }
+
+  for (const [, siblingIds] of siblingGroups) {
+    const assignedSibling = siblingIds.find(id => !unassignedPlayers.has(id));
+    if (assignedSibling) {
+      const assignment = assignments.find(a => a.playerId === assignedSibling);
+      if (assignment) {
+        for (const sibId of siblingIds) {
+          if (unassignedPlayers.has(sibId)) {
+            const team = workingTeams.find(t => t.id === assignment.teamId);
+            if (team && canAcceptPlayer(team)) {
+              assignPlayer(sibId, assignment.teamId, 'sibling-lock');
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // 0c: Manually locked players
+  for (const player of players) {
+    if (!unassignedPlayers.has(player.id)) continue;
+
+    if (player.lockedToTeamId) {
+      const team = workingTeams.find(t => t.id === player.lockedToTeamId);
+      if (team && canAcceptPlayer(team)) {
+        assignPlayer(player.id, team.id, 'manual-lock');
+      }
+    }
+  }
+
+  // =========================================================================
+  // PHASE 1: Build and place two-way request clusters
+  // =========================================================================
+
+  // Build clusters from confirmed requests
+  const confirmedRequests = resolvedRequests.filter(
+    r => r.status === 'auto-confirmed' || r.status === 'user-confirmed'
+  );
+
+  let clusters = buildRequestClusters(
+    confirmedRequests,
+    players.map(p => ({ id: p.id, firstName: p.firstName, lastName: p.lastName })),
+    fullConfig.maxRosterSize
+  );
+
+  // Split oversized clusters
+  const processedClusters: RequestCluster[] = [];
+  for (const cluster of clusters) {
+    if (cluster.playerIds.length > fullConfig.maxRosterSize) {
+      const split = splitOversizedCluster(cluster, confirmedRequests, fullConfig.maxRosterSize);
+      processedClusters.push(...split);
+    } else {
+      processedClusters.push(cluster);
+    }
+  }
+  clusters = processedClusters;
+
+  // Sort clusters by weight (descending)
+  clusters.sort((a, b) => b.totalWeight - a.totalWeight);
+
+  // Place each cluster
+  for (const cluster of clusters) {
+    // Skip if all players already assigned
+    const unassignedInCluster = cluster.playerIds.filter(id => unassignedPlayers.has(id));
+    if (unassignedInCluster.length === 0) continue;
+
+    // Find best team for this cluster
+    // Prefer teams where some cluster members are already assigned
+    // Then prefer teams with coach requests from cluster members
+    // Then prefer team with lowest score
+
+    let bestTeam: TeamBuilderTeam | null = null;
+    let bestScore = -Infinity;
+
+    for (const team of workingTeams) {
+      if (!canAcceptPlayer(team)) continue;
+      // Check if team can fit all unassigned cluster members
+      const remainingCapacity = fullConfig.maxRosterSize - team.assignedPlayerIds.length;
+      if (remainingCapacity < unassignedInCluster.length) continue;
+
+      let score = 0;
+
+      // Bonus for cluster members already on team
+      const alreadyOnTeam = cluster.playerIds.filter(id =>
+        team.assignedPlayerIds.includes(id)
+      ).length;
+      score += alreadyOnTeam * 200;
+
+      // Bonus for coach request preference
+      if (cluster.preferredTeamIds.includes(team.id)) {
+        score += fullConfig.coachRequestWeight;
+      }
+
+      // Small penalty for team score (prefer lower-score teams slightly)
+      score -= team.currentScore * 0.01;
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestTeam = team;
+      }
+    }
+
+    // If no team can fit the whole cluster, pick team with most capacity
+    if (!bestTeam) {
+      const teamsWithCapacity = workingTeams
+        .filter(canAcceptPlayer)
+        .sort((a, b) => {
+          const capA = fullConfig.maxRosterSize - a.assignedPlayerIds.length;
+          const capB = fullConfig.maxRosterSize - b.assignedPlayerIds.length;
+          return capB - capA;
+        });
+      bestTeam = teamsWithCapacity[0] || null;
+    }
+
+    if (bestTeam) {
+      for (const playerId of unassignedInCluster) {
+        if (canAcceptPlayer(bestTeam)) {
+          assignPlayer(playerId, bestTeam.id, 'two-way-friend');
+        } else {
+          warnings.push(`Could not place all cluster members together: ${playerId}`);
+        }
+      }
+    } else {
+      for (const playerId of unassignedInCluster) {
+        warnings.push(`No team available for cluster member: ${playerId}`);
+      }
+    }
+  }
+
+  // =========================================================================
+  // PHASE 2: Place remaining players by request weight
+  // =========================================================================
+
+  // Calculate request weight for each remaining player
+  interface PlayerWeight {
+    playerId: string;
+    weight: number;
+    preferredTeamIds: string[];
+    oneWayTargets: string[];
+  }
+
+  const playerWeights: PlayerWeight[] = [];
+
+  for (const playerId of unassignedPlayers) {
+    const requests = playerRequests.get(playerId) || [];
+    let weight = 0;
+    const preferredTeamIds: string[] = [];
+    const oneWayTargets: string[] = [];
+
+    for (const req of requests) {
+      if (req.status !== 'auto-confirmed' && req.status !== 'user-confirmed') continue;
+      if (!req.resolvedTargetId) continue;
+
+      if (req.requestType === 'coach') {
+        weight += fullConfig.coachRequestWeight;
+        preferredTeamIds.push(req.resolvedTargetId);
+      } else if (req.requestType === 'teammate') {
+        if (req.isTwoWay) {
+          weight += fullConfig.twoWayTeammateWeight;
+        } else {
+          weight += fullConfig.oneWayTeammateWeight;
+          oneWayTargets.push(req.resolvedTargetId);
+        }
+      }
+    }
+
+    // Add school cluster weight if player has school
+    const player = playerMap.get(playerId);
+    if (player?.school) {
+      weight += fullConfig.schoolClusterWeight;
+    }
+
+    playerWeights.push({
+      playerId,
+      weight,
+      preferredTeamIds,
+      oneWayTargets,
+    });
+  }
+
+  // Sort by weight descending (players with more/higher-priority requests first)
+  playerWeights.sort((a, b) => b.weight - a.weight);
+
+  // Place each player to maximize their request satisfaction
+  for (const { playerId, preferredTeamIds, oneWayTargets } of playerWeights) {
+    if (!unassignedPlayers.has(playerId)) continue;
+
+    const player = playerMap.get(playerId);
+    if (!player) continue;
+
+    let bestTeam: TeamBuilderTeam | null = null;
+    let bestScore = -Infinity;
+    let bestReason: AssignmentReason = 'balance';
+
+    for (const team of workingTeams) {
+      if (!canAcceptPlayer(team)) continue;
+
+      let score = 0;
+      let reason: AssignmentReason = 'balance';
+
+      // Check one-way targets on this team
+      const oneWayOnTeam = oneWayTargets.filter(targetId =>
+        team.assignedPlayerIds.includes(targetId)
+      ).length;
+      if (oneWayOnTeam > 0) {
+        score += oneWayOnTeam * fullConfig.oneWayTeammateWeight;
+        reason = 'one-way-friend';
+      }
+
+      // Check coach preference
+      if (preferredTeamIds.includes(team.id)) {
+        score += fullConfig.coachRequestWeight;
+        if (reason === 'balance') reason = 'coach-request';
+      }
+
+      // Check school clustering
+      if (player.school) {
+        const schoolmatesOnTeam = team.assignedPlayerIds.filter(id => {
+          const p = playerMap.get(id);
+          return p?.school && p.school.toLowerCase() === player.school!.toLowerCase();
+        }).length;
+        if (schoolmatesOnTeam > 0) {
+          score += schoolmatesOnTeam * fullConfig.schoolClusterWeight;
+          if (reason === 'balance') reason = 'school-cluster';
+        }
+      }
+
+      // Small penalty for team score (prefer lower-score teams for balance)
+      score -= team.currentScore * 0.001;
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestTeam = team;
+        bestReason = reason;
+      }
+    }
+
+    // If no team with requests, use smallest team (for even teams) or lowest score team
+    if (!bestTeam || bestScore <= 0) {
+      bestTeam = fullConfig.forceEvenTeams ? getSmallestTeam() : getLowestScoreTeam();
+      bestReason = 'balance';
+    }
+
+    if (bestTeam) {
+      assignPlayer(playerId, bestTeam.id, bestReason);
+    } else {
+      warnings.push(`No team available for player: ${player.name}`);
+    }
+  }
+
+  // =========================================================================
+  // PHASE 3: Place any remaining unassigned players
+  // =========================================================================
+
+  for (const playerId of unassignedPlayers) {
+    const player = playerMap.get(playerId);
+    if (!player) continue;
+
+    // Use smallest team for even distribution, or lowest score team otherwise
+    const targetTeam = fullConfig.forceEvenTeams ? getSmallestTeam() : getLowestScoreTeam();
+    if (targetTeam) {
+      assignPlayer(playerId, targetTeam.id, 'balance');
+    } else {
+      warnings.push(`Could not place player ${player.name} - all teams full`);
+    }
+  }
+
+  // =========================================================================
+  // PHASE 4: Calculate suggested trades for balance
+  // =========================================================================
+
+  const suggestedTrades = findBalancingTrades(
+    workingTeams,
+    players,
+    resolvedRequests,
+    assignments,
+    fullConfig
+  );
+
+  // =========================================================================
+  // Calculate results
+  // =========================================================================
+
+  // Team summaries
+  const teamAverages = workingTeams.map(team => ({
+    team,
+    averageScore: team.assignedPlayerIds.length > 0
+      ? team.currentScore / team.assignedPlayerIds.length
+      : 0,
+  }));
+  const meanAverageScore = teamAverages.length > 0
+    ? teamAverages.reduce((sum, t) => sum + t.averageScore, 0) / teamAverages.length
+    : 0;
+
+  const teamSummaries: TeamSummary[] = workingTeams.map(team => {
+    const rosterCount = team.assignedPlayerIds.length;
+    const averageScore = rosterCount > 0 ? team.currentScore / rosterCount : 0;
+    return {
+      teamId: team.id,
+      teamName: team.name || team.headCoach,
+      coachName: team.headCoach,
+      rosterCount,
+      totalScore: team.currentScore,
+      averageScore,
+      meanDelta: averageScore - meanAverageScore,
+      meanDeltaPercent: meanAverageScore > 0 ? ((averageScore - meanAverageScore) / meanAverageScore) * 100 : 0,
+    };
+  });
+
+  // Player happiness
+  const playerHappiness: PlayerHappiness[] = players.map(player => {
+    const assignment = assignments.find(a => a.playerId === player.id);
+    if (!assignment) {
+      return {
+        playerId: player.id,
+        score: 'no-requests' as HappinessScore,
+        coachRequestHonored: null,
+        teammateRequestsHonored: 0,
+        teammateRequestsTotal: 0,
+        twoWayRequestsHonored: 0,
+        twoWayRequestsTotal: 0,
+      };
+    }
+
+    const teamId = assignment.teamId;
+    const team = workingTeams.find(t => t.id === teamId)!;
+    const requests = playerRequests.get(player.id) || [];
+
+    // Coach request
+    const coachRequests = requests.filter(r =>
+      r.requestType === 'coach' &&
+      (r.status === 'auto-confirmed' || r.status === 'user-confirmed') &&
+      r.resolvedTargetId
+    );
+    const hasCoachRequest = coachRequests.length > 0;
+    const coachRequestHonored = hasCoachRequest
+      ? coachRequests.some(r => r.resolvedTargetId === teamId)
+      : null;
+
+    // Teammate requests
+    const teammateRequests = requests.filter(r =>
+      r.requestType === 'teammate' &&
+      (r.status === 'auto-confirmed' || r.status === 'user-confirmed') &&
+      r.resolvedTargetId
+    );
+
+    const twoWayTotal = teammateRequests.filter(r => r.isTwoWay).length;
+    const oneWayTotal = teammateRequests.filter(r => !r.isTwoWay).length;
+    const teammateRequestsTotal = twoWayTotal + oneWayTotal;
+
+    const twoWayHonored = teammateRequests.filter(r =>
+      r.isTwoWay && team.assignedPlayerIds.includes(r.resolvedTargetId!)
+    ).length;
+    const oneWayHonored = teammateRequests.filter(r =>
+      !r.isTwoWay && team.assignedPlayerIds.includes(r.resolvedTargetId!)
+    ).length;
+    const teammateRequestsHonored = twoWayHonored + oneWayHonored;
+
+    // Calculate happiness score
+    let score: HappinessScore;
+    const totalRequests = teammateRequestsTotal + (hasCoachRequest ? 1 : 0);
+    const totalHonored = teammateRequestsHonored + (coachRequestHonored ? 1 : 0);
+
+    if (totalRequests === 0) {
+      score = 'no-requests';
+    } else if (totalHonored === totalRequests) {
+      score = 'all';
+    } else if (totalHonored > 0) {
+      score = 'some';
+    } else {
+      score = 'none';
+    }
+
+    return {
+      playerId: player.id,
+      score,
+      coachRequestHonored,
+      teammateRequestsHonored,
+      teammateRequestsTotal,
+      twoWayRequestsHonored: twoWayHonored,
+      twoWayRequestsTotal: twoWayTotal,
+    };
+  });
+
+  // Stats
+  const lockedCount = assignments.filter(a =>
+    ['coach-kid', 'assistant-coach-kid', 'sibling-lock', 'manual-lock'].includes(a.reason)
+  ).length;
+
+  const topTalentAssigned = assignments.filter(a => a.reason === 'top-talent').length;
+
+  const requestBasedCount = assignments.filter(a =>
+    ['two-way-friend', 'one-way-friend', 'coach-request', 'school-cluster'].includes(a.reason)
+  ).length;
+
+  const balanceBasedCount = assignments.filter(a => a.reason === 'balance').length;
+
+  const twoWayTotal = players.reduce((sum, p) => sum + (p.twoWayTeammateIds?.length || 0), 0);
+  const twoWayHonored = playerHappiness.reduce((sum, h) => sum + h.twoWayRequestsHonored, 0);
+
+  const oneWayTotal = players.reduce((sum, p) => sum + (p.oneWayTeammateIds?.length || 0), 0);
+  const oneWayHonored = playerHappiness.reduce((sum, h) =>
+    sum + (h.teammateRequestsHonored - h.twoWayRequestsHonored), 0
+  );
+
+  const coachRequestTotal = players.filter(p => p.resolvedCoachTeamId).length;
+  const coachRequestHonored = playerHappiness.filter(h => h.coachRequestHonored === true).length;
+
+  // Average happiness
+  const happinessScores = playerHappiness.filter(h => h.score !== 'no-requests');
+  const avgHappiness = happinessScores.length > 0
+    ? happinessScores.reduce((sum, h) => {
+        if (h.score === 'all') return sum + 1;
+        if (h.score === 'some') return sum + 0.5;
+        return sum;
+      }, 0) / happinessScores.length
+    : 1;
+
+  return {
+    assignments,
+    teamSummaries,
+    playerHappiness,
+    warnings,
+    stats: {
+      totalPlayers: players.length,
+      lockedPlayers: lockedCount,
+      topTalentPlayers: topTalentAssigned,
+      requestBasedPlayers: requestBasedCount,
+      balanceBasedPlayers: balanceBasedCount,
+      twoWayRequestsHonored: twoWayHonored,
+      twoWayRequestsTotal: twoWayTotal,
+      oneWayRequestsHonored: oneWayHonored,
+      oneWayRequestsTotal: oneWayTotal,
+      coachRequestsHonored: coachRequestHonored,
+      coachRequestsTotal: coachRequestTotal,
+      averageHappiness: avgHappiness,
+    },
+    clusters,
+    suggestedTrades,
+  };
+}
+
+// -----------------------------------------------------------------------------
+// Trade Suggestions for Balance
+// -----------------------------------------------------------------------------
+
+/**
+ * Find trades that would improve team balance without breaking satisfied requests.
+ *
+ * A player is "tradeable" if:
+ * - They have NO requests, OR
+ * - ALL their requests are already satisfied on their current team
+ */
+export function findBalancingTrades(
+  teams: TeamBuilderTeam[],
+  players: TeamBuilderPlayer[],
+  resolvedRequests: ResolvedRequest[],
+  assignments: AssignmentResult[],
+  config: RequestsFirstConfig
+): TradeCandidate[] {
+  const candidates: TradeCandidate[] = [];
+  const playerMap = new Map(players.map(p => [p.id, p]));
+
+  // Build lookup for which team each player is on
+  const playerTeamMap = new Map<string, string>();
+  for (const assignment of assignments) {
+    playerTeamMap.set(assignment.playerId, assignment.teamId);
+  }
+
+  // Build request lookup
+  const playerRequests = new Map<string, ResolvedRequest[]>();
+  for (const req of resolvedRequests) {
+    if (!playerRequests.has(req.playerId)) {
+      playerRequests.set(req.playerId, []);
+    }
+    playerRequests.get(req.playerId)!.push(req);
+  }
+
+  // Determine which players are tradeable
+  const isPlayerTradeable = (playerId: string): boolean => {
+    const player = playerMap.get(playerId);
+    if (!player) return false;
+
+    // Coach kids are never tradeable
+    if (player.isCoachKid) return false;
+
+    // Siblings are not tradeable (would need to trade both)
+    if (player.siblingId) return false;
+
+    // Players locked to teams are not tradeable
+    if (player.lockedToTeamId) return false;
+
+    const requests = playerRequests.get(playerId) || [];
+    const confirmedRequests = requests.filter(
+      r => (r.status === 'auto-confirmed' || r.status === 'user-confirmed') && r.resolvedTargetId
+    );
+
+    // If no confirmed requests, player is tradeable
+    if (confirmedRequests.length === 0) return true;
+
+    // Check if all requests are satisfied
+    const teamId = playerTeamMap.get(playerId);
+    const team = teams.find(t => t.id === teamId);
+    if (!team) return false;
+
+    for (const req of confirmedRequests) {
+      if (req.requestType === 'coach') {
+        // Coach request satisfied if on requested team
+        if (req.resolvedTargetId !== teamId) return false;
+      } else {
+        // Teammate request satisfied if teammate is on same team
+        if (!team.assignedPlayerIds.includes(req.resolvedTargetId!)) return false;
+      }
+    }
+
+    return true;
+  };
+
+  // Get tradeable players per team with their scores
+  const tradeableByTeam = new Map<string, Array<{ playerId: string; score: number; name: string }>>();
+  for (const team of teams) {
+    const tradeable: Array<{ playerId: string; score: number; name: string }> = [];
+    for (const playerId of team.assignedPlayerIds) {
+      if (isPlayerTradeable(playerId)) {
+        const player = playerMap.get(playerId);
+        if (player) {
+          tradeable.push({
+            playerId,
+            score: player.totalScore,
+            name: player.name,
+          });
+        }
+      }
+    }
+    tradeableByTeam.set(team.id, tradeable);
+  }
+
+  // Calculate current balance metrics
+  const teamScores = teams.map(t => ({
+    team: t,
+    avgScore: t.assignedPlayerIds.length > 0
+      ? t.currentScore / t.assignedPlayerIds.length
+      : 0,
+  }));
+  const meanAvg = teamScores.reduce((sum, t) => sum + t.avgScore, 0) / teamScores.length;
+
+  // Sort teams by average score
+  teamScores.sort((a, b) => b.avgScore - a.avgScore);
+
+  // Find trades between high and low scoring teams
+  let tradeId = 0;
+  for (let i = 0; i < teamScores.length; i++) {
+    for (let j = teamScores.length - 1; j > i; j--) {
+      const highTeam = teamScores[i].team;
+      const lowTeam = teamScores[j].team;
+
+      // Get tradeable players
+      const highTradeable = tradeableByTeam.get(highTeam.id) || [];
+      const lowTradeable = tradeableByTeam.get(lowTeam.id) || [];
+
+      // Try to find beneficial swaps
+      for (const highPlayer of highTradeable) {
+        for (const lowPlayer of lowTradeable) {
+          // Only consider if high player has more points
+          if (highPlayer.score <= lowPlayer.score) continue;
+
+          // Calculate new averages after trade
+          const newHighTotal = highTeam.currentScore - highPlayer.score + lowPlayer.score;
+          const newLowTotal = lowTeam.currentScore - lowPlayer.score + highPlayer.score;
+
+          const newHighAvg = newHighTotal / highTeam.assignedPlayerIds.length;
+          const newLowAvg = newLowTotal / lowTeam.assignedPlayerIds.length;
+
+          // Calculate improvement (how much closer to mean)
+          const oldHighDelta = Math.abs(teamScores[i].avgScore - meanAvg);
+          const oldLowDelta = Math.abs(teamScores[j].avgScore - meanAvg);
+          const newHighDelta = Math.abs(newHighAvg - meanAvg);
+          const newLowDelta = Math.abs(newLowAvg - meanAvg);
+
+          const improvement = (oldHighDelta + oldLowDelta) - (newHighDelta + newLowDelta);
+
+          // Only suggest if it improves balance
+          if (improvement > 0) {
+            candidates.push({
+              id: `trade-${tradeId++}`,
+              fromTeamId: highTeam.id,
+              toTeamId: lowTeam.id,
+              player1Id: highPlayer.playerId,
+              player2Id: lowPlayer.playerId,
+              balanceImprovement: improvement,
+              player1Name: highPlayer.name,
+              player2Name: lowPlayer.name,
+              fromTeamName: highTeam.name || highTeam.headCoach,
+              toTeamName: lowTeam.name || lowTeam.headCoach,
+            });
+          }
+        }
+      }
+    }
+  }
+
+  // Sort by improvement (descending) and limit
+  candidates.sort((a, b) => b.balanceImprovement - a.balanceImprovement);
+
+  // Deduplicate - remove trades involving same players
+  const seen = new Set<string>();
+  const unique: TradeCandidate[] = [];
+  for (const trade of candidates) {
+    const key1 = trade.player1Id;
+    const key2 = trade.player2Id;
+    if (!seen.has(key1) && !seen.has(key2)) {
+      unique.push(trade);
+      seen.add(key1);
+      seen.add(key2);
+    }
+  }
+
+  return unique.slice(0, config.maxAutoTrades);
+}
+
+/**
+ * Apply a trade to update team assignments.
+ */
+export function applyTrade(
+  teams: TeamBuilderTeam[],
+  assignments: AssignmentResult[],
+  trade: TradeCandidate
+): { teams: TeamBuilderTeam[]; assignments: AssignmentResult[] } {
+  // Clone data
+  const newTeams = teams.map(t => ({
+    ...t,
+    assignedPlayerIds: [...t.assignedPlayerIds],
+  }));
+  const newAssignments = [...assignments];
+
+  // Find teams
+  const fromTeam = newTeams.find(t => t.id === trade.fromTeamId);
+  const toTeam = newTeams.find(t => t.id === trade.toTeamId);
+
+  if (!fromTeam || !toTeam) return { teams, assignments };
+
+  // Update team rosters
+  fromTeam.assignedPlayerIds = fromTeam.assignedPlayerIds
+    .filter(id => id !== trade.player1Id);
+  fromTeam.assignedPlayerIds.push(trade.player2Id);
+
+  toTeam.assignedPlayerIds = toTeam.assignedPlayerIds
+    .filter(id => id !== trade.player2Id);
+  toTeam.assignedPlayerIds.push(trade.player1Id);
+
+  // Update assignments
+  const a1Idx = newAssignments.findIndex(a => a.playerId === trade.player1Id);
+  const a2Idx = newAssignments.findIndex(a => a.playerId === trade.player2Id);
+
+  if (a1Idx >= 0) {
+    newAssignments[a1Idx] = { ...newAssignments[a1Idx], teamId: trade.toTeamId };
+  }
+  if (a2Idx >= 0) {
+    newAssignments[a2Idx] = { ...newAssignments[a2Idx], teamId: trade.fromTeamId };
+  }
+
+  return { teams: newTeams, assignments: newAssignments };
 }
