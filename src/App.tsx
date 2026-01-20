@@ -9,6 +9,7 @@ import { DivisionCreator } from './components/DivisionCreator';
 import { FileUpload } from './components/FileUpload';
 import { ColumnMapper } from './components/ColumnMapper';
 import { ImportTypeSelector, EvaluationImport } from './components/evaluation';
+import { CSVImportFlow } from './components/evaluation/CSVImportFlow';
 import { PlayerReview } from './components/PlayerReview';
 import { DraftConfig } from './components/DraftConfig';
 import { DraftBoard } from './components/DraftBoard';
@@ -87,7 +88,7 @@ function App() {
   }, []);
   const [mode, setMode] = useState<AppMode>('selector');
   const [csvData, setCSVData] = useState<ParsedCSVData | null>(null);
-  const [importMode, setImportMode] = useState<'csv' | 'excel' | null>(null);
+  const [importMode, setImportMode] = useState<'csv' | 'excel' | 'dualcsv' | null>(null);
 
   const {
     summaries,
@@ -946,6 +947,7 @@ function App() {
               <ImportTypeSelector
                 onSelectCSV={() => setImportMode('csv')}
                 onSelectExcel={() => setImportMode('excel')}
+                onSelectDualCSV={() => setImportMode('dualcsv')}
               />
             )}
 
@@ -966,6 +968,19 @@ function App() {
                 initialTeamNames={activeDivision?.teams.map(t => t.headCoach || '')}
                 initialAssistantCoaches={activeDivision?.teams.map(t => t.assistantCoach || '')}
                 onComplete={handleEvaluationComplete}
+                onCancel={() => setImportMode(null)}
+              />
+            )}
+
+            {/* Dual CSV Import Flow (Evaluation + Registration) */}
+            {importMode === 'dualcsv' && (
+              <CSVImportFlow
+                teamCount={activeDivision?.teamCount ?? 8}
+                onComplete={(importedPlayers) => {
+                  setPlayers(importedPlayers);
+                  setImportMode(null);
+                  setPhase('review');
+                }}
                 onCancel={() => setImportMode(null)}
               />
             )}
