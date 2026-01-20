@@ -201,14 +201,21 @@ export interface Player {
 export interface Team {
   id: string;
   divisionId?: string; // ID of the division this team belongs to (from API)
-  name: string; // Display/sponsor name (optional)
-  headCoach: string; // Manager's name - persists with division
-  assistantCoach: string; // Single assistant - persists with division
+
+  // Team Identity - the actual team name (e.g., "Guardians", "Yankees")
+  // Empty until assigned, typically after draft completion
+  teamName: string;
+
+  // Coaching Staff
+  headCoach: string;      // Manager's last name (e.g., "Bonacorsi")
+  assistantCoach: string; // Assistant's last name
+
+  // Draft & Roster
+  draftPosition: number;  // 1-8, determines draft order
   roster: Player[];
   totalScore: number;
-  draftPosition: number; // 1-8
-  coachKids: string[]; // player IDs
-  ageBreakdown: Record<string, number>; // { "10": 3, "11": 4, "12": 2 } - count per age (string keys from JSON)
+  coachKids: string[];    // Player IDs of coach's kids assigned to this team
+  ageBreakdown: Record<string, number>; // { "10": 3, "11": 4, "12": 2 } - count per age
 }
 
 export interface DraftPick {
@@ -546,7 +553,7 @@ export function createInitialDivision(
 ): Division {
   const teams: Team[] = Array.from({ length: teamCount }, (_, i) => ({
     id: `${id}-team-${i + 1}`,
-    name: '', // Empty to show placeholder text
+    teamName: '', // Empty until actual team name (e.g., "Guardians") is assigned
     headCoach: '',
     assistantCoach: '',
     roster: [],

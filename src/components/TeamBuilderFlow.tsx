@@ -213,14 +213,15 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
   ) => {
     setEvalPlayers(players);
 
-    // Update teams with names and coaches from eval import
+    // Update teams with coach info from eval import
     // IMPORTANT: Preserve existing coach names if they were already set in Setup step
+    // Note: teamNames from evaluation actually contains head coach names, not actual team names
     const updatedTeams = teams.map((team, index) => ({
       ...team,
-      // Only update name/headCoach from eval if the team doesn't already have one set
-      name: team.name || teamNames[index] || team.name,
+      // headCoach is the manager's last name - only update if not already set
       headCoach: team.headCoach || teamNames[index] || '',
       assistantCoach: team.assistantCoach || assistantCoaches[index] || '',
+      // teamName stays empty until actual team name (e.g., "Guardians") is assigned
     }));
     setTeams(updatedTeams);
 
@@ -408,7 +409,7 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
     // Run normalization to resolve all requests
     const coachInfos: CoachInfo[] = teams.map(t => ({
       teamId: t.id,
-      teamName: t.name || t.headCoach,
+      teamName: t.teamName || t.headCoach,
       coachName: t.headCoach,
       assistantCoach: t.assistantCoach,
     }));
@@ -893,7 +894,7 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
                       <input
                         type="text"
                         value={team.headCoach || ''}
-                        onChange={(e) => handleUpdateTeam(team.id, { headCoach: e.target.value, name: e.target.value })}
+                        onChange={(e) => handleUpdateTeam(team.id, { headCoach: e.target.value })}
                         placeholder="Last name only (e.g., Smith)"
                         className="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                       />
@@ -945,7 +946,7 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
             {evalPlayers.length === 0 ? (
               <EvaluationImport
                 teamCount={division.teamCount}
-                initialTeamNames={teams.map(t => t.headCoach || t.name)}
+                initialTeamNames={teams.map(t => t.headCoach || '')}
                 initialAssistantCoaches={teams.map(t => t.assistantCoach || '')}
                 onComplete={handleEvalImportComplete}
                 onCancel={onBack}
@@ -1351,7 +1352,7 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
                         <input
                           type="text"
                           value={team.headCoach}
-                          onChange={(e) => handleUpdateTeam(team.id, { headCoach: e.target.value, name: e.target.value })}
+                          onChange={(e) => handleUpdateTeam(team.id, { headCoach: e.target.value })}
                           placeholder="Head Coach"
                           className="flex-1 px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
                         />

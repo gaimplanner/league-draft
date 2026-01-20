@@ -29,8 +29,8 @@ export function generatePublicRosters(teams: Team[], _players: Player[]): string
         .map(p => `  ${p.lastName}, ${p.firstName}`)
         .join('\n');
 
-      // Get manager name (headCoach or fallback to team name)
-      const managerName = team.headCoach ? `Coach ${team.headCoach}` : (team.name ? `Coach ${team.name}` : 'TBD');
+      // Get manager name (headCoach is the primary field for manager's name)
+      const managerName = team.headCoach ? `Coach ${team.headCoach}` : 'TBD';
 
       // Get assistant coach
       const assistantCoach = team.assistantCoach ? `Coach ${team.assistantCoach}` : 'None';
@@ -382,7 +382,7 @@ export function exportPlayersForReimport(players: Player[], teams: Team[]): stri
     let coachTeamName = '';
     if (player.isCoachKid && player.coachTeamId) {
       const team = teams.find(t => t.id === player.coachTeamId);
-      coachTeamName = team ? (team.headCoach || team.name || '') : '';
+      coachTeamName = team ? (team.headCoach || team.teamName || '') : '';
     }
 
     // Find sibling name

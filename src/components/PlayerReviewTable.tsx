@@ -303,7 +303,7 @@ export function PlayerReviewTable({
                       </span>
                       <input
                         type="text"
-                        value={team.name}
+                        value={team.headCoach}
                         onChange={(e) => onTeamNameUpdate(team.id, e.target.value)}
                         placeholder="Last name only"
                         className="flex-1 px-2 py-1 text-sm font-medium border-0 bg-transparent text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500 rounded"

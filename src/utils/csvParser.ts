@@ -382,9 +382,11 @@ export const exportToCSV = (teams: Team[]): string => {
   const rows: string[][] = [['Team', 'Player', 'Total Score', 'Draft Round', 'Draft Pick']];
 
   teams.forEach((team) => {
+    // Use teamName if available, otherwise fall back to headCoach
+    const displayName = team.teamName || team.headCoach || `Team ${team.draftPosition}`;
     team.roster.forEach((player: Player) => {
       rows.push([
-        team.name,
+        displayName,
         player.name,
         player.totalScore.toString(),
         player.draftedInRound?.toString() || '',
@@ -392,7 +394,7 @@ export const exportToCSV = (teams: Team[]): string => {
       ]);
     });
     // Add team total row
-    rows.push([team.name, 'TEAM TOTAL', team.totalScore.toString(), '', '']);
+    rows.push([displayName, 'TEAM TOTAL', team.totalScore.toString(), '', '']);
     rows.push([]); // Empty row between teams
   });
 

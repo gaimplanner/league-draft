@@ -244,7 +244,8 @@ function transformTeamFromApi(data: Record<string, unknown>): Team {
     id: data.id as string,
     // Extract divisionId from API response (Issue #27 - data shape mismatch)
     divisionId: (data.division_id as string | null) ?? undefined,
-    name: data.name as string,
+    // Map backend 'name' to frontend 'teamName' (actual team name like "Guardians")
+    teamName: (data.name as string) || '',
     headCoach: (data.head_coach as string) || '',
     assistantCoach: (data.assistant_coach as string) || '',
     roster,
@@ -850,7 +851,7 @@ export const api = {
   async updateTeam(
     id: string,
     updates: Partial<{
-      name: string;
+      teamName: string;  // Maps to backend 'name' field
       headCoach: string;
       assistantCoach: string;
       draftPosition: number;
@@ -859,7 +860,8 @@ export const api = {
     }>
   ): Promise<Team> {
     const body: Record<string, unknown> = {};
-    if (updates.name !== undefined) body.name = updates.name;
+    // Map frontend 'teamName' to backend 'name'
+    if (updates.teamName !== undefined) body.name = updates.teamName;
     if (updates.headCoach !== undefined) body.head_coach = updates.headCoach;
     if (updates.assistantCoach !== undefined) body.assistant_coach = updates.assistantCoach;
     if (updates.draftPosition !== undefined) body.draft_position = updates.draftPosition;

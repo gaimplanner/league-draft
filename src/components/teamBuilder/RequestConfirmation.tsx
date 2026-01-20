@@ -253,7 +253,7 @@ export const RequestConfirmation = ({
                     )}
                     {req.requestType === 'coach' && (
                       <span className="text-xs text-gray-500 dark:text-gray-400">
-                        ({teamMap.get(req.resolvedTargetId)?.name || 'Team'})
+                        ({teamMap.get(req.resolvedTargetId)?.headCoach || 'Team'})
                       </span>
                     )}
                   </div>
@@ -289,7 +289,7 @@ export const RequestConfirmation = ({
                     {teams.map(team => (
                       <button
                         key={team.id}
-                        onClick={() => handleSelectMatch(req.id, team.id, team.headCoach || team.name)}
+                        onClick={() => handleSelectMatch(req.id, team.id, team.headCoach || team.teamName || '')}
                         className={`px-3 py-2 text-left rounded-lg border text-sm ${
                           req.resolvedTargetId === team.id
                             ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
@@ -297,7 +297,7 @@ export const RequestConfirmation = ({
                         }`}
                       >
                         <div className="font-medium text-gray-900 dark:text-white">
-                          {team.headCoach || team.name || `Team ${team.draftPosition}`}
+                          {team.headCoach || team.teamName || `Team ${team.draftPosition}`}
                         </div>
                         {team.assistantCoach && (
                           <div className="text-xs text-gray-500 dark:text-gray-400">

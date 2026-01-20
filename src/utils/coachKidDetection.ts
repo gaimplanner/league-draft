@@ -30,11 +30,11 @@ export function autoDetectCoachKids(
   const matches: CoachKidMatch[] = [];
 
   for (const team of teams) {
-    // Extract team name and normalize
-    const teamName = team.name.trim().toLowerCase();
+    // Extract head coach name and normalize
+    const coachName = team.headCoach.trim().toLowerCase();
 
-    // Skip default team names
-    if (teamName.startsWith('team ')) continue;
+    // Skip teams without a head coach assigned
+    if (!coachName || coachName.startsWith('team ')) continue;
 
     for (const player of players) {
       const lastName = player.lastName.trim().toLowerCase();
@@ -45,14 +45,17 @@ export function autoDetectCoachKids(
       // Check if already marked as coach's kid for THIS team
       const alreadyMarkedForThisTeam = player.isCoachKid && player.coachTeamId === team.id;
 
-      // Check if matches head coach (team name) - EXACT match only
-      if (teamName === lastName) {
+      // Get display name for messages
+      const teamDisplayName = team.teamName || team.headCoach || `Team ${team.draftPosition}`;
+
+      // Check if matches head coach - EXACT match only
+      if (coachName === lastName) {
         matches.push({
           playerId: player.id,
           teamId: team.id,
           playerName: player.name,
-          teamName: team.name,
-          reason: `Last name "${player.lastName}" matches team "${team.name}"`,
+          teamName: teamDisplayName,
+          reason: `Last name "${player.lastName}" matches coach "${team.headCoach}"`,
           alreadyMarked: alreadyMarkedForThisTeam,
         });
         continue; // Don't check assistant coaches if already matched head coach
@@ -68,8 +71,8 @@ export function autoDetectCoachKids(
             playerId: player.id,
             teamId: team.id,
             playerName: player.name,
-            teamName: team.name,
-            reason: `Last name "${player.lastName}" matches assistant coach "${team.assistantCoach}" on team "${team.name}"`,
+            teamName: teamDisplayName,
+            reason: `Last name "${player.lastName}" matches assistant coach "${team.assistantCoach}" on team "${teamDisplayName}"`,
             alreadyMarked: alreadyMarkedForThisTeam,
           });
         }

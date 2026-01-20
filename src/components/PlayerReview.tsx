@@ -72,11 +72,11 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
     }
   }, [weights, scoringMode]);
 
-  const handleTeamNameUpdate = (teamId: string, newName: string) => {
-    // Security: Sanitize team name input
+  const handleHeadCoachUpdate = (teamId: string, newName: string) => {
+    // Security: Sanitize coach name input
     const sanitizedName = sanitizeTeamName(newName);
     const updatedTeams = teams.map(t =>
-      t.id === teamId ? { ...t, name: sanitizedName } : t
+      t.id === teamId ? { ...t, headCoach: sanitizedName } : t
     );
     onTeamsUpdate(updatedTeams);
   };
@@ -273,7 +273,7 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
 
     for (const [teamId, teamKids] of Object.entries(coachKidsByTeam)) {
       const team = teams.find(t => t.id === teamId);
-      const teamDisplayName = team ? (team.name || `Team ${team.draftPosition}`) : 'Unknown Team';
+      const teamDisplayName = team ? (team.teamName || team.headCoach || `Team ${team.draftPosition}`) : 'Unknown Team';
 
       const assignedRounds = new Set<number>();
 
@@ -421,7 +421,7 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
           onCoachTeamAssignment={handleCoachTeamAssignment}
           onSiblingLink={handleSiblingLink}
           onSiblingUnlink={handleSiblingUnlink}
-          onTeamNameUpdate={handleTeamNameUpdate}
+          onTeamNameUpdate={handleHeadCoachUpdate}
           onAssistantCoachUpdate={handleAssistantCoachUpdate}
           onRunAutoDetection={handleAutoDetect}
         />

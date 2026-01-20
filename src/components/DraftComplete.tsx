@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Download, ChevronLeft, FileText, Printer, Copy, Check, ArrowLeftRight } from 'lucide-react';
-import { DraftState, Division } from '../types';
+import { DraftState, Division, Team } from '../types';
 import { exportToCSV } from '../utils/csvParser';
 import {
   generatePublicRosters,
@@ -12,6 +12,7 @@ import {
 } from '../utils/exports';
 import { TradeModal } from './TradeModal';
 import { CompleteRosters } from './CompleteRosters';
+import { TeamNameAssignment } from './shared';
 import { getTeamDisplayName } from '../utils/teamUtils';
 
 interface DraftCompleteProps {
@@ -25,9 +26,10 @@ interface DraftCompleteProps {
     player2Id: string,
     reason: string
   ) => void;
+  onUpdateTeam?: (teamId: string, updates: Partial<Team>) => void;
 }
 
-export const DraftComplete = ({ draftState, division, onReset, onExecuteTrade }: DraftCompleteProps) => {
+export const DraftComplete = ({ draftState, division, onReset, onExecuteTrade, onUpdateTeam }: DraftCompleteProps) => {
   const [copiedRosters, setCopiedRosters] = useState(false);
   const [copiedRecord, setCopiedRecord] = useState(false);
   const [showTradeModal, setShowTradeModal] = useState(false);
@@ -220,6 +222,20 @@ export const DraftComplete = ({ draftState, division, onReset, onExecuteTrade }:
             </div>
           </div>
         </div>
+
+        {/* Team Name Assignment */}
+        {onUpdateTeam && (
+          <div className="mb-6">
+            <TeamNameAssignment
+              teams={draftState.teams}
+              onUpdateTeam={onUpdateTeam}
+              title="Assign Team Names"
+              description="Now that the draft is complete, assign official team names (e.g., 'Guardians', 'Yankees'). Teams are currently identified by manager name."
+              collapsible={true}
+              defaultExpanded={false}
+            />
+          </div>
+        )}
 
         {/* Full Rosters */}
         <CompleteRosters teams={draftState.teams} />

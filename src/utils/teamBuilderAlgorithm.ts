@@ -501,7 +501,7 @@ export function runTeamBuilderAlgorithm(
     const averageScore = rosterCount > 0 ? team.currentScore / rosterCount : 0;
     return {
       teamId: team.id,
-      teamName: team.name || team.headCoach,
+      teamName: team.teamName || team.headCoach,
       coachName: team.headCoach,
       rosterCount,
       totalScore: team.currentScore,
@@ -753,7 +753,7 @@ export function runRequestsFirstAlgorithm(
     }
 
     if (team.assignedPlayerIds.length >= fullConfig.maxRosterSize) {
-      warnings.push(`Team ${team.name || team.headCoach} is full, cannot assign ${player.name}`);
+      warnings.push(`Team ${team.teamName || team.headCoach} is full, cannot assign ${player.name}`);
       return false;
     }
 
@@ -1155,7 +1155,7 @@ export function runRequestsFirstAlgorithm(
     const averageScore = rosterCount > 0 ? team.currentScore / rosterCount : 0;
     return {
       teamId: team.id,
-      teamName: team.name || team.headCoach,
+      teamName: team.teamName || team.headCoach,
       coachName: team.headCoach,
       rosterCount,
       totalScore: team.currentScore,
@@ -1448,8 +1448,8 @@ export function findBalancingTrades(
               balanceImprovement: improvement,
               player1Name: highPlayer.name,
               player2Name: lowPlayer.name,
-              fromTeamName: highTeam.name || highTeam.headCoach,
-              toTeamName: lowTeam.name || lowTeam.headCoach,
+              fromTeamName: highTeam.teamName || highTeam.headCoach,
+              toTeamName: lowTeam.teamName || lowTeam.headCoach,
             });
           }
         }

@@ -20,7 +20,7 @@ import { ForgotPasswordPage } from './components/ForgotPasswordPage';
 import { ResetPasswordPage } from './components/ResetPasswordPage';
 import { ProfilePage } from './components/profile';
 import { JoinPage } from './components/JoinPage';
-import { isApiMode } from './api';
+import { api, isApiMode } from './api';
 import {
   Player,
   Team,
@@ -303,17 +303,17 @@ function App() {
       const teamCoachInfo = new Map<string, { managerName: string; assistantName?: string }>();
 
       // Process each team's assignments - create teams and track coach names
-      teamAssignments.forEach((assignments, teamName) => {
-        // Find or create team by name
+      teamAssignments.forEach((assignments, coachName) => {
+        // Find team by headCoach name (manager's last name)
         let team = updatedTeams.find(t =>
-          t.name.toLowerCase() === teamName.toLowerCase()
+          t.headCoach.toLowerCase() === coachName.toLowerCase()
         );
 
-        // If team not found by name, find first unnamed team and name it
+        // If team not found by headCoach, find first team without a coach and assign
         if (!team) {
-          team = updatedTeams.find(t => !t.name || t.name.trim() === '');
+          team = updatedTeams.find(t => !t.headCoach || t.headCoach.trim() === '');
           if (team) {
-            team.name = teamName;
+            team.headCoach = coachName;
           }
         }
 
@@ -323,11 +323,11 @@ function App() {
           if (teamColumnAssignment) {
             // Track coach names for auto-detection
             teamCoachInfo.set(team.id, {
-              managerName: teamName,
+              managerName: coachName,
               assistantName: teamColumnAssignment.assistantName,
             });
             // Set head coach and assistant coach names
-            team.headCoach = teamName;
+            team.headCoach = coachName;
             if (teamColumnAssignment.assistantName) {
               team.assistantCoach = teamColumnAssignment.assistantName;
             }
@@ -416,11 +416,12 @@ function App() {
   ) => {
     if (!activeDivision) return;
 
-    // Update teams with names and assistant coaches from evaluation
-    // Team name is the head coach's name, which also serves as the display name
+    // Update teams with coach info from evaluation
+    // teamNames array contains head coach last names (used for display until actual team name assigned)
     let updatedTeams = activeDivision.teams.map((team, i) => ({
       ...team,
-      name: teamNames[i] || team.name,
+      // Don't set teamName here - it should remain empty until actual team name (e.g., "Guardians") is assigned
+      // Display will fall back to headCoach via getTeamDisplayName()
       headCoach: teamNames[i] || team.headCoach,
       assistantCoach: assistantCoaches[i] || team.assistantCoach,
     }));
@@ -626,6 +627,31 @@ function App() {
   const handleReset = () => {
     handleGoBack(phase);
   };
+
+  // Handle individual team update (e.g., assigning team names after draft)
+  const handleUpdateTeam = useCallback(async (teamId: string, updates: Partial<Team>) => {
+    // Update in draft state
+    const updatedTeams = draftState.teams.map(t =>
+      t.id === teamId ? { ...t, ...updates } : t
+    );
+    setTeams(updatedTeams);
+
+    // Persist to API
+    if (activeDivision && isApiMode()) {
+      try {
+        const team = updatedTeams.find(t => t.id === teamId);
+        if (team) {
+          await api.updateTeam(teamId, {
+            teamName: team.teamName,
+            headCoach: team.headCoach,
+            assistantCoach: team.assistantCoach,
+          });
+        }
+      } catch (err) {
+        console.error('Failed to save team update:', err);
+      }
+    }
+  }, [draftState.teams, setTeams, activeDivision]);
 
   // Handle user update from profile page
   const handleUserUpdate = useCallback(async () => {
@@ -937,7 +963,7 @@ function App() {
             {importMode === 'excel' && (
               <EvaluationImport
                 teamCount={activeDivision?.teamCount ?? 8}
-                initialTeamNames={activeDivision?.teams.map(t => t.headCoach || t.name || '')}
+                initialTeamNames={activeDivision?.teams.map(t => t.headCoach || '')}
                 initialAssistantCoaches={activeDivision?.teams.map(t => t.assistantCoach || '')}
                 onComplete={handleEvaluationComplete}
                 onCancel={() => setImportMode(null)}
@@ -1033,6 +1059,7 @@ function App() {
               division={activeDivision}
               onReset={handleReset}
               onExecuteTrade={executeTrade}
+              onUpdateTeam={handleUpdateTeam}
             />
           </div>
         )}
