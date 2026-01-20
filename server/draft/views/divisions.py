@@ -244,11 +244,6 @@ def division_reset(request, pk):
     # Delete draft state if exists
     if hasattr(division, "draft_state"):
         division.draft_state.delete()
-        # Clear cached relationship so transform_division doesn't see deleted object
-        try:
-            del division.draft_state
-        except AttributeError:
-            pass
 
     # Reset all players
     division.players.update(
@@ -267,5 +262,8 @@ def division_reset(request, pk):
     division.phase = "config"
     division.completed_at = None
     division.save()
+
+    # Refresh from database to clear cached draft_state reference
+    division.refresh_from_db()
 
     return json_response(transform_division(division, include_all=True))

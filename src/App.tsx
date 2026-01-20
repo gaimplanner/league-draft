@@ -196,14 +196,15 @@ function App() {
     // Also prevent concurrent updates (Issue #6)
     if (divisionStateLoaded && activeDivision && phase !== activeDivision.phase && !isUpdatingPhase.current) {
       isUpdatingPhase.current = true;
-      // When draft completes, also save the completion timestamp and final state
+      // When draft completes, save the completion timestamp and final state
+      // Note: Don't pass players here - they're already saved by draft pick API
+      // Trying to re-save would trigger delete/recreate which is blocked during draft/complete
       if (phase === 'complete') {
         updateActiveDivision({
           phase,
           completedAt: new Date().toISOString(),
           draftState,
           teams: draftState.teams,
-          players: draftState.players,
         }).then(() => {
           setSaveError(null);
         }).catch((err) => {
@@ -936,6 +937,8 @@ function App() {
             {importMode === 'excel' && (
               <EvaluationImport
                 teamCount={activeDivision?.teamCount ?? 8}
+                initialTeamNames={activeDivision?.teams.map(t => t.headCoach || t.name || '')}
+                initialAssistantCoaches={activeDivision?.teams.map(t => t.assistantCoach || '')}
                 onComplete={handleEvaluationComplete}
                 onCancel={() => setImportMode(null)}
               />
