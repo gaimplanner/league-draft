@@ -187,6 +187,20 @@ export function processWorkbook(
     });
   }
 
+  // Merge littleLeagueAge from registration data if available
+  if (workbook.registrationData) {
+    for (const player of players) {
+      // Find matching registration record by name
+      const regRecord = workbook.registrationData.find(
+        r => r.firstName.toLowerCase() === player.firstName.toLowerCase() &&
+             r.lastName.toLowerCase() === player.lastName.toLowerCase()
+      );
+      if (regRecord?.littleLeagueAge) {
+        player.littleLeagueAge = regRecord.littleLeagueAge;
+      }
+    }
+  }
+
   // Sort by weighted total (descending) and assign ranks
   players.sort((a, b) => b.weightedTotal - a.weightedTotal);
   players.forEach((player, index) => {

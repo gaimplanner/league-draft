@@ -290,6 +290,7 @@ export interface EvaluationPlayer {
   lastName: string;
   fullName: string;
   age: number;
+  littleLeagueAge?: number;  // Calculated LL age from birthdate
   level: string;
 
   // Raw scores from spreadsheet by category and field

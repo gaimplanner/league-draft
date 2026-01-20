@@ -150,8 +150,8 @@ export function PlayerSummaryTable({
         bVal = `${b.lastName}, ${b.firstName}`;
         break;
       case 'age':
-        aVal = a.age;
-        bVal = b.age;
+        aVal = a.littleLeagueAge ?? a.age;
+        bVal = b.littleLeagueAge ?? b.age;
         break;
       case 'allstar':
         aVal = a.isAllStar ? 1 : 0;
@@ -461,8 +461,8 @@ export function PlayerSummaryTable({
                 <th rowSpan={2} className="sticky left-[136px] z-20 bg-gray-100 dark:bg-gray-700 px-2 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 min-w-[120px]" onClick={() => handleSort('name')}>
                   Name<SortIndicator field="name" />
                 </th>
-                <th rowSpan={2} className="px-2 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-300 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 w-10" onClick={() => handleSort('age')}>
-                  Age<SortIndicator field="age" />
+                <th rowSpan={2} className="px-2 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-300 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 w-10" onClick={() => handleSort('age')} title="Little League Age">
+                  LL Age<SortIndicator field="age" />
                 </th>
                 <th rowSpan={2} className="px-1 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-300 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 w-10" onClick={() => handleSort('allstar')}>
                   ⭐<SortIndicator field="allstar" />
@@ -544,8 +544,8 @@ export function PlayerSummaryTable({
                       )}
                     </div>
                   </td>
-                  <td className="px-2 py-1.5 text-gray-600 dark:text-gray-400 text-center">
-                    {player.age || '-'}
+                  <td className="px-2 py-1.5 text-gray-600 dark:text-gray-400 text-center" title={player.littleLeagueAge ? 'Little League Age' : 'Age from evaluation'}>
+                    {player.littleLeagueAge ?? player.age ?? '-'}
                   </td>
                   {/* All-Star */}
                   <td className="px-1 py-1 text-center">

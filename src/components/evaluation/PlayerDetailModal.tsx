@@ -47,7 +47,7 @@ export function PlayerDetailModal({
               {player.fullName || player.bib}
             </h2>
             <p className="text-sm text-gray-600 dark:text-gray-400">
-              BIB: {player.bib} | Age: {player.age || '-'} | Level: {player.level || '-'}
+              BIB: {player.bib} | LL Age: {player.littleLeagueAge ?? player.age ?? '-'} | Level: {player.level || '-'}
             </p>
           </div>
           <button
