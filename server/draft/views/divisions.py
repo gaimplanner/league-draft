@@ -117,9 +117,10 @@ def divisions_list_create(request):
         coach_info = coaches[i] if i < len(coaches) else {}
         head_coach = coach_info.get("head_coach", "") or coach_info.get("headCoach", "")
         assistant_coach = coach_info.get("assistant_coach", "") or coach_info.get("assistantCoach", "")
+        team_name = coach_info.get("team_name", "") or coach_info.get("teamName", "")
         Team.objects.create(
             division=division,
-            name=head_coach,  # Team name defaults to head coach name
+            name=team_name or head_coach,  # Team name defaults to head coach name if not provided
             head_coach=head_coach,
             assistant_coach=assistant_coach,
             draft_position=i + 1,

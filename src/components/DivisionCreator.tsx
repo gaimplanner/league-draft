@@ -3,8 +3,9 @@ import { ArrowLeft, Check, AlertCircle, AlertTriangle, Users, Wand2, ChevronDown
 import { DivisionPreset, DIVISION_PRESETS, DivisionAgeRange, DivisionMode } from '../types';
 
 export interface CoachConfig {
-  headCoach: string;
-  assistantCoach: string;
+  headCoach: string;      // Manager's last name
+  assistantCoach: string; // Assistant's last name
+  teamName: string;       // Optional team name (e.g., "Guardians") - defaults to headCoach if empty
 }
 
 interface DivisionCreatorProps {
@@ -41,7 +42,7 @@ export const DivisionCreator = ({ onCancel, onCreate, existingNames = [] }: Divi
   const [maxPerAge, setMaxPerAge] = useState(8);
   const [showCoaches, setShowCoaches] = useState(false);
   const [coaches, setCoaches] = useState<CoachConfig[]>(() =>
-    Array.from({ length: 10 }, () => ({ headCoach: '', assistantCoach: '' }))
+    Array.from({ length: 10 }, () => ({ headCoach: '', assistantCoach: '', teamName: '' }))
   );
 
   // Check if name already exists (case-insensitive)
@@ -80,7 +81,7 @@ export const DivisionCreator = ({ onCancel, onCreate, existingNames = [] }: Divi
     setStep('mode');
   };
 
-  const updateCoach = (index: number, field: 'headCoach' | 'assistantCoach', value: string) => {
+  const updateCoach = (index: number, field: 'headCoach' | 'assistantCoach' | 'teamName', value: string) => {
     setCoaches(prev => {
       const updated = [...prev];
       updated[index] = { ...updated[index], [field]: value };
@@ -353,9 +354,18 @@ export const DivisionCreator = ({ onCancel, onCreate, existingNames = [] }: Divi
               {showCoaches && (
                 <div className="p-4 space-y-3 border-t border-gray-200 dark:border-gray-700">
                   <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-                    Pre-fill coach names now or add them later during player import.
+                    Pre-fill team info now or add it later during player import. Team name defaults to manager's last name if not specified.
                   </p>
-                  <div className="grid gap-3">
+
+                  {/* Column Headers */}
+                  <div className="flex items-center gap-3 pb-2 border-b border-gray-200 dark:border-gray-700">
+                    <span className="text-xs font-semibold text-gray-600 dark:text-gray-400 w-16"></span>
+                    <span className="flex-1 text-xs font-semibold text-gray-600 dark:text-gray-400">Manager</span>
+                    <span className="flex-1 text-xs font-semibold text-gray-600 dark:text-gray-400">Assistant</span>
+                    <span className="flex-1 text-xs font-semibold text-gray-600 dark:text-gray-400">Team Name <span className="font-normal text-gray-400">(optional)</span></span>
+                  </div>
+
+                  <div className="grid gap-2">
                     {Array.from({ length: teamCount }).map((_, index) => (
                       <div key={index} className="flex items-center gap-3">
                         <span className="text-sm font-medium text-gray-500 dark:text-gray-400 w-16">
@@ -365,14 +375,21 @@ export const DivisionCreator = ({ onCancel, onCreate, existingNames = [] }: Divi
                           type="text"
                           value={coaches[index]?.headCoach || ''}
                           onChange={(e) => updateCoach(index, 'headCoach', e.target.value)}
-                          placeholder="Last name only (e.g., Smith)"
+                          placeholder="Last name (e.g., Smith)"
                           className="flex-1 px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                         />
                         <input
                           type="text"
                           value={coaches[index]?.assistantCoach || ''}
                           onChange={(e) => updateCoach(index, 'assistantCoach', e.target.value)}
-                          placeholder="Last name only"
+                          placeholder="Last name"
+                          className="flex-1 px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                        <input
+                          type="text"
+                          value={coaches[index]?.teamName || ''}
+                          onChange={(e) => updateCoach(index, 'teamName', e.target.value)}
+                          placeholder={coaches[index]?.headCoach || 'e.g., Guardians'}
                           className="flex-1 px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                         />
                       </div>
