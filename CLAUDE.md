@@ -265,7 +265,7 @@ Tests cover:
 The Team Builder is an alternative to live drafts for younger divisions (AA, etc.) where teams are auto-assigned rather than drafted.
 
 ### Team Builder Flow
-`setup` → `import` → `resolution` → `configure` → `generate` → `results`
+`setup` → `import` → `resolution` → `confirm-requests` → `configure` → `generate` → `results`
 
 ### Key Files
 
@@ -274,25 +274,48 @@ The Team Builder is an alternative to live drafts for younger divisions (AA, etc
 | `src/components/TeamBuilderFlow.tsx` | Main orchestration for Team Builder steps |
 | `src/components/teamBuilder/TeamBuilderResults.tsx` | Results display with happiness indicators and search |
 | `src/components/teamBuilder/NameMatchResolver.tsx` | UI for resolving unmatched player names |
-| `src/utils/teamBuilderAlgorithm.ts` | Greedy assignment algorithm with phases |
-| `src/utils/teamBuilderParser.ts` | Request parsing, name matching, normalization |
+| `src/components/teamBuilder/RequestConfirmation.tsx` | UI for reviewing/confirming request matches with confidence scores |
+| `src/components/teamBuilder/TradeSuggestions.tsx` | UI for applying suggested balance trades |
+| `src/utils/teamBuilderAlgorithm.ts` | Assignment algorithms (balance-first and requests-first) |
+| `src/utils/teamBuilderParser.ts` | Request parsing, name matching, normalization, cluster building |
 
 ### Division Mode
 - `mode: 'live-draft' | 'league-generated'` on Division (set at creation, immutable)
 - Live Draft → existing draft flow
 - League Generated Teams → Team Builder flow
 
-### Algorithm Phases
+### Algorithm Modes
+
+**Requests-First (Recommended)**
+Prioritizes request satisfaction over balance:
+1. **Locked Placements**: Coach kids, assistant coach kids, siblings
+2. **Cluster Placement**: Two-way request clusters placed together on same team
+3. **Request-Based Placement**: Remaining players placed to maximize request satisfaction
+4. **Balance via Trading**: Suggested trades to improve balance without breaking satisfied requests
+
+**Balance-First (Original)**
 1. **Locked Placements**: Coach kids, assistant coach kids, siblings
 2. **Top Talent Distribution**: Spread top N players by score for balance
 3. **Request-Based Placement**: Honor two-way friends > one-way friends > coach requests > school clustering
 4. **Balance-Based**: Remaining players assigned to lowest-scoring teams
 
-### Request Resolution
+### Request Resolution & Confirmation
 - **Coach requests**: Match to coach names (exact or fuzzy)
 - **Teammate requests**: Parse comma/space-delimited names, resolve to players
 - **Two-way detection**: Both players requested each other (higher priority)
-- **Request status**: `resolved` | `possible` (person exists) | `impossible` (not in system)
+- **Confidence scoring**: Auto-confirm (≥90%), needs-review (50-90%), unresolvable (<50%)
+- **Request status**: `auto-confirmed` | `needs-review` | `user-confirmed` | `unresolvable`
+
+### Request Clusters (Union-Find)
+- Two-way requests form clusters (A↔B + B↔C = cluster {A,B,C})
+- Clusters placed together on same team when possible
+- Oversized clusters auto-split at weakest connection
+
+### Trade Suggestions
+- After requests-first assignment, system suggests trades to improve balance
+- Only "tradeable" players eligible: those with no requests OR all requests satisfied
+- Trades shown with balance improvement score
+- Apply individually or all at once
 
 ### Player Happiness Scores
 - 🟢 All requests honored
@@ -300,18 +323,28 @@ The Team Builder is an alternative to live drafts for younger divisions (AA, etc
 - 🔴 No requests honored
 - ⚪ No requests made
 
+### Key Types
+- `ResolvedRequest`: Request with confidence score and resolution status
+- `RequestsFirstConfig`: Configuration for requests-first algorithm
+- `RequestCluster`: Group of two-way connected players
+- `TradeCandidate`: Suggested trade with balance improvement
+
 ### Key State
 - `registrationPlayers`: Parsed from Registration Data tab (has requests, school, grade)
 - `evalPlayers`: Parsed from eval tabs (has scores, bib numbers)
+- `resolvedRequests`: Requests prepared for confirmation UI
 - `normalizationResult`: Request resolution results with stats and warnings
 - `algorithmResult`: Team assignments with happiness calculations
+- `requestsFirstResult`: Extended result with clusters and suggested trades
 
 ### Data Flow
 1. Registration Data + Eval tabs parsed from Excel
 2. Players linked by First Name + Last Name matching
 3. Requests parsed and resolved to actual players/coaches
-4. Algorithm assigns players to teams
-5. Results show happiness indicators and allow swaps via TradeModal
+4. **Request Confirmation**: User reviews/edits auto-resolved requests
+5. Algorithm assigns players to teams (requests-first or balance-first)
+6. **Trade Suggestions**: User can apply suggested trades for balance
+7. Results show happiness indicators and allow manual swaps via TradeModal
 
 ## Branching
 

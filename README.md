@@ -148,17 +148,22 @@ For younger divisions that don't use live drafts, the Team Builder automatically
 
 - **Division Mode Selection**: Choose "Live Draft" or "League Generated Teams" at division creation
 - **Excel Import**: Registration Data tab with coach/teammate requests, plus evaluation tabs
-- **Request Resolution**:
-  - Coach requests matched to configured coaches
-  - Teammate requests parsed and resolved to players
+- **Request Confirmation Step**:
+  - Review auto-resolved requests with confidence scores
+  - High-confidence matches (≥90%) auto-confirmed
+  - Ambiguous matches highlighted for review
+  - Edit any match with inline search
   - Two-way detection (both kids requested each other)
-  - Fuzzy name matching with suggestions for unresolved requests
-- **Auto-Assignment Algorithm**:
-  - Locked placements (coach kids, siblings)
-  - Top talent distribution for balance
-  - Request-based placement (two-way > one-way > coach > school)
-  - Balance-based fallback
+- **Algorithm Modes**:
+  - **Requests-First (Recommended)**: Prioritizes honoring friend requests, then balances via suggested trades
+  - **Balance-First**: Traditional approach prioritizing team balance over requests
+- **Requests-First Algorithm**:
+  - Places two-way request clusters together on same team
+  - Honors one-way requests and coach preferences
+  - Suggests trades to improve balance without breaking satisfied requests
+- **Trade Suggestions**: After assignment, review and apply suggested trades that improve balance
 - **Happiness Indicators**: Visual status showing which requests were honored (🟢 all, 🟡 some, 🔴 none, ⚪ no requests)
+- **Force Even Teams**: Option to ensure all teams have equal roster sizes (±1 player)
 - **Player Search**: Search by name on Results page to see request details
 - **Manual Adjustments**: Swap players using the trade module
 - **Export**: Happiness report CSV with request fulfillment details
@@ -333,7 +338,9 @@ src/
 │   ├── evaluation/            # Excel import components
 │   └── teamBuilder/           # Team Builder components
 │       ├── TeamBuilderResults.tsx  # Results with happiness indicators
-│       └── NameMatchResolver.tsx   # Unmatched name resolution UI
+│       ├── NameMatchResolver.tsx   # Unmatched name resolution UI
+│       ├── RequestConfirmation.tsx # Review/confirm request matches
+│       └── TradeSuggestions.tsx    # Balance trade suggestions UI
 ├── hooks/
 │   ├── useDivisions.ts        # Division state (API mode)
 │   ├── useDraft.ts            # Draft logic (API mode)
