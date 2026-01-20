@@ -1378,8 +1378,11 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
             {normalizationResult && (
               <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                  Request Resolution
+                  Request Resolution Summary
                 </h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                  You'll review and confirm all matches on the next screen.
+                </p>
                 <div className="grid grid-cols-3 gap-4 mb-4">
                   {/* Coach Requests */}
                   <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
@@ -1387,28 +1390,13 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
                       {normalizationResult.stats.coachRequestsResolved}/{normalizationResult.stats.playersWithCoachRequest}
                     </div>
                     <div className="text-sm text-purple-700 dark:text-purple-300 font-medium">
-                      Coach Requests Resolved
+                      Coach Requests
                     </div>
                     <div className="text-xs text-purple-600 dark:text-purple-400 mt-1">
                       {normalizationResult.stats.playersWithCoachRequest > 0
-                        ? `${Math.round((normalizationResult.stats.coachRequestsResolved / normalizationResult.stats.playersWithCoachRequest) * 100)}% matched`
+                        ? `${Math.round((normalizationResult.stats.coachRequestsResolved / normalizationResult.stats.playersWithCoachRequest) * 100)}% auto-matched`
                         : 'No requests'}
                     </div>
-                    {/* Breakdown of unresolved */}
-                    {(normalizationResult.stats.coachRequestsPossible > 0 || normalizationResult.stats.coachRequestsImpossible > 0) && (
-                      <div className="text-xs mt-2 pt-2 border-t border-purple-200 dark:border-purple-700 space-y-0.5">
-                        {normalizationResult.stats.coachRequestsPossible > 0 && (
-                          <div className="text-amber-600 dark:text-amber-400">
-                            {normalizationResult.stats.coachRequestsPossible} possible (coach exists)
-                          </div>
-                        )}
-                        {normalizationResult.stats.coachRequestsImpossible > 0 && (
-                          <div className="text-gray-500 dark:text-gray-500">
-                            {normalizationResult.stats.coachRequestsImpossible} impossible (not in system)
-                          </div>
-                        )}
-                      </div>
-                    )}
                   </div>
 
                   {/* Teammate Requests */}
@@ -1417,28 +1405,13 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
                       {normalizationResult.stats.teammateRequestsResolved}/{normalizationResult.stats.totalTeammateRequests}
                     </div>
                     <div className="text-sm text-blue-700 dark:text-blue-300 font-medium">
-                      Buddy Requests Resolved
+                      Buddy Requests
                     </div>
                     <div className="text-xs text-blue-600 dark:text-blue-400 mt-1">
                       {normalizationResult.stats.totalTeammateRequests > 0
-                        ? `${Math.round((normalizationResult.stats.teammateRequestsResolved / normalizationResult.stats.totalTeammateRequests) * 100)}% matched`
+                        ? `${Math.round((normalizationResult.stats.teammateRequestsResolved / normalizationResult.stats.totalTeammateRequests) * 100)}% auto-matched`
                         : 'No requests'}
                     </div>
-                    {/* Breakdown of unresolved */}
-                    {(normalizationResult.stats.teammateRequestsPossible > 0 || normalizationResult.stats.teammateRequestsImpossible > 0) && (
-                      <div className="text-xs mt-2 pt-2 border-t border-blue-200 dark:border-blue-700 space-y-0.5">
-                        {normalizationResult.stats.teammateRequestsPossible > 0 && (
-                          <div className="text-amber-600 dark:text-amber-400">
-                            {normalizationResult.stats.teammateRequestsPossible} possible (player exists)
-                          </div>
-                        )}
-                        {normalizationResult.stats.teammateRequestsImpossible > 0 && (
-                          <div className="text-gray-500 dark:text-gray-500">
-                            {normalizationResult.stats.teammateRequestsImpossible} impossible (not in system)
-                          </div>
-                        )}
-                      </div>
-                    )}
                   </div>
 
                   {/* Two-Way Requests */}
@@ -1461,44 +1434,6 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
                     <div className="text-sm text-gray-600 dark:text-gray-400">
                       <span className="font-medium">{normalizationResult.stats.uniqueSchools} schools</span> detected for clustering
                     </div>
-                  </div>
-                )}
-
-                {/* Warnings - split by possible vs impossible */}
-                {normalizationResult.warnings.length > 0 && (
-                  <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 space-y-3">
-                    {/* Possible matches (amber) */}
-                    {normalizationResult.warnings.filter(w => w.includes('(possible match)')).length > 0 && (
-                      <details className="text-sm">
-                        <summary className="cursor-pointer text-amber-600 dark:text-amber-400 font-medium">
-                          {normalizationResult.warnings.filter(w => w.includes('(possible match)')).length} unresolved but possible (player/coach exists)
-                        </summary>
-                        <div className="mt-2 max-h-32 overflow-y-auto text-xs text-amber-700 dark:text-amber-300 space-y-1">
-                          {normalizationResult.warnings.filter(w => w.includes('(possible match)')).slice(0, 20).map((warning, i) => (
-                            <div key={i}>• {warning.replace(' (possible match)', '')}</div>
-                          ))}
-                          {normalizationResult.warnings.filter(w => w.includes('(possible match)')).length > 20 && (
-                            <div className="text-amber-500">...and {normalizationResult.warnings.filter(w => w.includes('(possible match)')).length - 20} more</div>
-                          )}
-                        </div>
-                      </details>
-                    )}
-                    {/* Impossible matches (gray) */}
-                    {normalizationResult.warnings.filter(w => w.includes('(not in system)')).length > 0 && (
-                      <details className="text-sm">
-                        <summary className="cursor-pointer text-gray-500 dark:text-gray-500 font-medium">
-                          {normalizationResult.warnings.filter(w => w.includes('(not in system)')).length} impossible (person not in system)
-                        </summary>
-                        <div className="mt-2 max-h-32 overflow-y-auto text-xs text-gray-500 dark:text-gray-500 space-y-1">
-                          {normalizationResult.warnings.filter(w => w.includes('(not in system)')).slice(0, 20).map((warning, i) => (
-                            <div key={i}>• {warning.replace(' (not in system)', '')}</div>
-                          ))}
-                          {normalizationResult.warnings.filter(w => w.includes('(not in system)')).length > 20 && (
-                            <div>...and {normalizationResult.warnings.filter(w => w.includes('(not in system)')).length - 20} more</div>
-                          )}
-                        </div>
-                      </details>
-                    )}
                   </div>
                 )}
               </div>
