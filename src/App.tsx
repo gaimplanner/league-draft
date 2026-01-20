@@ -981,7 +981,7 @@ function App() {
           />
         )}
 
-        {phase === 'draft' && draftState.currentTeamId && (
+        {phase === 'draft' && (draftState.currentTeamId || pendingComplete || draftState.isDraftComplete) && (
           <DraftBoard
             draftState={draftState}
             onDraftPlayer={draftPlayer}
@@ -998,7 +998,7 @@ function App() {
           />
         )}
 
-        {phase === 'draft' && !draftState.currentTeamId && (
+        {phase === 'draft' && !draftState.currentTeamId && !pendingComplete && !draftState.isDraftComplete && (
           <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center p-4">
             <div className="text-center">
               <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">

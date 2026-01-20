@@ -76,13 +76,13 @@ export async function savePlayersToApi(divisionId: string, players: Partial<Play
 export async function saveTeamsToApi(_divisionId: string, teams: Team[]): Promise<Team[]> {
   try {
     // Update each team
+    // Note: Only send name and coach fields - draftPosition is not allowed during draft/complete phases
     const updated: Team[] = [];
     for (const team of teams) {
       const result = await api.updateTeam(team.id, {
         name: team.name,
         headCoach: team.headCoach,
         assistantCoach: team.assistantCoach,
-        draftPosition: team.draftPosition,
       });
       updated.push(result);
     }

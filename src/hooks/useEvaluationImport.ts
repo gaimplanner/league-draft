@@ -444,9 +444,9 @@ export function useEvaluationImport(
       }
     }
 
-    // Pre-select only new matches (not already marked/linked)
-    const selectedKids = new Set(matches.filter(m => !m.alreadyMarked).map(m => m.bib));
-    const selectedSibs = new Set(siblings.filter(s => !s.alreadyLinked).map(s => `${s.bib1}-${s.bib2}`));
+    // Pre-select all matches (including already marked/linked - user can uncheck to remove)
+    const selectedKids = new Set(matches.map(m => m.bib));
+    const selectedSibs = new Set(siblings.map(s => `${s.bib1}-${s.bib2}`));
 
     setCoachKidMatches(matches);
     setSiblingMatches(siblings);
@@ -538,19 +538,39 @@ export function useEvaluationImport(
         }
       }
 
+      // Track all bibs that were in the detection modal (for clearing unselected ones)
+      // Include alreadyLinked/alreadyMarked items so users can uncheck to remove them
+      const allDetectedSiblingBibs = new Set<string>();
+      for (const match of siblingMatches) {
+        allDetectedSiblingBibs.add(match.bib1);
+        allDetectedSiblingBibs.add(match.bib2);
+      }
+
+      const allDetectedCoachKidBibs = new Set<string>();
+      for (const match of coachKidMatches) {
+        allDetectedCoachKidBibs.add(match.bib);
+      }
+
       // Update players
       const updatedPlayers = prev.players.map((player) => {
         const updates: Partial<EvaluationPlayer> = {};
 
-        // Apply coach kid assignment
+        // Apply or clear coach kid assignment
         if (coachKidAssignments.has(player.bib)) {
           updates.isCoachKid = true;
           updates.coachTeamIndex = coachKidAssignments.get(player.bib)!;
+        } else if (allDetectedCoachKidBibs.has(player.bib)) {
+          // Player was in detection list but not selected - clear their coach kid status
+          updates.isCoachKid = false;
+          updates.coachTeamIndex = undefined;
         }
 
-        // Apply sibling group
+        // Apply or clear sibling group
         if (siblingGroups.has(player.bib)) {
           updates.siblingGroupId = siblingGroups.get(player.bib)!;
+        } else if (allDetectedSiblingBibs.has(player.bib)) {
+          // Player was in detection list but not selected - clear their sibling group
+          updates.siblingGroupId = null;
         }
 
         if (Object.keys(updates).length > 0) {
@@ -571,7 +591,7 @@ export function useEvaluationImport(
     setSiblingMatches([]);
     setSelectedCoachKids(new Set());
     setSelectedSiblings(new Set());
-  }, [coachKidMatches, selectedCoachKids, selectedSiblings]);
+  }, [coachKidMatches, siblingMatches, selectedCoachKids, selectedSiblings]);
 
   /**
    * Cancel detection modal

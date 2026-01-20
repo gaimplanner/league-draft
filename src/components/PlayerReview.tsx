@@ -138,8 +138,9 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
     setSiblingMatches(siblingPairs);
 
     if (coachMatches.length > 0 || siblingPairs.length > 0) {
-      setSelectedMatches(new Set(coachMatches.filter(m => !m.alreadyMarked).map(m => m.playerId)));
-      setSelectedSiblingPairs(new Set(siblingPairs.filter(s => !s.alreadyLinked).map(s => `${s.player1Id}-${s.player2Id}`)));
+      // Pre-select ALL matches including already marked/linked (user can uncheck to remove)
+      setSelectedMatches(new Set(coachMatches.map(m => m.playerId)));
+      setSelectedSiblingPairs(new Set(siblingPairs.map(s => `${s.player1Id}-${s.player2Id}`)));
       setShowAutoDetectModal(true);
     }
   };
@@ -169,17 +170,26 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
   };
 
   const handleApplyMatches = () => {
+    // Apply or clear coach kid assignments based on selection
     autoDetectedMatches.forEach(match => {
       if (selectedMatches.has(match.playerId)) {
         handleCoachKidToggle(match.playerId, true);
         handleCoachTeamAssignment(match.playerId, match.teamId);
+      } else {
+        // Not selected - clear coach kid status if it was previously set
+        handleCoachKidToggle(match.playerId, false);
       }
     });
 
+    // Apply or clear sibling links based on selection
     siblingMatches.forEach(match => {
       const pairKey = `${match.player1Id}-${match.player2Id}`;
       if (selectedSiblingPairs.has(pairKey)) {
         handleSiblingLink(match.player1Id, match.player2Id);
+      } else {
+        // Not selected - clear sibling links if they were previously set
+        handleSiblingUnlink(match.player1Id);
+        handleSiblingUnlink(match.player2Id);
       }
     });
 
@@ -456,16 +466,14 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
                             <label
                               key={match.playerId}
                               className={`flex items-start gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all ${
-                                match.alreadyMarked
-                                  ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
-                                  : isSelected
+                                isSelected
                                   ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20'
                                   : 'border-gray-200 dark:border-gray-700 hover:border-purple-300 dark:hover:border-purple-700'
                               }`}
                             >
                               <input
                                 type="checkbox"
-                                checked={isSelected || match.alreadyMarked}
+                                checked={isSelected}
                                 onChange={() => handleToggleMatch(match.playerId)}
                                 className="mt-1 w-5 h-5 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
                               />
@@ -473,11 +481,11 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
                                 <div className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
                                   {match.playerName}
                                   {match.alreadyMarked && (
-                                    <span className="text-xs bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 px-2 py-0.5 rounded">
-                                      Already assigned
+                                    <span className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded">
+                                      Previously assigned
                                     </span>
                                   )}
-                                  {isSelected && !match.alreadyMarked && (
+                                  {isSelected && (
                                     <CheckCircle2 className="w-5 h-5 text-purple-600" />
                                   )}
                                 </div>
@@ -518,16 +526,14 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
                             <label
                               key={pairKey}
                               className={`flex items-start gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all ${
-                                match.alreadyLinked
-                                  ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
-                                  : isSelected
+                                isSelected
                                   ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20'
                                   : 'border-gray-200 dark:border-gray-700 hover:border-purple-300 dark:hover:border-purple-700'
                               }`}
                             >
                               <input
                                 type="checkbox"
-                                checked={isSelected || match.alreadyLinked}
+                                checked={isSelected}
                                 onChange={() => handleToggleSiblingPair(pairKey)}
                                 className="mt-1 w-5 h-5 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
                               />
@@ -535,11 +541,11 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
                                 <div className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
                                   {match.player1Name} ↔ {match.player2Name}
                                   {match.alreadyLinked && (
-                                    <span className="text-xs bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 px-2 py-0.5 rounded">
-                                      Already linked
+                                    <span className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded">
+                                      Previously linked
                                     </span>
                                   )}
-                                  {isSelected && !match.alreadyLinked && (
+                                  {isSelected && (
                                     <CheckCircle2 className="inline-block w-5 h-5 text-purple-600" />
                                   )}
                                 </div>

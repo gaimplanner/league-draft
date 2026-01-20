@@ -74,18 +74,16 @@ export function DetectionModal({
                         <label
                           key={match.bib}
                           className={`flex items-start gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all ${
-                            match.alreadyMarked
-                              ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
-                              : isSelected
+                            isSelected
                               ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20'
                               : 'border-gray-200 dark:border-gray-700 hover:border-purple-300 dark:hover:border-purple-700'
                           }`}
                         >
                           <input
                             type="checkbox"
-                            checked={isSelected || match.alreadyMarked}
+                            checked={isSelected}
                             onChange={() => onToggleCoachKid(match.bib)}
-                            disabled={match.alreadyMarked}
+                            onClick={(e) => e.stopPropagation()}
                             className="mt-1 w-5 h-5 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
                           />
                           <div className="flex-1">
@@ -95,11 +93,11 @@ export function DetectionModal({
                                 {match.bib}
                               </span>
                               {match.alreadyMarked && (
-                                <span className="text-xs bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 px-2 py-0.5 rounded">
-                                  Already assigned
+                                <span className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded">
+                                  Previously assigned
                                 </span>
                               )}
-                              {isSelected && !match.alreadyMarked && (
+                              {isSelected && (
                                 <CheckCircle2 className="w-5 h-5 text-purple-600" />
                               )}
                             </div>
@@ -140,18 +138,16 @@ export function DetectionModal({
                         <label
                           key={pairKey}
                           className={`flex items-start gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all ${
-                            match.alreadyLinked
-                              ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
-                              : isSelected
+                            isSelected
                               ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20'
                               : 'border-gray-200 dark:border-gray-700 hover:border-purple-300 dark:hover:border-purple-700'
                           }`}
                         >
                           <input
                             type="checkbox"
-                            checked={isSelected || match.alreadyLinked}
+                            checked={isSelected}
                             onChange={() => onToggleSibling(pairKey)}
-                            disabled={match.alreadyLinked}
+                            onClick={(e) => e.stopPropagation()}
                             className="mt-1 w-5 h-5 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
                           />
                           <div className="flex-1">
@@ -160,11 +156,11 @@ export function DetectionModal({
                               <span className="text-gray-400">↔</span>
                               <span>{match.player2Name}</span>
                               {match.alreadyLinked && (
-                                <span className="text-xs bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 px-2 py-0.5 rounded">
-                                  Already linked
+                                <span className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded">
+                                  Previously linked
                                 </span>
                               )}
-                              {isSelected && !match.alreadyLinked && (
+                              {isSelected && (
                                 <CheckCircle2 className="w-5 h-5 text-purple-600" />
                               )}
                             </div>
