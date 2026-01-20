@@ -12,7 +12,7 @@ import {
   Search,
   ClipboardCheck,
 } from 'lucide-react';
-import { Division, Player, Team, ResolvedRequest, RequestsFirstConfig, DEFAULT_REQUESTS_FIRST_CONFIG, TradeCandidate } from '../types';
+import { Division, Player, Team, ResolvedRequest, RequestsFirstConfig, DEFAULT_REQUESTS_FIRST_CONFIG, TradeCandidate, AppPhase } from '../types';
 import { RegistrationRecord } from '../types/evaluation';
 import { EvaluationImport } from './evaluation';
 import { NameMatchResolver, TeamBuilderResults, RequestConfirmation, TradeSuggestions } from './teamBuilder';
@@ -53,6 +53,8 @@ interface TeamBuilderFlowProps {
   onBack: () => void;
   onComplete?: (players: Player[], teams: Team[]) => void;
   onUpdateTeams?: (teams: Team[]) => void;
+  onUpdatePlayers?: (players: Player[]) => void;
+  onUpdatePhase?: (phase: AppPhase) => void;
 }
 
 interface RegistrationPlayer {
@@ -74,14 +76,29 @@ interface RegistrationPlayer {
 // Component
 // -----------------------------------------------------------------------------
 
-export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams }: TeamBuilderFlowProps) => {
-  // Step state - start at setup for new divisions (no players), import for divisions with players
-  const [step, setStep] = useState<TeamBuilderStep>(
-    division.players.length > 0 ? 'import' : 'setup'
-  );
+export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, onUpdatePlayers, onUpdatePhase: _onUpdatePhase }: TeamBuilderFlowProps) => {
+  // Determine initial step based on division state
+  const getInitialStep = (): TeamBuilderStep => {
+    // If we have players with team assignments (results), go to results
+    if (division.players.length > 0 && division.players.some(p => p.draftedByTeamId)) {
+      return 'results';
+    }
+    // If we have players but no assignments, go to configure (ready to generate)
+    if (division.players.length > 0) {
+      return 'configure';
+    }
+    // If teams have coach names, go to import
+    if (division.teams.some(t => t.headCoach)) {
+      return 'import';
+    }
+    // Otherwise start fresh
+    return 'setup';
+  };
 
-  // Import data
-  const [evalPlayers, setEvalPlayers] = useState<Player[]>([]);
+  const [step, setStep] = useState<TeamBuilderStep>(getInitialStep);
+
+  // Import data - initialize from division if available
+  const [evalPlayers, setEvalPlayers] = useState<Player[]>(division.players);
   const [teams, setTeams] = useState<Team[]>(division.teams);
   const [registrationData, setRegistrationData] = useState<RegistrationData | null>(null);
   const [registrationPlayers, setRegistrationPlayers] = useState<RegistrationPlayer[]>([]);
@@ -95,11 +112,12 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams }:
   // Normalization result (from request resolution step)
   const [normalizationResult, setNormalizationResult] = useState<NormalizationResult | null>(null);
 
-  // Results
+  // Results - initialize from division if we have results (players with team assignments)
+  const hasResults = division.players.length > 0 && division.players.some(p => p.draftedByTeamId);
   const [algorithmResult, setAlgorithmResult] = useState<TeamBuilderResult | null>(null);
   const [requestsFirstResult, setRequestsFirstResult] = useState<RequestsFirstResult | null>(null);
-  const [finalPlayers, setFinalPlayers] = useState<Player[]>([]);
-  const [finalTeams, setFinalTeams] = useState<Team[]>([]);
+  const [finalPlayers, setFinalPlayers] = useState<Player[]>(hasResults ? division.players : []);
+  const [finalTeams, setFinalTeams] = useState<Team[]>(hasResults ? division.teams : []);
 
   // Swap modal
   const [showSwapModal, setShowSwapModal] = useState(false);
@@ -206,10 +224,13 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams }:
     }));
     setTeams(updatedTeams);
 
-    // Persist the updated teams (mark as local update to prevent sync loop)
+    // Persist the updated teams and players (mark as local update to prevent sync loop)
+    isLocalUpdate.current = true;
     if (onUpdateTeams) {
-      isLocalUpdate.current = true;
       onUpdateTeams(updatedTeams);
+    }
+    if (onUpdatePlayers) {
+      onUpdatePlayers(players);
     }
 
     // If registration data was parsed from the same Excel file, process it
@@ -225,7 +246,7 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams }:
 
     // Move to resolution step
     setStep('resolution');
-  }, [teams, convertRegistrationRecords, onUpdateTeams]);
+  }, [teams, convertRegistrationRecords, onUpdateTeams, onUpdatePlayers]);
 
   // Handle Registration Data file upload (separate from eval)
   const handleRegistrationFileUpload = useCallback(async (file: File) => {
@@ -574,6 +595,14 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams }:
 
       setFinalPlayers(updatedPlayers);
       setFinalTeams(updatedTeams);
+
+      // Persist the results
+      if (onUpdatePlayers) {
+        onUpdatePlayers(updatedPlayers);
+      }
+      if (onUpdateTeams) {
+        onUpdateTeams(updatedTeams);
+      }
     } else {
       // Run balance-first algorithm (original)
       const result = runTeamBuilderAlgorithm(teamBuilderPlayers, teams, config);
@@ -589,10 +618,18 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams }:
 
       setFinalPlayers(updatedPlayers);
       setFinalTeams(updatedTeams);
+
+      // Persist the results
+      if (onUpdatePlayers) {
+        onUpdatePlayers(updatedPlayers);
+      }
+      if (onUpdateTeams) {
+        onUpdateTeams(updatedTeams);
+      }
     }
 
     setStep('results');
-  }, [evalPlayers, teams, registrationPlayers, config, normalizationResult, algorithmMode, resolvedRequests, requestsFirstConfig]);
+  }, [evalPlayers, teams, registrationPlayers, config, normalizationResult, algorithmMode, resolvedRequests, requestsFirstConfig, onUpdatePlayers, onUpdateTeams]);
 
   // Handle applying a suggested trade
   const handleApplyTrade = useCallback((trade: TradeCandidate) => {

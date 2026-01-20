@@ -772,6 +772,8 @@ function App() {
         division={activeDivision}
         onBack={handleBackToSelector}
         onUpdateTeams={(teams) => updateActiveDivision({ teams })}
+        onUpdatePlayers={(players) => updateActiveDivision({ players })}
+        onUpdatePhase={(phase) => updateActiveDivision({ phase })}
       />
     );
   }
