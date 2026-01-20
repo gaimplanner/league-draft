@@ -40,7 +40,7 @@ Has name, roster (drafted players), totalScore, draftPosition, coachKids array, 
 - **Session timeout**: 24-hour expiration (SESSION_COOKIE_AGE)
 
 ### State Management
-- `useDivisions` hook: Division CRUD via API
+- `useDivisions` hook: Division CRUD via API. `updateActiveDivision` persists teams via `saveTeamsToApi` and players via `savePlayersToApi`
 - `useDraft` hook: Draft state, pick logic, undo, mandatory pick checks via API
 - `useEvaluationImport` hook: Excel workbook processing
 - `AuthContext`: User authentication state

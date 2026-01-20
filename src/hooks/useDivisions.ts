@@ -7,7 +7,7 @@ import {
   DivisionMode,
 } from '../types';
 import { api, ApiError } from '../api/client';
-import { saveTeamsToApi } from '../api';
+import { saveTeamsToApi, savePlayersToApi } from '../api';
 
 // Validation: A division is complete enough to persist when it has players
 export function isDivisionValid(division: Division | null): boolean {
@@ -190,8 +190,17 @@ export function useDivisions() {
         const savedTeams = await saveTeamsToApi(activeDivision.id, updates.teams);
         // Update local state with the saved teams
         setActiveDivision(prev => prev ? { ...prev, teams: savedTeams } : prev);
-      } else if (Object.keys(apiUpdates).length === 0) {
-        // For other non-API updates (like players), just update local state
+      }
+
+      // Save players to API if they were updated
+      if (updates.players !== undefined) {
+        const savedPlayers = await savePlayersToApi(activeDivision.id, updates.players);
+        // Update local state with the saved players
+        setActiveDivision(prev => prev ? { ...prev, players: savedPlayers } : prev);
+      }
+
+      // For other non-API updates, just update local state
+      if (Object.keys(apiUpdates).length === 0 && updates.teams === undefined && updates.players === undefined) {
         setActiveDivision(updated);
       }
       setError(null);
