@@ -365,17 +365,41 @@ export function normalizeName(name: string): string {
 
 /**
  * Parse teammate requests from a string.
- * Handles both comma-separated and space-separated formats.
+ * Handles various delimiter formats and name patterns.
  *
  * Examples:
  * - "Mike Smith, Jake Johnson" -> ["Mike Smith", "Jake Johnson"]
+ * - "Jett Janda + Caden Vandegrift" -> ["Jett Janda", "Caden Vandegrift"]
+ * - "Sam Hagedorn and Aidan Brown" -> ["Sam Hagedorn", "Aidan Brown"]
  * - "Smith Johnson" -> ["Smith", "Johnson"] (last names only)
  * - "Mike Smith Jake Johnson" -> attempts to detect full names vs last names
+ * - "Joey (Joseph) Park" -> "Joseph Park" (extracts name from parentheses)
+ * - "JackSmithMikeJones" -> attempts to split camelCase/concatenated names
  */
 export function parseTeammateRequestsString(raw: string): string[] {
   if (!raw || raw.trim() === '') return [];
 
-  const trimmed = raw.trim();
+  let trimmed = raw.trim();
+
+  // Check for concatenated names (no spaces, multiple capitals like "JackFulcherColeSkaranHudsonGon")
+  if (!trimmed.includes(' ') && /[a-z][A-Z]/.test(trimmed)) {
+    // Split on capital letters
+    const splitNames = trimmed.split(/(?=[A-Z])/).filter(s => s.length > 0);
+    // Try to pair them as first/last names
+    if (splitNames.length >= 2 && splitNames.length % 2 === 0) {
+      const names: string[] = [];
+      for (let i = 0; i < splitNames.length; i += 2) {
+        names.push(normalizeRequestName(`${splitNames[i]} ${splitNames[i + 1]}`));
+      }
+      return names;
+    }
+    // If odd number, might be last names only
+    return splitNames.map(normalizeRequestName);
+  }
+
+  // Normalize delimiters: replace +, &, ;, and " and " with comma
+  trimmed = trimmed.replace(/\s*[+&;]\s*/g, ', ');
+  trimmed = trimmed.replace(/\s+and\s+/gi, ', ');
 
   // If contains comma, split by comma
   if (trimmed.includes(',')) {
@@ -383,7 +407,7 @@ export function parseTeammateRequestsString(raw: string): string[] {
       .split(',')
       .map(s => s.trim())
       .filter(s => s.length > 0)
-      .map(normalizeName);
+      .map(normalizeRequestName);
   }
 
   // Otherwise, try to intelligently split
@@ -392,21 +416,45 @@ export function parseTeammateRequestsString(raw: string): string[] {
   const words = trimmed.split(/\s+/).filter(w => w.length > 0);
 
   if (words.length === 0) return [];
-  if (words.length === 1) return [normalizeName(words[0])];
+  if (words.length === 1) return [normalizeRequestName(words[0])];
 
   // Heuristic: if all words start with capital and we have even count,
   // try to pair them as "First Last" names
-  const allCapitalized = words.every(w => /^[A-Z]/.test(w));
+  const allCapitalized = words.every(w => /^[A-Z]/i.test(w));
   if (allCapitalized && words.length % 2 === 0 && words.length <= 6) {
     const names: string[] = [];
     for (let i = 0; i < words.length; i += 2) {
-      names.push(normalizeName(`${words[i]} ${words[i + 1]}`));
+      names.push(normalizeRequestName(`${words[i]} ${words[i + 1]}`));
     }
     return names;
   }
 
   // Default: treat each word as a separate name (likely last names)
-  return words.map(normalizeName);
+  return words.map(normalizeRequestName);
+}
+
+/**
+ * Normalize a request name, handling special patterns like:
+ * - "Joey (Joseph) Park" -> "Joseph Park"
+ * - "E. Tiller" -> "E Tiller" (keep initial for matching)
+ * - "Will N" -> "Will N" (keep as-is for partial matching)
+ */
+function normalizeRequestName(name: string): string {
+  if (!name) return '';
+  let trimmed = name.trim();
+
+  // Handle "Nickname (RealName) LastName" pattern
+  // e.g., "Joey (Joseph) Park" -> "Joseph Park"
+  const parenMatch = trimmed.match(/^[\w]+\s*\((\w+)\)\s*([\w]+)$/);
+  if (parenMatch) {
+    trimmed = `${parenMatch[1]} ${parenMatch[2]}`;
+  }
+
+  // Remove periods from initials but keep the letter
+  // e.g., "E. Tiller" -> "E Tiller"
+  trimmed = trimmed.replace(/\.\s*/g, ' ').replace(/\s+/g, ' ').trim();
+
+  return normalizeName(trimmed);
 }
 
 // -----------------------------------------------------------------------------
@@ -646,6 +694,13 @@ export interface CoachRequestMatch {
   matchedCoachName: string | null;
   matchType: 'exact' | 'fuzzy' | 'none';
   matchScore: number;
+  /**
+   * Request status:
+   * - 'resolved': Successfully matched to a coach in the system
+   * - 'possible': Coach likely exists (has good potential matches) but couldn't confidently match
+   * - 'impossible': No coach in the system matches this request (coach doesn't exist)
+   */
+  requestStatus: 'resolved' | 'possible' | 'impossible';
   suggestedMatches?: Array<{
     teamId: string;
     coachName: string;
@@ -668,6 +723,7 @@ export function resolveCoachRequest(
       matchedCoachName: null,
       matchType: 'none',
       matchScore: 0,
+      requestStatus: 'impossible', // Empty request
     };
   }
 
@@ -686,6 +742,7 @@ export function resolveCoachRequest(
         matchedCoachName: coach.coachName,
         matchType: 'exact',
         matchScore: 1,
+        requestStatus: 'resolved',
       };
     }
 
@@ -700,6 +757,7 @@ export function resolveCoachRequest(
         matchedCoachName: coach.coachName,
         matchType: 'exact',
         matchScore: 1,
+        requestStatus: 'resolved',
       };
     }
   }
@@ -734,17 +792,23 @@ export function resolveCoachRequest(
       matchedCoachName: bestCandidate.coachName,
       matchType: 'fuzzy',
       matchScore: bestCandidate.score,
+      requestStatus: 'resolved',
       suggestedMatches: candidates.slice(0, 3).filter(c => c.score >= 0.4),
     };
   }
 
-  // No good match
+  // No good match - determine if it's possible (has decent candidates) or impossible
+  // A "possible" request means the coach might exist but we couldn't confidently match
+  // An "impossible" request means the coach definitely doesn't exist in the system
+  const hasPotentialMatches = candidates.some(c => c.score >= 0.4);
+
   return {
     rawRequest: request,
     matchedTeamId: null,
     matchedCoachName: null,
     matchType: 'none',
     matchScore: 0,
+    requestStatus: hasPotentialMatches ? 'possible' : 'impossible',
     suggestedMatches: candidates.slice(0, 3).filter(c => c.score >= 0.3),
   };
 }
@@ -766,6 +830,741 @@ export function resolveAllCoachRequests(
   }
 
   return results;
+}
+
+// -----------------------------------------------------------------------------
+// Normalized Request Resolution
+// -----------------------------------------------------------------------------
+
+export interface NormalizedPlayer {
+  id: string;
+  bib: string;
+  firstName: string;
+  lastName: string;
+  fullName: string;
+  // Raw requests from registration
+  rawCoachRequest: string;
+  rawTeammateRequests: string[];
+  rawSchool: string;
+  // Resolved/normalized values
+  resolvedCoachTeamId: string | null;
+  resolvedCoachName: string | null;
+  coachMatchType: 'exact' | 'fuzzy' | 'none';
+  coachMatchScore: number;
+  coachRequestStatus: 'resolved' | 'possible' | 'impossible' | 'none'; // 'none' = no request made
+  resolvedTeammateIds: string[]; // Player IDs (using bib as ID)
+  teammateResolutions: TeammateResolution[];
+  normalizedSchool: string; // Normalized school name
+  schoolId: string | null; // Unique school identifier
+}
+
+export interface TeammateResolution {
+  rawRequest: string;
+  resolvedPlayerId: string | null; // BIB of matched player
+  resolvedPlayerName: string | null;
+  matchType: 'exact' | 'fuzzy' | 'none';
+  matchScore: number;
+  isTwoWay: boolean;
+  /**
+   * Request status:
+   * - 'resolved': Successfully matched to a player in the system
+   * - 'possible': Player likely exists (has good potential matches) but couldn't confidently match
+   * - 'impossible': No player in the system matches this request (person doesn't exist)
+   */
+  requestStatus: 'resolved' | 'possible' | 'impossible';
+  suggestedMatches?: Array<{
+    playerId: string;
+    name: string;
+    score: number;
+  }>;
+}
+
+export interface SchoolNormalization {
+  originalName: string;
+  normalizedName: string;
+  schoolId: string;
+  playerCount: number;
+}
+
+export interface NormalizationResult {
+  players: NormalizedPlayer[];
+  schools: SchoolNormalization[];
+  stats: {
+    totalPlayers: number;
+    playersWithCoachRequest: number;
+    coachRequestsResolved: number;
+    coachRequestsPossible: number; // Could match but didn't (coach exists)
+    coachRequestsImpossible: number; // Coach doesn't exist in system
+    playersWithTeammateRequest: number;
+    teammateRequestsResolved: number;
+    teammateRequestsPossible: number; // Could match but didn't (player exists)
+    teammateRequestsImpossible: number; // Player doesn't exist in system
+    totalTeammateRequests: number;
+    twoWayRequestsFound: number;
+    uniqueSchools: number;
+  };
+  warnings: string[];
+}
+
+/**
+ * Normalize all request data for the team builder.
+ * This is the main function that should be called after name matching
+ * to resolve all coach requests, teammate requests, and school names.
+ */
+export function normalizeRequestData(
+  players: Array<{
+    id: string;
+    bib: string;
+    firstName: string;
+    lastName: string;
+    coachRequest?: string;
+    teammateRequests?: string[];
+    school?: string;
+  }>,
+  coaches: CoachInfo[]
+): NormalizationResult {
+  const warnings: string[] = [];
+
+  // Step 1: Normalize schools first (we need school IDs for clustering)
+  const schoolNormalizations = normalizeSchools(players);
+  const schoolNameToId = new Map<string, string>();
+  schoolNormalizations.forEach(s => {
+    schoolNameToId.set(s.originalName.toLowerCase(), s.schoolId);
+  });
+
+  // Step 2: Resolve all requests for each player
+  const normalizedPlayers: NormalizedPlayer[] = players.map(player => {
+    const fullName = `${player.firstName} ${player.lastName}`;
+
+    // Resolve coach request
+    const coachMatch = player.coachRequest
+      ? resolveCoachRequest(player.coachRequest, coaches)
+      : null;
+
+    // Resolve teammate requests
+    const teammateResolutions = resolveTeammateRequests(
+      player.teammateRequests || [],
+      players,
+      player.id
+    );
+
+    // Get normalized school
+    const rawSchool = player.school || '';
+    const schoolId = rawSchool ? schoolNameToId.get(rawSchool.toLowerCase()) || null : null;
+    const normalizedSchool = schoolId
+      ? schoolNormalizations.find(s => s.schoolId === schoolId)?.normalizedName || rawSchool
+      : rawSchool;
+
+    // Determine coach request status
+    let coachRequestStatus: 'resolved' | 'possible' | 'impossible' | 'none' = 'none';
+    if (player.coachRequest && player.coachRequest.trim()) {
+      coachRequestStatus = coachMatch?.requestStatus || 'impossible';
+    }
+
+    return {
+      id: player.id,
+      bib: player.bib,
+      firstName: player.firstName,
+      lastName: player.lastName,
+      fullName,
+      rawCoachRequest: player.coachRequest || '',
+      rawTeammateRequests: player.teammateRequests || [],
+      rawSchool,
+      resolvedCoachTeamId: coachMatch?.matchedTeamId || null,
+      resolvedCoachName: coachMatch?.matchedCoachName || null,
+      coachMatchType: coachMatch?.matchType || 'none',
+      coachMatchScore: coachMatch?.matchScore || 0,
+      coachRequestStatus,
+      resolvedTeammateIds: teammateResolutions
+        .filter(t => t.resolvedPlayerId)
+        .map(t => t.resolvedPlayerId!),
+      teammateResolutions,
+      normalizedSchool,
+      schoolId,
+    };
+  });
+
+  // Step 3: Detect two-way requests now that all resolutions are done
+  detectAndMarkTwoWayRequests(normalizedPlayers);
+
+  // Calculate stats
+  const playersWithCoachRequest = normalizedPlayers.filter(p => p.rawCoachRequest).length;
+  const coachRequestsResolved = normalizedPlayers.filter(p => p.coachRequestStatus === 'resolved').length;
+  const coachRequestsPossible = normalizedPlayers.filter(p => p.coachRequestStatus === 'possible').length;
+  const coachRequestsImpossible = normalizedPlayers.filter(p => p.coachRequestStatus === 'impossible').length;
+
+  const playersWithTeammateRequest = normalizedPlayers.filter(p => p.rawTeammateRequests.length > 0).length;
+  const totalTeammateRequests = normalizedPlayers.reduce((sum, p) => sum + p.teammateResolutions.length, 0);
+  const teammateRequestsResolved = normalizedPlayers.reduce(
+    (sum, p) => sum + p.teammateResolutions.filter(t => t.requestStatus === 'resolved').length,
+    0
+  );
+  const teammateRequestsPossible = normalizedPlayers.reduce(
+    (sum, p) => sum + p.teammateResolutions.filter(t => t.requestStatus === 'possible').length,
+    0
+  );
+  const teammateRequestsImpossible = normalizedPlayers.reduce(
+    (sum, p) => sum + p.teammateResolutions.filter(t => t.requestStatus === 'impossible').length,
+    0
+  );
+  const twoWayRequestsFound = normalizedPlayers.reduce(
+    (sum, p) => sum + p.teammateResolutions.filter(t => t.isTwoWay).length,
+    0
+  ) / 2; // Divide by 2 since each two-way is counted twice
+
+  // Generate warnings for unresolved requests with status info
+  normalizedPlayers.forEach(p => {
+    if (p.rawCoachRequest && p.coachRequestStatus !== 'resolved') {
+      const status = p.coachRequestStatus === 'impossible' ? '(not in system)' : '(possible match)';
+      warnings.push(`${p.fullName}: Coach request "${p.rawCoachRequest}" could not be matched ${status}`);
+    }
+    p.teammateResolutions.forEach(t => {
+      if (t.requestStatus !== 'resolved' && t.rawRequest) {
+        const status = t.requestStatus === 'impossible' ? '(not in system)' : '(possible match)';
+        warnings.push(`${p.fullName}: Teammate request "${t.rawRequest}" could not be matched ${status}`);
+      }
+    });
+  });
+
+  return {
+    players: normalizedPlayers,
+    schools: schoolNormalizations,
+    stats: {
+      totalPlayers: players.length,
+      playersWithCoachRequest,
+      coachRequestsResolved,
+      coachRequestsPossible,
+      coachRequestsImpossible,
+      playersWithTeammateRequest,
+      teammateRequestsResolved,
+      teammateRequestsPossible,
+      teammateRequestsImpossible,
+      totalTeammateRequests,
+      twoWayRequestsFound,
+      uniqueSchools: schoolNormalizations.length,
+    },
+    warnings,
+  };
+}
+
+/**
+ * Resolve teammate requests for a single player against the full player list.
+ */
+function resolveTeammateRequests(
+  requests: string[],
+  allPlayers: Array<{
+    id: string;
+    bib: string;
+    firstName: string;
+    lastName: string;
+  }>,
+  excludePlayerId: string
+): TeammateResolution[] {
+  // Filter out the requesting player
+  const candidates = allPlayers.filter(p => p.id !== excludePlayerId);
+
+  return requests.map(rawRequest => {
+    if (!rawRequest || rawRequest.trim() === '') {
+      return {
+        rawRequest,
+        resolvedPlayerId: null,
+        resolvedPlayerName: null,
+        matchType: 'none' as const,
+        matchScore: 0,
+        isTwoWay: false,
+        requestStatus: 'impossible' as const, // Empty request
+      };
+    }
+
+    const normalizedRequest = rawRequest.toLowerCase().trim();
+
+    // Try exact matches first
+    // 1. Exact full name match
+    const exactFullName = candidates.find(
+      p => `${p.firstName} ${p.lastName}`.toLowerCase() === normalizedRequest
+    );
+    if (exactFullName) {
+      return {
+        rawRequest,
+        resolvedPlayerId: exactFullName.id,
+        resolvedPlayerName: `${exactFullName.firstName} ${exactFullName.lastName}`,
+        matchType: 'exact' as const,
+        matchScore: 1,
+        isTwoWay: false,
+        requestStatus: 'resolved' as const,
+      };
+    }
+
+    // 2. Exact last name match (if unique)
+    const lastNameMatches = candidates.filter(
+      p => p.lastName.toLowerCase() === normalizedRequest
+    );
+    if (lastNameMatches.length === 1) {
+      return {
+        rawRequest,
+        resolvedPlayerId: lastNameMatches[0].id,
+        resolvedPlayerName: `${lastNameMatches[0].firstName} ${lastNameMatches[0].lastName}`,
+        matchType: 'exact' as const,
+        matchScore: 1,
+        isTwoWay: false,
+        requestStatus: 'resolved' as const,
+      };
+    }
+
+    // 3. Exact first name match (if unique) - sometimes kids just use first names
+    const firstNameMatches = candidates.filter(
+      p => p.firstName.toLowerCase() === normalizedRequest
+    );
+    if (firstNameMatches.length === 1) {
+      return {
+        rawRequest,
+        resolvedPlayerId: firstNameMatches[0].id,
+        resolvedPlayerName: `${firstNameMatches[0].firstName} ${firstNameMatches[0].lastName}`,
+        matchType: 'exact' as const,
+        matchScore: 0.95,
+        isTwoWay: false,
+        requestStatus: 'resolved' as const,
+      };
+    }
+
+    // 4. Check for "First L" pattern (first name + last initial)
+    // e.g., "Will N" should match "Will Nielsen"
+    const firstLastInitialMatch = normalizedRequest.match(/^(\w+)\s+([a-z])$/i);
+    if (firstLastInitialMatch) {
+      const [, firstName, lastInitial] = firstLastInitialMatch;
+      const initialMatches = candidates.filter(
+        p => p.firstName.toLowerCase() === firstName.toLowerCase() &&
+             p.lastName.toLowerCase().startsWith(lastInitial.toLowerCase())
+      );
+      if (initialMatches.length === 1) {
+        return {
+          rawRequest,
+          resolvedPlayerId: initialMatches[0].id,
+          resolvedPlayerName: `${initialMatches[0].firstName} ${initialMatches[0].lastName}`,
+          matchType: 'exact' as const,
+          matchScore: 0.95,
+          isTwoWay: false,
+          requestStatus: 'resolved' as const,
+        };
+      }
+    }
+
+    // 5. Check for "F. LastName" or "F LastName" pattern (first initial + last name)
+    // e.g., "E Tiller" or "E. Tiller" should match "Ethan Tiller"
+    const initialLastNameMatch = normalizedRequest.match(/^([a-z])\.?\s+(\w+)$/i);
+    if (initialLastNameMatch) {
+      const [, firstInitial, lastName] = initialLastNameMatch;
+      const initialMatches = candidates.filter(
+        p => p.firstName.toLowerCase().startsWith(firstInitial.toLowerCase()) &&
+             p.lastName.toLowerCase() === lastName.toLowerCase()
+      );
+      if (initialMatches.length === 1) {
+        return {
+          rawRequest,
+          resolvedPlayerId: initialMatches[0].id,
+          resolvedPlayerName: `${initialMatches[0].firstName} ${initialMatches[0].lastName}`,
+          matchType: 'exact' as const,
+          matchScore: 0.95,
+          isTwoWay: false,
+          requestStatus: 'resolved' as const,
+        };
+      }
+      // If multiple matches, still prefer this over fuzzy
+      if (initialMatches.length > 1) {
+        return {
+          rawRequest,
+          resolvedPlayerId: initialMatches[0].id,
+          resolvedPlayerName: `${initialMatches[0].firstName} ${initialMatches[0].lastName}`,
+          matchType: 'fuzzy' as const,
+          matchScore: 0.85,
+          isTwoWay: false,
+          requestStatus: 'resolved' as const,
+          suggestedMatches: initialMatches.map(p => ({
+            playerId: p.id,
+            name: `${p.firstName} ${p.lastName}`,
+            score: 0.85,
+          })),
+        };
+      }
+    }
+
+    // 6. Fuzzy matching with improved scoring
+    const fuzzyMatches = candidates.map(p => {
+      const fullName = `${p.firstName} ${p.lastName}`.toLowerCase();
+      const fullNameScore = nameSimilarity(normalizedRequest, fullName);
+      const lastNameScore = nameSimilarity(normalizedRequest, p.lastName.toLowerCase()) * 0.85;
+      const firstNameScore = nameSimilarity(normalizedRequest, p.firstName.toLowerCase()) * 0.75;
+
+      // Check for partial matches (e.g., "Mike" matching "Michael", "Will" matching "William")
+      const isPartialFirst = p.firstName.toLowerCase().startsWith(normalizedRequest) ||
+        normalizedRequest.startsWith(p.firstName.toLowerCase());
+      const partialBonus = isPartialFirst ? 0.15 : 0;
+
+      // Check for common nickname patterns
+      const nicknameBonus = isNicknameMatch(normalizedRequest, p.firstName.toLowerCase()) ? 0.25 : 0;
+
+      // Check if request matches "FirstName LastName" with typo in last name
+      const requestParts = normalizedRequest.split(/\s+/);
+      let typoBonus = 0;
+      if (requestParts.length === 2) {
+        const [reqFirst, reqLast] = requestParts;
+        // Check first name match (exact or nickname)
+        const firstMatches = p.firstName.toLowerCase() === reqFirst ||
+                            isNicknameMatch(reqFirst, p.firstName.toLowerCase());
+        if (firstMatches) {
+          // First name matches, check last name similarity
+          const lastSimilarity = nameSimilarity(reqLast, p.lastName.toLowerCase());
+          if (lastSimilarity >= 0.6) {
+            typoBonus = 0.2; // Boost for likely typo in last name
+          }
+        }
+
+        // Also check if last name matches exactly and first is similar
+        if (p.lastName.toLowerCase() === reqLast) {
+          const firstSimilarity = nameSimilarity(reqFirst, p.firstName.toLowerCase());
+          if (firstSimilarity >= 0.6 || isNicknameMatch(reqFirst, p.firstName.toLowerCase())) {
+            typoBonus = Math.max(typoBonus, 0.2);
+          }
+        }
+      }
+
+      // Single word request matching first name with nickname check
+      if (requestParts.length === 1 && nicknameBonus > 0) {
+        // If it's a nickname match, give it a strong score
+        return {
+          playerId: p.id,
+          name: `${p.firstName} ${p.lastName}`,
+          score: 0.85,
+        };
+      }
+
+      const bestScore = Math.max(fullNameScore, lastNameScore, firstNameScore) +
+                        partialBonus + nicknameBonus + typoBonus;
+
+      return {
+        playerId: p.id,
+        name: `${p.firstName} ${p.lastName}`,
+        score: Math.min(bestScore, 1), // Cap at 1
+      };
+    }).sort((a, b) => b.score - a.score);
+
+    const bestMatch = fuzzyMatches[0];
+
+    // For single-word requests (likely first names), be more selective
+    // Only match if there's one strong candidate or it's a nickname
+    const requestParts = normalizedRequest.split(/\s+/);
+    if (requestParts.length === 1) {
+      // Check if multiple candidates have similar scores (ambiguous)
+      const topMatches = fuzzyMatches.filter(m => m.score >= 0.7);
+      if (topMatches.length === 1 && topMatches[0].score >= 0.7) {
+        return {
+          rawRequest,
+          resolvedPlayerId: topMatches[0].playerId,
+          resolvedPlayerName: topMatches[0].name,
+          matchType: 'fuzzy' as const,
+          matchScore: topMatches[0].score,
+          isTwoWay: false,
+          requestStatus: 'resolved' as const,
+          suggestedMatches: fuzzyMatches.slice(0, 3).filter(m => m.score >= 0.4),
+        };
+      }
+      // If ambiguous (multiple high-scoring matches), pick the best but note it
+      if (bestMatch && bestMatch.score >= 0.75) {
+        return {
+          rawRequest,
+          resolvedPlayerId: bestMatch.playerId,
+          resolvedPlayerName: bestMatch.name,
+          matchType: 'fuzzy' as const,
+          matchScore: bestMatch.score,
+          isTwoWay: false,
+          requestStatus: 'resolved' as const,
+          suggestedMatches: fuzzyMatches.slice(0, 3).filter(m => m.score >= 0.4),
+        };
+      }
+    }
+
+    // Threshold for fuzzy match acceptance
+    if (bestMatch && bestMatch.score >= 0.55) {
+      return {
+        rawRequest,
+        resolvedPlayerId: bestMatch.playerId,
+        resolvedPlayerName: bestMatch.name,
+        matchType: 'fuzzy' as const,
+        matchScore: bestMatch.score,
+        isTwoWay: false,
+        requestStatus: 'resolved' as const,
+        suggestedMatches: fuzzyMatches.slice(0, 3).filter(m => m.score >= 0.4),
+      };
+    }
+
+    // No match found - determine if it's possible (has decent candidates) or impossible
+    // A "possible" request means the player might exist but we couldn't confidently match
+    // An "impossible" request means the player definitely doesn't exist in the system
+    // Threshold: if best match is >= 0.35, consider it "possible" (might be a typo or nickname we don't know)
+    const hasPotentialMatches = bestMatch && bestMatch.score >= 0.35;
+
+    return {
+      rawRequest,
+      resolvedPlayerId: null,
+      resolvedPlayerName: null,
+      matchType: 'none' as const,
+      matchScore: 0,
+      isTwoWay: false,
+      requestStatus: hasPotentialMatches ? 'possible' : 'impossible' as const,
+      suggestedMatches: fuzzyMatches.slice(0, 5).filter(m => m.score >= 0.3),
+    };
+  });
+}
+
+/**
+ * Check if a request might be a nickname for the actual name.
+ */
+function isNicknameMatch(request: string, actualName: string): boolean {
+  const nicknames: Record<string, string[]> = {
+    'william': ['will', 'willy', 'bill', 'billy', 'liam'],
+    'joseph': ['joe', 'joey'],
+    'michael': ['mike', 'mikey'],
+    'robert': ['rob', 'robby', 'bob', 'bobby'],
+    'richard': ['rick', 'ricky', 'dick', 'finn'], // Finn can be nickname for Richard
+    'james': ['jim', 'jimmy', 'jamie'],
+    'john': ['jack', 'johnny'],
+    'thomas': ['tom', 'tommy'],
+    'christopher': ['chris'],
+    'matthew': ['matt'],
+    'nicholas': ['nick', 'nicky'],
+    'daniel': ['dan', 'danny'],
+    'alexander': ['alex', 'xander'],
+    'benjamin': ['ben', 'benny'],
+    'samuel': ['sam', 'sammy'],
+    'jonathan': ['jon', 'jonny'],
+    'anthony': ['tony'],
+    'edward': ['ed', 'eddie', 'ted'],
+    'charles': ['charlie', 'chuck'],
+    'joshua': ['josh'],
+    'andrew': ['andy', 'drew'],
+    'jacob': ['jake'],
+    'ethan': ['e'],
+    'nathan': ['nate'],
+    'zachary': ['zach', 'zack'],
+    'timothy': ['tim', 'timmy'],
+    'steven': ['steve'],
+    'stephen': ['steve'],
+    'patrick': ['pat'],
+    'cameron': ['cam'],
+    'caden': ['cade'],
+    'jett': ['jet'],
+    'maxwell': ['max'],
+    'maximilian': ['max'],
+    'oliver': ['ollie'],
+    'theodore': ['theo', 'ted', 'teddy'],
+    'sebastian': ['seb'],
+    'dominic': ['dom'],
+    'elizabeth': ['liz', 'lizzy', 'beth'],
+    'katherine': ['kate', 'katie', 'kathy'],
+    'jennifer': ['jen', 'jenny'],
+    'margaret': ['maggie', 'meg'],
+    'elijah': ['eli'],
+    'porter': ['port'],
+    'finnegan': ['finn'],
+    'finley': ['finn'],
+    'aidan': ['aiden'],
+    'aiden': ['aidan'],
+    'cole': ['coleman'],
+    'hudson': ['hud'],
+    'wyatt': ['wy'],
+    'burke': ['burk'],
+    'sidhanth': ['sid'],
+    'siddhant': ['sid'],
+  };
+
+  // Check if request is a nickname for actualName
+  const actualLower = actualName.toLowerCase();
+  const requestLower = request.toLowerCase();
+
+  if (nicknames[actualLower]?.includes(requestLower)) {
+    return true;
+  }
+
+  // Check reverse (if request is the full name and actual is nickname)
+  for (const [fullName, nicks] of Object.entries(nicknames)) {
+    if (nicks.includes(actualLower) && fullName === requestLower) {
+      return true;
+    }
+  }
+
+  // Check if actual name contains the request as a nickname entry
+  for (const [fullName, nicks] of Object.entries(nicknames)) {
+    if (actualLower === fullName && nicks.includes(requestLower)) {
+      return true;
+    }
+    if (nicks.includes(requestLower) && nicks.includes(actualLower)) {
+      return true; // Both are nicknames for the same name
+    }
+  }
+
+  return false;
+}
+
+/**
+ * After all teammate requests are resolved, detect which ones are two-way.
+ */
+function detectAndMarkTwoWayRequests(players: NormalizedPlayer[]): void {
+  const playerById = new Map(players.map(p => [p.id, p]));
+
+  for (const playerA of players) {
+    for (const resolution of playerA.teammateResolutions) {
+      if (!resolution.resolvedPlayerId) continue;
+
+      const playerB = playerById.get(resolution.resolvedPlayerId);
+      if (!playerB) continue;
+
+      // Check if player B also resolved a request to player A
+      const bRequestsA = playerB.teammateResolutions.some(
+        t => t.resolvedPlayerId === playerA.id
+      );
+
+      if (bRequestsA) {
+        resolution.isTwoWay = true;
+      }
+    }
+  }
+}
+
+/**
+ * Normalize school names by clustering similar names together.
+ */
+function normalizeSchools(
+  players: Array<{ school?: string }>
+): SchoolNormalization[] {
+  // Collect all school names
+  const schoolCounts = new Map<string, number>();
+  players.forEach(p => {
+    if (p.school && p.school.trim()) {
+      const lower = p.school.trim().toLowerCase();
+      schoolCounts.set(lower, (schoolCounts.get(lower) || 0) + 1);
+    }
+  });
+
+  if (schoolCounts.size === 0) return [];
+
+  // Cluster similar school names
+  const schools = Array.from(schoolCounts.entries()).map(([name, count]) => ({
+    original: name,
+    count,
+    clusterId: null as string | null,
+  }));
+
+  // Sort by count descending (most common names are canonical)
+  schools.sort((a, b) => b.count - a.count);
+
+  // Simple clustering: group names that are very similar
+  let clusterCounter = 0;
+  const clusters = new Map<string, { canonical: string; members: string[]; count: number }>();
+
+  for (const school of schools) {
+    if (school.clusterId) continue;
+
+    // Start a new cluster with this school as canonical
+    const clusterId = `school-${clusterCounter++}`;
+    school.clusterId = clusterId;
+
+    const clusterMembers = [school.original];
+    let totalCount = school.count;
+
+    // Find similar schools to add to this cluster
+    for (const other of schools) {
+      if (other.clusterId) continue;
+
+      const similarity = schoolNameSimilarity(school.original, other.original);
+      if (similarity >= 0.8) {
+        other.clusterId = clusterId;
+        clusterMembers.push(other.original);
+        totalCount += other.count;
+      }
+    }
+
+    clusters.set(clusterId, {
+      canonical: school.original, // Most common variant is canonical
+      members: clusterMembers,
+      count: totalCount,
+    });
+  }
+
+  // Build result
+  const result: SchoolNormalization[] = [];
+  const processed = new Set<string>();
+
+  for (const school of schools) {
+    if (processed.has(school.original)) continue;
+
+    const cluster = clusters.get(school.clusterId!);
+    if (!cluster) continue;
+
+    // Add all members of this cluster
+    for (const member of cluster.members) {
+      if (processed.has(member)) continue;
+      processed.add(member);
+
+      // Find original casing from players
+      const originalCased = players.find(
+        p => p.school && p.school.toLowerCase() === member
+      )?.school || member;
+
+      result.push({
+        originalName: originalCased,
+        normalizedName: titleCase(cluster.canonical),
+        schoolId: school.clusterId!,
+        playerCount: schoolCounts.get(member) || 0,
+      });
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Calculate similarity between two school names.
+ * Handles common variations like "Elementary", "School", abbreviations, etc.
+ */
+function schoolNameSimilarity(name1: string, name2: string): number {
+  // Normalize both names
+  const norm1 = normalizeSchoolName(name1);
+  const norm2 = normalizeSchoolName(name2);
+
+  if (norm1 === norm2) return 1;
+
+  // Use Levenshtein-based similarity
+  return nameSimilarity(norm1, norm2);
+}
+
+/**
+ * Normalize a school name for comparison.
+ */
+function normalizeSchoolName(name: string): string {
+  return name
+    .toLowerCase()
+    .trim()
+    // Remove common suffixes
+    .replace(/\s+(elementary|elem\.?|school|sch\.?|primary|academy|acad\.?)$/gi, '')
+    // Normalize common abbreviations
+    .replace(/\belem\.?\b/gi, 'elementary')
+    .replace(/\bsch\.?\b/gi, 'school')
+    .replace(/\bacad\.?\b/gi, 'academy')
+    // Remove punctuation
+    .replace(/[.,'-]/g, '')
+    // Collapse whitespace
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Convert a string to title case.
+ */
+function titleCase(str: string): string {
+  return str
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
 }
 
 // -----------------------------------------------------------------------------

@@ -143,6 +143,26 @@ Switch between two views using the toggle bar:
 - Division state snapshots
 - Completion timestamps for archives
 
+### Team Builder (League Generated Teams)
+For younger divisions that don't use live drafts, the Team Builder automatically creates balanced teams while honoring requests:
+
+- **Division Mode Selection**: Choose "Live Draft" or "League Generated Teams" at division creation
+- **Excel Import**: Registration Data tab with coach/teammate requests, plus evaluation tabs
+- **Request Resolution**:
+  - Coach requests matched to configured coaches
+  - Teammate requests parsed and resolved to players
+  - Two-way detection (both kids requested each other)
+  - Fuzzy name matching with suggestions for unresolved requests
+- **Auto-Assignment Algorithm**:
+  - Locked placements (coach kids, siblings)
+  - Top talent distribution for balance
+  - Request-based placement (two-way > one-way > coach > school)
+  - Balance-based fallback
+- **Happiness Indicators**: Visual status showing which requests were honored (🟢 all, 🟡 some, 🔴 none, ⚪ no requests)
+- **Player Search**: Search by name on Results page to see request details
+- **Manual Adjustments**: Swap players using the trade module
+- **Export**: Happiness report CSV with request fulfillment details
+
 ## Getting Started
 
 ### Prerequisites
@@ -310,7 +330,10 @@ src/
 │   │   ├── JoinLinkSection.tsx# Shareable join link management
 │   │   ├── ProfileTab.tsx     # Edit user profile
 │   │   └── ChangePasswordModal.tsx
-│   └── evaluation/            # Excel import components
+│   ├── evaluation/            # Excel import components
+│   └── teamBuilder/           # Team Builder components
+│       ├── TeamBuilderResults.tsx  # Results with happiness indicators
+│       └── NameMatchResolver.tsx   # Unmatched name resolution UI
 ├── hooks/
 │   ├── useDivisions.ts        # Division state (API mode)
 │   ├── useDraft.ts            # Draft logic (API mode)
@@ -328,7 +351,9 @@ src/
 │   ├── simulation.ts          # Simulation engine
 │   ├── exports.ts             # Export formatting
 │   ├── teamUtils.ts           # Team display helpers
-│   └── evaluationProcessor.ts # Excel processing
+│   ├── evaluationProcessor.ts # Excel processing
+│   ├── teamBuilderAlgorithm.ts # Auto-assignment algorithm
+│   └── teamBuilderParser.ts   # Request parsing & name matching
 └── e2e/
     └── draft-flow.spec.ts     # Playwright E2E tests
 

@@ -260,8 +260,62 @@ Tests cover:
 - Re-pushes state to prevent navigation (keeps user in app)
 - Prevents data loss from accidental back navigation
 
+## Team Builder Feature (In Development)
+
+The Team Builder is an alternative to live drafts for younger divisions (AA, etc.) where teams are auto-assigned rather than drafted.
+
+### Team Builder Flow
+`setup` → `import` → `resolution` → `configure` → `generate` → `results`
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `src/components/TeamBuilderFlow.tsx` | Main orchestration for Team Builder steps |
+| `src/components/teamBuilder/TeamBuilderResults.tsx` | Results display with happiness indicators and search |
+| `src/components/teamBuilder/NameMatchResolver.tsx` | UI for resolving unmatched player names |
+| `src/utils/teamBuilderAlgorithm.ts` | Greedy assignment algorithm with phases |
+| `src/utils/teamBuilderParser.ts` | Request parsing, name matching, normalization |
+
+### Division Mode
+- `mode: 'live-draft' | 'league-generated'` on Division (set at creation, immutable)
+- Live Draft → existing draft flow
+- League Generated Teams → Team Builder flow
+
+### Algorithm Phases
+1. **Locked Placements**: Coach kids, assistant coach kids, siblings
+2. **Top Talent Distribution**: Spread top N players by score for balance
+3. **Request-Based Placement**: Honor two-way friends > one-way friends > coach requests > school clustering
+4. **Balance-Based**: Remaining players assigned to lowest-scoring teams
+
+### Request Resolution
+- **Coach requests**: Match to coach names (exact or fuzzy)
+- **Teammate requests**: Parse comma/space-delimited names, resolve to players
+- **Two-way detection**: Both players requested each other (higher priority)
+- **Request status**: `resolved` | `possible` (person exists) | `impossible` (not in system)
+
+### Player Happiness Scores
+- 🟢 All requests honored
+- 🟡 Some requests honored
+- 🔴 No requests honored
+- ⚪ No requests made
+
+### Key State
+- `registrationPlayers`: Parsed from Registration Data tab (has requests, school, grade)
+- `evalPlayers`: Parsed from eval tabs (has scores, bib numbers)
+- `normalizationResult`: Request resolution results with stats and warnings
+- `algorithmResult`: Team assignments with happiness calculations
+
+### Data Flow
+1. Registration Data + Eval tabs parsed from Excel
+2. Players linked by First Name + Last Name matching
+3. Requests parsed and resolved to actual players/coaches
+4. Algorithm assigns players to teams
+5. Results show happiness indicators and allow swaps via TradeModal
+
 ## Branching
 
 - `development` - Feature work
 - `staging` - Testing
 - `main` - Production
+- `feature/team-builder` - Team Builder feature development

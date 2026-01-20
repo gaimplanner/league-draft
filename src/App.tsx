@@ -771,6 +771,7 @@ function App() {
       <TeamBuilderFlow
         division={activeDivision}
         onBack={handleBackToSelector}
+        onUpdateTeams={(teams) => updateActiveDivision({ teams })}
       />
     );
   }

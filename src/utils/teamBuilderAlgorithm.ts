@@ -22,14 +22,18 @@ export interface TeamBuilderConfig {
   balanceTolerance: number; // e.g., 0.10 for ±10%
   topTalentRounds: number; // Number of "rounds" of top talent to spread (e.g., 2)
   maxRosterSize: number; // Hard max per team (e.g., 13)
+  minRosterSize: number; // Minimum players per team (e.g., 10)
   prioritizeBalance: boolean; // If true, balance > happiness; if false, happiness > balance
+  forceEvenTeams: boolean; // If true, all teams will have same size (or differ by at most 1)
 }
 
 export const DEFAULT_TEAM_BUILDER_CONFIG: TeamBuilderConfig = {
   balanceTolerance: 0.10,
   topTalentRounds: 2,
   maxRosterSize: 13,
+  minRosterSize: 10,
   prioritizeBalance: true,
+  forceEvenTeams: false,
 };
 
 export interface TeamBuilderPlayer extends Player {
@@ -105,8 +109,9 @@ export interface TeamSummary {
   coachName: string;
   rosterCount: number;
   totalScore: number;
-  meanDelta: number; // Difference from mean (positive = above, negative = below)
-  meanDeltaPercent: number; // As percentage
+  averageScore: number; // Average score per player (totalScore / rosterCount)
+  meanDelta: number; // Difference from mean average (positive = above, negative = below)
+  meanDeltaPercent: number; // As percentage of mean average
 }
 
 // -----------------------------------------------------------------------------
@@ -170,13 +175,68 @@ export function runTeamBuilderAlgorithm(
     }
   };
 
+  // Calculate target roster size for even teams
+  const baseRosterSize = Math.floor(players.length / teams.length);
+  const extraPlayers = players.length % teams.length;
+  // Some teams get baseRosterSize + 1, others get baseRosterSize
+  // The first 'extraPlayers' teams (by current roster count) can have the extra player
+
   // Helper to check if team can accept more players
   const canAcceptPlayer = (team: TeamBuilderTeam): boolean => {
-    return team.assignedPlayerIds.length < config.maxRosterSize;
+    if (team.assignedPlayerIds.length >= config.maxRosterSize) {
+      return false;
+    }
+
+    if (config.forceEvenTeams) {
+      // Count how many teams already have baseRosterSize + 1 players
+      const teamsWithExtra = workingTeams.filter(t => t.assignedPlayerIds.length > baseRosterSize).length;
+
+      // If this team is at baseRosterSize, it can only accept if there are still extra slots available
+      if (team.assignedPlayerIds.length >= baseRosterSize) {
+        // Team is at base size - can only go to base+1 if extra slots remain
+        if (team.assignedPlayerIds.length === baseRosterSize && teamsWithExtra < extraPlayers) {
+          return true;
+        }
+        return false;
+      }
+      return true;
+    }
+
+    return true;
+  };
+
+  // Helper to check if any team is below minimum roster size
+  const getTeamsBelowMinimum = (): TeamBuilderTeam[] => {
+    return workingTeams.filter(t =>
+      t.assignedPlayerIds.length < config.minRosterSize && canAcceptPlayer(t)
+    );
+  };
+
+  // Helper to get the team with fewest players that's below minimum (for priority filling)
+  const getSmallestTeamBelowMinimum = (): TeamBuilderTeam | null => {
+    const belowMin = getTeamsBelowMinimum();
+    if (belowMin.length === 0) return null;
+    return belowMin.reduce((smallest, team) =>
+      team.assignedPlayerIds.length < smallest.assignedPlayerIds.length ? team : smallest
+    );
   };
 
   // Helper to get team with lowest score that can accept
+  // Prioritizes teams below minimum roster size first
   const getLowestScoreTeam = (): TeamBuilderTeam | null => {
+    // First, try to fill teams that are below minimum
+    const smallestBelowMin = getSmallestTeamBelowMinimum();
+    if (smallestBelowMin) {
+      // Among teams below minimum with same roster count, pick lowest score
+      const belowMinSameCount = getTeamsBelowMinimum().filter(
+        t => t.assignedPlayerIds.length === smallestBelowMin.assignedPlayerIds.length
+      );
+      return belowMinSameCount.reduce((lowest, team) =>
+        team.currentScore < lowest.currentScore ? team : lowest
+      );
+    }
+
+    // All teams are at or above minimum, use normal logic
     const eligible = workingTeams.filter(canAcceptPlayer);
     if (eligible.length === 0) return null;
     return eligible.reduce((lowest, team) =>
@@ -301,6 +361,19 @@ export function runTeamBuilderAlgorithm(
   for (const player of remainingByScore) {
     if (!unassignedPlayers.has(player.id)) continue;
 
+    // Check if any teams are below minimum - they get priority
+    const teamsBelowMin = getTeamsBelowMinimum();
+    if (teamsBelowMin.length > 0) {
+      // Must fill teams to minimum first - pick the smallest team with lowest score
+      const smallestCount = Math.min(...teamsBelowMin.map(t => t.assignedPlayerIds.length));
+      const smallestTeams = teamsBelowMin.filter(t => t.assignedPlayerIds.length === smallestCount);
+      const targetTeam = smallestTeams.reduce((lowest, team) =>
+        team.currentScore < lowest.currentScore ? team : lowest
+      );
+      assignPlayer(player.id, targetTeam.id, 'balance');
+      continue;
+    }
+
     const eligibleTeams = workingTeams.filter(t =>
       canAcceptPlayer(t) && !wouldBreakBalance(t, player.totalScore)
     );
@@ -402,19 +475,31 @@ export function runTeamBuilderAlgorithm(
   // Calculate results
   // =========================================================================
 
-  // Team summaries
-  const totalScore = workingTeams.reduce((sum, t) => sum + t.currentScore, 0);
-  const meanScore = totalScore / workingTeams.length;
-
-  const teamSummaries: TeamSummary[] = workingTeams.map(team => ({
-    teamId: team.id,
-    teamName: team.name || team.headCoach,
-    coachName: team.headCoach,
-    rosterCount: team.assignedPlayerIds.length,
-    totalScore: team.currentScore,
-    meanDelta: team.currentScore - meanScore,
-    meanDeltaPercent: meanScore > 0 ? ((team.currentScore - meanScore) / meanScore) * 100 : 0,
+  // Team summaries - use average scores for balance comparison since teams may have different sizes
+  const teamAverages = workingTeams.map(team => ({
+    team,
+    averageScore: team.assignedPlayerIds.length > 0
+      ? team.currentScore / team.assignedPlayerIds.length
+      : 0,
   }));
+  const meanAverageScore = teamAverages.length > 0
+    ? teamAverages.reduce((sum, t) => sum + t.averageScore, 0) / teamAverages.length
+    : 0;
+
+  const teamSummaries: TeamSummary[] = workingTeams.map(team => {
+    const rosterCount = team.assignedPlayerIds.length;
+    const averageScore = rosterCount > 0 ? team.currentScore / rosterCount : 0;
+    return {
+      teamId: team.id,
+      teamName: team.name || team.headCoach,
+      coachName: team.headCoach,
+      rosterCount,
+      totalScore: team.currentScore,
+      averageScore,
+      meanDelta: averageScore - meanAverageScore,
+      meanDeltaPercent: meanAverageScore > 0 ? ((averageScore - meanAverageScore) / meanAverageScore) * 100 : 0,
+    };
+  });
 
   // Player happiness
   const playerHappiness: PlayerHappiness[] = players.map(player => {

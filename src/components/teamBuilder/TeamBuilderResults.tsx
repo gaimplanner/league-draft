@@ -8,6 +8,7 @@ import {
   Heart,
   RefreshCw,
   Download,
+  Search,
 } from 'lucide-react';
 import {
   TeamBuilderResult,
@@ -37,6 +38,7 @@ export const TeamBuilderResults = ({
 }: TeamBuilderResultsProps) => {
   const [expandedTeamId, setExpandedTeamId] = useState<string | null>(null);
   const [view, setView] = useState<'teams' | 'players' | 'stats'>('teams');
+  const [playerSearch, setPlayerSearch] = useState('');
 
   const playerMap = new Map(players.map(p => [p.id, p]));
 
@@ -298,7 +300,7 @@ export const TeamBuilderResults = ({
                   <div className="flex items-center gap-4">
                     <div className="text-right">
                       <div className="text-sm font-medium text-gray-900 dark:text-white">
-                        {team.totalScore.toFixed(1)}
+                        {team.averageScore.toFixed(1)} avg
                       </div>
                       <div className={`text-xs ${balanceClass}`}>
                         {team.meanDeltaPercent >= 0 ? '+' : ''}{team.meanDeltaPercent.toFixed(1)}%
@@ -374,6 +376,19 @@ export const TeamBuilderResults = ({
       {/* Players/Happiness view */}
       {view === 'players' && (
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+          {/* Search input */}
+          <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="text"
+                value={playerSearch}
+                onChange={(e) => setPlayerSearch(e.target.value)}
+                placeholder="Search by player name..."
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 text-sm"
+              />
+            </div>
+          </div>
           <table className="w-full text-sm">
             <thead className="bg-gray-50 dark:bg-gray-700/50">
               <tr>
@@ -418,7 +433,22 @@ export const TeamBuilderResults = ({
 
                   return { happiness, player, assignment, team, schoolCount };
                 })
+                .filter(({ player }) => {
+                  // Apply search filter
+                  if (!playerSearch.trim()) return true;
+                  const query = playerSearch.toLowerCase().trim();
+                  return player.name?.toLowerCase().includes(query) ||
+                         player.firstName?.toLowerCase().includes(query) ||
+                         player.lastName?.toLowerCase().includes(query);
+                })
                 .sort((a, b) => {
+                  // If searching, prioritize exact matches
+                  if (playerSearch.trim()) {
+                    const query = playerSearch.toLowerCase().trim();
+                    const aExact = a.player.name?.toLowerCase().startsWith(query) ? 0 : 1;
+                    const bExact = b.player.name?.toLowerCase().startsWith(query) ? 0 : 1;
+                    if (aExact !== bExact) return aExact - bExact;
+                  }
                   // Sort by happiness (worst first for review)
                   const order = { 'none': 0, 'some': 1, 'all': 2, 'no-requests': 3 };
                   return order[a.happiness.score] - order[b.happiness.score];
@@ -469,14 +499,26 @@ export const TeamBuilderResults = ({
                         </span>
                       </td>
                       <td className={`px-4 py-3 ${coachRequestClass}`}>
-                        {coachRequestText}
+                        <div>{coachRequestText}</div>
+                        {player.coachRequest && (
+                          <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                            Requested: "{player.coachRequest}"
+                          </div>
+                        )}
                       </td>
                       <td className={`px-4 py-3 ${teammateRequestClass}`}>
-                        {teammateRequestText}
-                        {happiness.teammateRequestsTotal > 0 && (
-                          <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">
-                            ({happiness.teammateRequestsHonored}/{happiness.teammateRequestsTotal})
-                          </span>
+                        <div>
+                          {teammateRequestText}
+                          {happiness.teammateRequestsTotal > 0 && (
+                            <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">
+                              ({happiness.teammateRequestsHonored}/{happiness.teammateRequestsTotal})
+                            </span>
+                          )}
+                        </div>
+                        {player.teammateRequests && player.teammateRequests.length > 0 && (
+                          <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                            Requested: {player.teammateRequests.join(', ')}
+                          </div>
                         )}
                       </td>
                       <td className="px-4 py-3 text-center text-gray-600 dark:text-gray-400">
@@ -602,21 +644,21 @@ export const TeamBuilderResults = ({
           {/* Team balance */}
           <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
             <h3 className="font-semibold text-gray-900 dark:text-white mb-4">
-              Team Balance
+              Team Balance (Avg Score)
             </h3>
             <div className="space-y-2">
               {result.teamSummaries
-                .sort((a, b) => b.totalScore - a.totalScore)
+                .sort((a, b) => b.averageScore - a.averageScore)
                 .map(team => {
                   const isBalanced = Math.abs(team.meanDeltaPercent) <= 10;
                   return (
                     <div key={team.teamId} className="flex items-center justify-between">
                       <span className="text-gray-600 dark:text-gray-400 truncate max-w-[150px]">
-                        {team.teamName || team.coachName}
+                        {team.teamName || team.coachName} ({team.rosterCount})
                       </span>
                       <div className="flex items-center gap-2">
                         <span className="font-medium text-gray-900 dark:text-white">
-                          {team.totalScore.toFixed(1)}
+                          {team.averageScore.toFixed(1)}
                         </span>
                         <span className={`text-xs ${
                           isBalanced

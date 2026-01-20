@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import {
   EvaluationImportState,
   EvaluationImportStep,
@@ -62,6 +62,21 @@ export function useEvaluationImport(
       ? initialAssistantCoaches
       : Array.from({ length: initialTeamCount }, () => '')
   );
+
+  // Sync teamNames when initialTeamNames prop changes (e.g., when coming back from Setup step)
+  // We always prefer the parent's values since they represent the saved state
+  useEffect(() => {
+    if (initialTeamNames && initialTeamNames.length === teamCount) {
+      setTeamNames(initialTeamNames);
+    }
+  }, [initialTeamNames, teamCount]);
+
+  // Sync assistantCoaches when initialAssistantCoaches prop changes
+  useEffect(() => {
+    if (initialAssistantCoaches && initialAssistantCoaches.length === teamCount) {
+      setAssistantCoaches(initialAssistantCoaches);
+    }
+  }, [initialAssistantCoaches, teamCount]);
 
   // Detection modal state
   const [showDetectionModal, setShowDetectionModal] = useState(false);
