@@ -7,6 +7,7 @@ import {
   EvaluationTabConfig,
   RegistrationRecord,
 } from '../types/evaluation';
+import { parseTeammateRequestsString } from './teamBuilderParser';
 
 /**
  * Parse an Excel file and extract structured tab data
@@ -148,15 +149,12 @@ function parseRegistrationDataSheet(sheet: XLSX.WorkSheet): RegistrationRecord[]
       record.coachRequest = String(row[coachRequestIdx]).trim();
     }
 
-    // Teammate requests - parse comma/space separated
+    // Teammate requests - parse using shared parser that handles comma, +, &, ; and "and" delimiters
     if (teammateRequestIdx !== -1 && row[teammateRequestIdx]) {
       const rawRequests = String(row[teammateRequestIdx]).trim();
       if (rawRequests) {
-        // Split by comma, then trim each name
-        record.teammateRequests = rawRequests
-          .split(/[,;]/)
-          .map(name => name.trim())
-          .filter(name => name.length > 0);
+        // Use the same parsing logic as teamBuilderParser for consistency
+        record.teammateRequests = parseTeammateRequestsString(rawRequests);
       }
     }
 
