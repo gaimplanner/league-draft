@@ -1,10 +1,11 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   EvaluationImportState,
   EvaluationImportStep,
   ImportError,
   EvaluationPlayer,
   DEFAULT_FIELD_WEIGHTS,
+  RegistrationRecord,
 } from '../types/evaluation';
 import { Player } from '../types';
 import { parseExcelFile, validateWorkbook } from '../utils/excelParser';
@@ -15,6 +16,11 @@ import {
   generateEvaluationCSV,
   downloadEvaluationCSV,
 } from '../utils/evaluationProcessor';
+import {
+  matchRegistrationToEval,
+  PlayerMatch,
+  RegistrationRow,
+} from '../utils/teamBuilderParser';
 
 // Types for detection results
 export interface CoachKidMatch {
@@ -33,6 +39,26 @@ export interface SiblingMatch {
   player2Name: string;
   sharedLastName: string;
   alreadyLinked: boolean;
+}
+
+// Types for registration matching
+export interface RegistrationMatchResult {
+  registrationIndex: number;
+  firstName: string;
+  lastName: string;
+  fullName: string;
+  match: PlayerMatch;
+  resolution: 'matched' | 'dne' | 'unresolved';
+  resolvedBib: string | null;
+}
+
+export interface EvaluatedNotRegistered {
+  bib: string;
+  firstName: string;
+  lastName: string;
+  fullName: string;
+  totalScore: number;
+  excluded: boolean;
 }
 
 const initialState: EvaluationImportState = {
@@ -85,6 +111,10 @@ export function useEvaluationImport(
   const [selectedCoachKids, setSelectedCoachKids] = useState<Set<string>>(new Set());
   const [selectedSiblings, setSelectedSiblings] = useState<Set<string>>(new Set());
 
+  // Registration matching state
+  const [registrationMatches, setRegistrationMatches] = useState<RegistrationMatchResult[]>([]);
+  const [evaluatedNotRegistered, setEvaluatedNotRegistered] = useState<EvaluatedNotRegistered[]>([]);
+
   /**
    * Update projected rounds for all players based on current team count
    */
@@ -108,6 +138,8 @@ export function useEvaluationImport(
     setSiblingMatches([]);
     setSelectedCoachKids(new Set());
     setSelectedSiblings(new Set());
+    setRegistrationMatches([]);
+    setEvaluatedNotRegistered([]);
   }, [initialTeamCount]);
 
   /**
@@ -691,6 +723,275 @@ export function useEvaluationImport(
     downloadEvaluationCSV(csv, filename);
   }, [state.players, state.workbook, teamNames, state.fieldWeights]);
 
+  // -------------------------------------------------------------------------
+  // Registration Matching Functions
+  // -------------------------------------------------------------------------
+
+  /**
+   * Convert RegistrationRecord to RegistrationRow for matching
+   */
+  const convertToRegistrationRow = useCallback((record: RegistrationRecord): RegistrationRow => {
+    return {
+      firstName: record.firstName,
+      lastName: record.lastName,
+      fullName: `${record.firstName} ${record.lastName}`,
+      coachRequest: record.coachRequest || '',
+      teammateRequests: record.teammateRequests || [],
+      school: record.school || '',
+      grade: record.grade ?? null,
+      address: record.address || '',
+      littleLeagueAge: record.littleLeagueAge ?? null,
+      rawTeammateRequestsString: record.teammateRequests?.join(', ') || '',
+    };
+  }, []);
+
+  /**
+   * Run registration matching when entering the registration step.
+   * Compares registration data to evaluation players.
+   */
+  const runRegistrationMatching = useCallback(() => {
+    const regData = state.workbook?.registrationData;
+    if (!regData || regData.length === 0) {
+      // No registration data - skip to summary
+      goToStep('summary');
+      return;
+    }
+
+    const evalPlayers = state.players.map(p => ({
+      bib: p.bib,
+      firstName: p.firstName,
+      lastName: p.lastName,
+    }));
+
+    // Match each registration record to eval players
+    const matches: RegistrationMatchResult[] = regData.map((record, index) => {
+      const regRow = convertToRegistrationRow(record);
+      const match = matchRegistrationToEval(regRow, evalPlayers);
+      match.registrationIndex = index;
+
+      // Auto-resolve exact matches
+      const resolution: 'matched' | 'dne' | 'unresolved' =
+        match.matchType === 'exact' ? 'matched' : 'unresolved';
+
+      return {
+        registrationIndex: index,
+        firstName: record.firstName,
+        lastName: record.lastName,
+        fullName: `${record.firstName} ${record.lastName}`,
+        match,
+        resolution,
+        resolvedBib: match.matchType === 'exact' ? match.evalBib : null,
+      };
+    });
+
+    // Find evaluated players not in registration
+    const matchedBibs = new Set(
+      matches
+        .filter(m => m.resolvedBib)
+        .map(m => m.resolvedBib!)
+    );
+
+    const notRegistered: EvaluatedNotRegistered[] = state.players
+      .filter(p => !matchedBibs.has(p.bib))
+      .map(p => ({
+        bib: p.bib,
+        firstName: p.firstName,
+        lastName: p.lastName,
+        fullName: `${p.firstName} ${p.lastName}`,
+        totalScore: p.weightedTotal,
+        excluded: true, // Default to excluded
+      }));
+
+    setRegistrationMatches(matches);
+    setEvaluatedNotRegistered(notRegistered);
+    goToStep('registration');
+  }, [state.workbook?.registrationData, state.players, convertToRegistrationRow, goToStep]);
+
+  /**
+   * Resolve a registration match (manual selection or DNE)
+   */
+  const resolveRegistrationMatch = useCallback((registrationIndex: number, evalBib: string | null) => {
+    setRegistrationMatches(prev =>
+      prev.map(m => {
+        if (m.registrationIndex !== registrationIndex) return m;
+        return {
+          ...m,
+          resolution: evalBib ? 'matched' : 'dne',
+          resolvedBib: evalBib,
+        };
+      })
+    );
+
+    // If matched to a bib, remove it from evaluatedNotRegistered exclusion tracking
+    if (evalBib) {
+      setEvaluatedNotRegistered(prev =>
+        prev.filter(p => p.bib !== evalBib)
+      );
+    }
+  }, []);
+
+  /**
+   * Mark a registration player as DNE (Did Not Evaluate)
+   */
+  const markRegistrationAsDNE = useCallback((registrationIndex: number) => {
+    setRegistrationMatches(prev =>
+      prev.map(m => {
+        if (m.registrationIndex !== registrationIndex) return m;
+        return {
+          ...m,
+          resolution: 'dne',
+          resolvedBib: null,
+        };
+      })
+    );
+  }, []);
+
+  /**
+   * Toggle exclusion of an evaluated-but-not-registered player
+   */
+  const toggleExcludeNotRegistered = useCallback((bib: string) => {
+    setEvaluatedNotRegistered(prev =>
+      prev.map(p => p.bib === bib ? { ...p, excluded: !p.excluded } : p)
+    );
+  }, []);
+
+  /**
+   * Apply registration resolutions and proceed.
+   * - Removes excluded eval players
+   * - Creates DNE players from registration data
+   * - Updates player list
+   */
+  const applyRegistrationResolutions = useCallback(() => {
+    const regData = state.workbook?.registrationData;
+    if (!regData) {
+      goToStep('summary');
+      return;
+    }
+
+    // Get list of excluded bibs
+    const excludedBibs = new Set(
+      evaluatedNotRegistered.filter(p => p.excluded).map(p => p.bib)
+    );
+
+    // Filter out excluded players
+    let updatedPlayers = state.players.filter(p => !excludedBibs.has(p.bib));
+
+    // Create DNE players from registration records marked as DNE
+    const dneMatches = registrationMatches.filter(m => m.resolution === 'dne');
+    const nextBib = Math.max(...updatedPlayers.map(p => parseInt(p.bib) || 0), 0) + 1;
+
+    dneMatches.forEach((match, index) => {
+      const regRecord = regData[match.registrationIndex];
+      const dneBib = String(nextBib + index);
+
+      // Create empty score structures for DNE players
+      const emptyRawScores = {
+        fielding: {},
+        pitching: {},
+        hitting: {},
+        flyBalls: {},
+        baserunning: {},
+      };
+      const emptyNormalizedScores = {
+        fielding: {},
+        pitching: {},
+        hitting: {},
+        flyBalls: {},
+        baserunning: {},
+      };
+      const emptyCategoryScores = {
+        fielding: null,
+        pitching: null,
+        hitting: null,
+        flyBalls: null,
+        baserunning: null,
+      };
+
+      const dnePlayer: EvaluationPlayer = {
+        bib: dneBib,
+        firstName: regRecord.firstName,
+        lastName: regRecord.lastName,
+        fullName: `${regRecord.firstName} ${regRecord.lastName}`,
+        age: regRecord.littleLeagueAge || 0,
+        littleLeagueAge: regRecord.littleLeagueAge ?? undefined,
+        level: '',
+        rawScores: emptyRawScores,
+        normalizedScores: emptyNormalizedScores,
+        categoryScores: emptyCategoryScores,
+        manualAdjust: 0,
+        weightedTotal: 0,
+        rank: updatedPlayers.length + index + 1,
+        projectedRound: Math.ceil((updatedPlayers.length + index + 1) / teamCount),
+        isCoachKid: false,
+        coachTeamIndex: null,
+        siblingGroupId: null,
+        isAllStar: false,
+        missingCategories: ['fielding', 'pitching', 'hitting', 'flyBalls', 'baserunning'],
+        tabsFound: [],
+        isPartial: false,
+        isDNE: true,
+      };
+
+      updatedPlayers.push(dnePlayer);
+    });
+
+    // Re-rank players (DNE players go to bottom)
+    const scoredPlayers = updatedPlayers.filter(p => !p.isDNE);
+    const dnePlayers = updatedPlayers.filter(p => p.isDNE);
+
+    scoredPlayers.sort((a, b) => b.weightedTotal - a.weightedTotal);
+    scoredPlayers.forEach((p, i) => {
+      p.rank = i + 1;
+      p.projectedRound = Math.ceil((i + 1) / teamCount);
+    });
+
+    dnePlayers.forEach((p, i) => {
+      p.rank = scoredPlayers.length + i + 1;
+      p.projectedRound = Math.ceil((scoredPlayers.length + i + 1) / teamCount);
+    });
+
+    updatedPlayers = [...scoredPlayers, ...dnePlayers];
+
+    setState(prev => ({
+      ...prev,
+      players: updatedPlayers,
+    }));
+
+    goToStep('summary');
+  }, [state.workbook?.registrationData, state.players, evaluatedNotRegistered, registrationMatches, teamCount, goToStep]);
+
+  /**
+   * Skip registration step (when no registration data or user skips)
+   */
+  const skipRegistrationStep = useCallback(() => {
+    goToStep('summary');
+  }, [goToStep]);
+
+  /**
+   * Computed: unresolved registration matches (need user action)
+   */
+  const unresolvedMatches = useMemo(() =>
+    registrationMatches.filter(m => m.resolution === 'unresolved'),
+    [registrationMatches]
+  );
+
+  /**
+   * Computed: registration matching stats
+   */
+  const registrationStats = useMemo(() => {
+    const total = registrationMatches.length;
+    const matched = registrationMatches.filter(m => m.resolution === 'matched').length;
+    const dne = registrationMatches.filter(m => m.resolution === 'dne').length;
+    const unresolved = registrationMatches.filter(m => m.resolution === 'unresolved').length;
+    const excludedCount = evaluatedNotRegistered.filter(p => p.excluded).length;
+
+    return { total, matched, dne, unresolved, excludedCount };
+  }, [registrationMatches, evaluatedNotRegistered]);
+
+  // -------------------------------------------------------------------------
+  // Computed Values
+  // -------------------------------------------------------------------------
+
   /**
    * Check if weights sum to 100%
    */
@@ -708,6 +1009,9 @@ export function useEvaluationImport(
   // Get registration data from parsed workbook
   const registrationData = state.workbook?.registrationData || null;
 
+  // Check if registration data exists
+  const hasRegistrationData = registrationData && registrationData.length > 0;
+
   return {
     // State
     state,
@@ -717,6 +1021,7 @@ export function useEvaluationImport(
     teamNames,
     assistantCoaches,
     registrationData,
+    hasRegistrationData,
 
     // Detection modal state
     showDetectionModal,
@@ -724,6 +1029,12 @@ export function useEvaluationImport(
     siblingMatches,
     selectedCoachKids,
     selectedSiblings,
+
+    // Registration matching state
+    registrationMatches,
+    evaluatedNotRegistered,
+    unresolvedMatches,
+    registrationStats,
 
     // Actions
     reset,
@@ -751,5 +1062,13 @@ export function useEvaluationImport(
     toggleAllStar,
     getPlayers,
     exportCSV,
+
+    // Registration matching actions
+    runRegistrationMatching,
+    resolveRegistrationMatch,
+    markRegistrationAsDNE,
+    toggleExcludeNotRegistered,
+    applyRegistrationResolutions,
+    skipRegistrationStep,
   };
 }

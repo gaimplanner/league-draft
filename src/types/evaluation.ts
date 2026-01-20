@@ -322,7 +322,7 @@ export interface EvaluationPlayer {
 }
 
 // Import state
-export type EvaluationImportStep = 'upload' | 'parsing' | 'overview' | 'weights' | 'summary';
+export type EvaluationImportStep = 'upload' | 'parsing' | 'overview' | 'registration' | 'weights' | 'summary';
 
 export interface EvaluationImportState {
   step: EvaluationImportStep;

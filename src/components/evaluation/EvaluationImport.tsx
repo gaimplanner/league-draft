@@ -7,6 +7,7 @@ import { TabOverview } from './TabOverview';
 import { PlayerSummaryTable } from './PlayerSummaryTable';
 import { ExportControls } from './ExportControls';
 import { DetectionModal } from './DetectionModal';
+import { RegistrationMatchStep } from './RegistrationMatchStep';
 
 interface EvaluationImportProps {
   teamCount: number;
@@ -28,6 +29,11 @@ export function EvaluationImport({ teamCount, initialTeamNames, initialAssistant
     siblingMatches,
     selectedCoachKids,
     selectedSiblings,
+    // Registration matching state
+    hasRegistrationData,
+    registrationMatches,
+    evaluatedNotRegistered,
+    registrationStats,
     reset,
     goToStep,
     uploadWorkbook,
@@ -53,6 +59,13 @@ export function EvaluationImport({ teamCount, initialTeamNames, initialAssistant
     getPlayers,
     exportCSV,
     registrationData,
+    // Registration matching actions
+    runRegistrationMatching,
+    resolveRegistrationMatch,
+    markRegistrationAsDNE,
+    toggleExcludeNotRegistered,
+    applyRegistrationResolutions,
+    skipRegistrationStep,
   } = useEvaluationImport(teamCount, initialTeamNames, initialAssistantCoaches);
 
   const handleContinueToDraft = () => {
@@ -65,8 +78,25 @@ export function EvaluationImport({ teamCount, initialTeamNames, initialAssistant
     onCancel();
   };
 
-  // Simplified steps - weights are now inline on summary
-  const steps = ['upload', 'overview', 'summary'] as const;
+  // Handle overview continue - go to registration if data exists, otherwise summary
+  const handleOverviewContinue = () => {
+    if (hasRegistrationData) {
+      runRegistrationMatching();
+    } else {
+      goToStep('summary');
+    }
+  };
+
+  // Steps include registration only if registration data exists
+  const steps = hasRegistrationData
+    ? (['upload', 'overview', 'registration', 'summary'] as const)
+    : (['upload', 'overview', 'summary'] as const);
+
+  // Get current step index for progress indicator
+  const getCurrentStepIndex = () => {
+    if (state.step === 'weights') return steps.indexOf('summary' as never);
+    return steps.indexOf(state.step as never);
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
@@ -82,26 +112,33 @@ export function EvaluationImport({ teamCount, initialTeamNames, initialAssistant
 
         {/* Step Indicator */}
         <div className="flex items-center gap-2 text-sm">
-          {steps.map((step, index) => (
-            <div key={step} className="flex items-center">
-              {index > 0 && (
-                <div className="w-8 h-px bg-gray-300 dark:bg-gray-600 mx-2" />
-              )}
-              <div
-                className={`px-3 py-1 rounded-full ${
-                  state.step === step || (state.step === 'weights' && step === 'summary')
-                    ? 'bg-green-500 text-white'
-                    : steps.indexOf(state.step as typeof steps[number]) > steps.indexOf(step)
-                    ? 'bg-green-200 dark:bg-green-900 text-green-800 dark:text-green-200'
-                    : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
-                }`}
-              >
-                {step === 'upload' && 'Upload'}
-                {step === 'overview' && 'Overview'}
-                {step === 'summary' && 'Summary'}
+          {steps.map((step, index) => {
+            const currentIndex = getCurrentStepIndex();
+            const isActive = state.step === step || (state.step === 'weights' && step === 'summary');
+            const isComplete = currentIndex > index;
+
+            return (
+              <div key={step} className="flex items-center">
+                {index > 0 && (
+                  <div className="w-8 h-px bg-gray-300 dark:bg-gray-600 mx-2" />
+                )}
+                <div
+                  className={`px-3 py-1 rounded-full ${
+                    isActive
+                      ? 'bg-green-500 text-white'
+                      : isComplete
+                      ? 'bg-green-200 dark:bg-green-900 text-green-800 dark:text-green-200'
+                      : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
+                  }`}
+                >
+                  {step === 'upload' && 'Upload'}
+                  {step === 'overview' && 'Overview'}
+                  {step === 'registration' && 'Verify'}
+                  {step === 'summary' && 'Summary'}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
@@ -122,10 +159,26 @@ export function EvaluationImport({ teamCount, initialTeamNames, initialAssistant
             workbook={state.workbook}
             errors={state.errors}
             warnings={state.warnings}
-            onContinue={() => goToStep('summary')}
+            onContinue={handleOverviewContinue}
             onBack={() => {
               reset();
             }}
+          />
+        )}
+
+        {/* Registration Verification Step */}
+        {state.step === 'registration' && (
+          <RegistrationMatchStep
+            registrationMatches={registrationMatches}
+            evaluatedNotRegistered={evaluatedNotRegistered}
+            evalPlayers={state.players}
+            stats={registrationStats}
+            onResolveMatch={resolveRegistrationMatch}
+            onMarkAsDNE={markRegistrationAsDNE}
+            onToggleExclude={toggleExcludeNotRegistered}
+            onApply={applyRegistrationResolutions}
+            onSkip={skipRegistrationStep}
+            onBack={() => goToStep('overview')}
           />
         )}
 
@@ -167,7 +220,7 @@ export function EvaluationImport({ teamCount, initialTeamNames, initialAssistant
               playerCount={state.players.length}
               onExportCSV={exportCSV}
               onContinueToDraft={handleContinueToDraft}
-              onBack={() => goToStep('overview')}
+              onBack={() => goToStep(hasRegistrationData ? 'registration' : 'overview')}
             />
           </div>
         )}
