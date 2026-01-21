@@ -49,6 +49,7 @@ export const useDraft = (_divisionId?: string) => {
   const [pendingComplete, setPendingComplete] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [mandatoryPickError, setMandatoryPickError] = useState<string | null>(null);
 
   // Store draft state ID (needed for API draft operations)
   const draftStateId = useRef<string | null>(null);
@@ -233,7 +234,9 @@ export const useDraft = (_divisionId?: string) => {
 
       // Validate mandatory pick
       if (mandatoryPick && mandatoryPick.playerId !== playerId) {
-        alert(`You must draft ${players.find(p => p.id === mandatoryPick.playerId)?.name} (${mandatoryPick.reason === 'coach-kid' ? "coach's kid" : 'sibling requirement'})`);
+        const playerName = players.find(p => p.id === mandatoryPick.playerId)?.name;
+        const reason = mandatoryPick.reason === 'coach-kid' ? "coach's kid" : 'sibling requirement';
+        setMandatoryPickError(`You must draft ${playerName} (${reason})`);
         return;
       }
 
@@ -419,5 +422,7 @@ export const useDraft = (_divisionId?: string) => {
     cancelPendingComplete,
     isLoading,
     error,
+    mandatoryPickError,
+    clearMandatoryPickError: () => setMandatoryPickError(null),
   };
 };

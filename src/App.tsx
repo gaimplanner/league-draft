@@ -124,6 +124,8 @@ function App() {
     finalizeDraft,
     cancelPendingComplete,
     isLoading,
+    mandatoryPickError,
+    clearMandatoryPickError,
   } = useDraft(activeDivision?.id);
 
   const { players, updatePlayer, updatePlayerField, linkSiblings, unlinkSibling, setAllPlayers } = usePlayerScoring(
@@ -1115,6 +1117,8 @@ function App() {
             onFinalizeDraft={finalizeDraft}
             onCancelComplete={cancelPendingComplete}
             isLoading={isLoading}
+            mandatoryPickError={mandatoryPickError}
+            onClearMandatoryPickError={clearMandatoryPickError}
           />
         )}
 

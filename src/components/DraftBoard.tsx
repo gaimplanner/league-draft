@@ -21,6 +21,9 @@ interface DraftBoardProps {
   onCancelComplete: () => void;
   // Issue #20: isLoading prop to disable buttons during API calls
   isLoading?: boolean;
+  // Mandatory pick error modal
+  mandatoryPickError?: string | null;
+  onClearMandatoryPickError?: () => void;
 }
 
 export const DraftBoard = ({
@@ -36,6 +39,8 @@ export const DraftBoard = ({
   onFinalizeDraft,
   onCancelComplete,
   isLoading = false,
+  mandatoryPickError,
+  onClearMandatoryPickError,
 }: DraftBoardProps) => {
   const viewMode = useViewMode();
   const isPublicView = viewMode === 'public';
@@ -522,6 +527,35 @@ export const DraftBoard = ({
           )}
         </div>
       </div>
+
+      {/* Mandatory Pick Error Modal */}
+      {mandatoryPickError && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-sm w-full shadow-xl">
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-yellow-100 dark:bg-yellow-900/30 flex items-center justify-center">
+                <AlertCircle className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
+                  Mandatory Pick Required
+                </h3>
+                <p className="text-gray-600 dark:text-gray-400 text-sm">
+                  {mandatoryPickError}
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 flex justify-end">
+              <button
+                onClick={onClearMandatoryPickError}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Draft Complete Confirmation Modal */}
       {pendingComplete && (
