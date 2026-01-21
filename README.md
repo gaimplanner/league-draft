@@ -59,7 +59,7 @@ The draft board provides a comprehensive interface for conducting live drafts wi
 - **Mandatory pick banner** (yellow) alerts when coach's kid or sibling must be drafted
 - **Pending draft confirmation banner** (blue) for confirming player selections
 - **Best Available by Age** quick-pick buttons grouped by age (top 2 per age)
-- **Admin controls**: Skip pick (final round only), Undo, Reset
+- **Admin controls**: Skip pick (final round only, disabled when all remaining players must be drafted), Undo, Reset
 
 #### Round Order Display
 - Horizontal team cards showing pick order for current round
@@ -117,12 +117,17 @@ Switch between two views using the toggle bar:
 - Export simulation results
 
 ### Post-Draft Features
+- **Team Balance Metrics**:
+  - Toggle between "Top 8 Picks" and "Full Roster" views
+  - Shows highest, lowest, spread, and average team scores
+  - Visual team rankings with color-coded indicators (green=highest, red=lowest)
+  - Top 8 metric excludes late-round players for better core team comparison
 - **Trade System**: Execute player swaps with reason tracking
-- **Multiple Export Formats:**
-  - Public rosters (alphabetical, no scores)
-  - Official draft record (pick-by-pick with flags)
+- **Multiple Export Formats (CSV)**:
+  - Public rosters (alphabetical with BIB numbers, no scores)
+  - Official draft record (pick-by-pick with BIB numbers and flags)
   - Simulation draft boards (grid + sequential views with scores)
-- Print-ready formatting
+- Print-ready formatting and clipboard copy
 
 ### Dual-View Architecture
 - **Admin View**: Full control over all functions
