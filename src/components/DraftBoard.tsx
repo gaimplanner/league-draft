@@ -82,7 +82,10 @@ export const DraftBoard = ({
 
   const availablePlayers = draftState.players.filter((p) => !p.isDrafted);
 
-  const currentTeam = draftState.teams.find((t) => t.id === draftState.currentTeamId);
+  // Try to get current team from currentTeamId, fallback to deriving from currentRoundOrder
+  const derivedCurrentTeamId = draftState.currentTeamId ||
+    draftState.currentRoundOrder[draftState.currentPickInRound - 1] || null;
+  const currentTeam = draftState.teams.find((t) => t.id === derivedCurrentTeamId);
 
   // Calculate next team
   const { round: nextRound, pickInRound: nextPickInRound } = getNextPick(
@@ -326,8 +329,8 @@ export const DraftBoard = ({
           {!draftState.mandatoryPick && !pendingDraftPlayer && !isPublicView && (() => {
             const topByAge: Record<number, typeof availablePlayers> = {};
             availablePlayers.forEach(player => {
-              const isCoachKidForOtherTeam = player.isCoachKid && player.coachTeamId && player.coachTeamId !== draftState.currentTeamId;
-              const isSiblingLocked = player.lockedToTeamId && player.lockedToTeamId !== draftState.currentTeamId;
+              const isCoachKidForOtherTeam = player.isCoachKid && player.coachTeamId && player.coachTeamId !== derivedCurrentTeamId;
+              const isSiblingLocked = player.lockedToTeamId && player.lockedToTeamId !== derivedCurrentTeamId;
               if (isCoachKidForOtherTeam || isSiblingLocked) return;
               const age = player.littleLeagueAge;
               if (!topByAge[age]) topByAge[age] = [];
@@ -501,7 +504,7 @@ export const DraftBoard = ({
           {drawerMode === 'players' ? (
             <DraftBoardPlayerGrid
               players={draftState.players}
-              currentTeamId={draftState.currentTeamId}
+              currentTeamId={derivedCurrentTeamId}
               teams={draftState.teams}
               showScores={showScores}
               onDraftPlayer={onDraftPlayer}
