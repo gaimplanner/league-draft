@@ -433,8 +433,8 @@ export const DraftBoardPlayerGrid = ({
                             </span>
                           )}
 
-                          {/* Sibling not yet locked */}
-                          {(player.siblingId || player.sibling) && (
+                          {/* Sibling - only show if actually linked (siblingId set) */}
+                          {player.siblingId && (
                             <span
                               className="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200"
                               title={`Sibling: ${player.sibling || 'linked'}`}
