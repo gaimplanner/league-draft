@@ -193,8 +193,8 @@ export const DraftBoard = ({
       )}
 
       <div className="max-w-7xl mx-auto">
-        {/* Sticky Draft Header Container */}
-        <div className="sticky top-0 z-40 bg-gray-50 dark:bg-gray-900 -mx-4 px-4 pt-0 pb-4">
+        {/* Sticky Draft Header Container - top-10 accounts for the fixed division header */}
+        <div className="sticky top-10 z-40 bg-gray-50 dark:bg-gray-900 -mx-4 px-4 pt-0 pb-4">
         {/* Compact Draft Header */}
         <div className="bg-gradient-to-r from-blue-600 to-blue-500 rounded-lg p-4 text-white shadow-lg">
           {/* Header row */}
