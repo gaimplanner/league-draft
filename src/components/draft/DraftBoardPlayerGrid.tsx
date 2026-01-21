@@ -471,7 +471,7 @@ export const DraftBoardPlayerGrid = ({
                   </td>
 
                   {/* Name */}
-                  <td className="px-2 py-1.5">
+                  <td className="px-2 py-1.5 text-left">
                     <span className={`font-medium ${
                       isRestricted
                         ? 'text-gray-400 dark:text-gray-500'
