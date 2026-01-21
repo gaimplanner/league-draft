@@ -21,7 +21,7 @@ interface DraftBoardPlayerGridProps {
   isPublicView: boolean;
 }
 
-type SortField = 'rank' | 'bib' | 'name' | 'age' | 'round' | 'fielding' | 'hitting' | 'pitching' | 'catch' | 'running' | 'total';
+type SortField = 'rank' | 'bib' | 'name' | 'age' | 'school' | 'round' | 'fielding' | 'hitting' | 'pitching' | 'catch' | 'running' | 'total';
 type SortDirection = 'asc' | 'desc';
 
 export const DraftBoardPlayerGrid = ({
@@ -74,6 +74,10 @@ export const DraftBoardPlayerGrid = ({
         case 'age':
           aVal = a.littleLeagueAge;
           bVal = b.littleLeagueAge;
+          break;
+        case 'school':
+          aVal = a.school || '';
+          bVal = b.school || '';
           break;
         case 'round':
           aVal = a.lockedToRound ?? a.projectedRound;
@@ -183,7 +187,7 @@ export const DraftBoardPlayerGrid = ({
 
   // Calculate column count for empty state
   const getColumnCount = () => {
-    let count = 7; // rank, bib, name, age, round, flags, action
+    let count = 8; // rank, bib, name, age, school, round, flags, action
     if (showScores) count += 6; // F, H, P, C, R, Total
     if (isPublicView) count -= 1; // no action column
     return count;
@@ -253,6 +257,12 @@ export const DraftBoardPlayerGrid = ({
                 className="px-2 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-300 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 w-12"
               >
                 Age<SortIndicator field="age" />
+              </th>
+              <th
+                onClick={() => handleSort('school')}
+                className="px-2 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 w-24"
+              >
+                School<SortIndicator field="school" />
               </th>
               {showScores && (
                 <>
@@ -365,6 +375,11 @@ export const DraftBoardPlayerGrid = ({
                   {/* Age */}
                   <td className="px-2 py-1.5 text-center text-gray-600 dark:text-gray-400 tabular-nums">
                     {player.littleLeagueAge}
+                  </td>
+
+                  {/* School */}
+                  <td className="px-2 py-1.5 text-left text-gray-500 dark:text-gray-400 text-xs truncate max-w-[6rem]" title={player.school || undefined}>
+                    {player.school || '-'}
                   </td>
 
                   {/* Score Columns */}

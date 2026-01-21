@@ -213,6 +213,17 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
   const coachKidsCount = players.filter(p => p.isCoachKid).length;
   const unassignedCoachKids = players.filter(p => p.isCoachKid && !p.coachTeamId).length;
 
+  // Calculate score statistics (excluding DNE and zero-score players)
+  const validPlayers = players.filter(p => !p.isDNE && p.totalScore > 0);
+  const dneOrZeroCount = players.length - validPlayers.length;
+  const scoreStats = validPlayers.length > 0
+    ? {
+        average: validPlayers.reduce((sum, p) => sum + p.totalScore, 0) / validPlayers.length,
+        min: Math.min(...validPlayers.map(p => p.totalScore)),
+        max: Math.max(...validPlayers.map(p => p.totalScore)),
+      }
+    : null;
+
   const brokenSiblingLinks = players.filter(p => {
     if (!p.siblingId) return false;
     const sibling = players.find(s => s.id === p.siblingId);
@@ -351,7 +362,14 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
           <div>
             <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Review Players & Setup Teams</h1>
             <p className="text-gray-600 dark:text-gray-400 mt-1">
-              {players.length} players loaded • {coachKidsCount} coach's kids • Click cells to edit scores
+              {validPlayers.length} evaluated players
+              {dneOrZeroCount > 0 && ` • ${dneOrZeroCount} DNE/zero`}
+              {coachKidsCount > 0 && ` • ${coachKidsCount} coach's kids`}
+              {scoreStats && (
+                <span className="ml-2 text-gray-500 dark:text-gray-500">
+                  [Avg: {scoreStats.average.toFixed(1)}] [Range: {scoreStats.min.toFixed(1)} - {scoreStats.max.toFixed(1)}]
+                </span>
+              )}
             </p>
             {unassignedCoachKids > 0 && (
               <p className="text-sm text-orange-600 dark:text-orange-400 mt-1">

@@ -193,8 +193,10 @@ export const DraftBoard = ({
       )}
 
       <div className="max-w-7xl mx-auto">
+        {/* Sticky Draft Header Container */}
+        <div className="sticky top-0 z-40 bg-gray-50 dark:bg-gray-900 -mx-4 px-4 pt-0 pb-4">
         {/* Compact Draft Header */}
-        <div className="bg-gradient-to-r from-blue-600 to-blue-500 rounded-lg p-4 mb-4 text-white shadow-lg">
+        <div className="bg-gradient-to-r from-blue-600 to-blue-500 rounded-lg p-4 text-white shadow-lg">
           {/* Header row */}
           <div className="flex items-center justify-between gap-4 flex-wrap">
             {/* Left: Pick info and current team */}
@@ -367,6 +369,7 @@ export const DraftBoard = ({
               </div>
             );
           })()}
+        </div>
         </div>
 
         {/* Round Order Display */}
