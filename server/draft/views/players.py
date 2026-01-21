@@ -2,6 +2,7 @@
 Player views (replaces DRF PlayerViewSet).
 """
 
+import math
 import uuid as uuid_module
 
 from django.views.decorators.csrf import csrf_protect
@@ -256,10 +257,10 @@ def players_bulk_create(request):
                     p.sibling_id = new_sibling_id
                     break
 
-    # Update roster size
+    # Update roster size (use ceiling to ensure all players can be drafted)
     total_players = division.players.count()
     division.roster_size = (
-        total_players // division.team_count
+        math.ceil(total_players / division.team_count)
         if division.team_count > 0
         else 0
     )
