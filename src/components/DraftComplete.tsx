@@ -27,9 +27,10 @@ interface DraftCompleteProps {
     reason: string
   ) => void;
   onUpdateTeam?: (teamId: string, updates: Partial<Team>) => void;
+  onReturnToDraftBoard?: () => void;
 }
 
-export const DraftComplete = ({ draftState, division, onReset, onExecuteTrade, onUpdateTeam }: DraftCompleteProps) => {
+export const DraftComplete = ({ draftState, division, onReset, onExecuteTrade, onUpdateTeam, onReturnToDraftBoard }: DraftCompleteProps) => {
   const [copiedRosters, setCopiedRosters] = useState(false);
   const [copiedRecord, setCopiedRecord] = useState(false);
   const [showTradeModal, setShowTradeModal] = useState(false);
@@ -131,6 +132,16 @@ export const DraftComplete = ({ draftState, division, onReset, onExecuteTrade, o
               >
                 <ArrowLeftRight className="w-5 h-5" />
                 Make Trade
+              </button>
+            )}
+            {onReturnToDraftBoard && (
+              <button
+                onClick={onReturnToDraftBoard}
+                className="px-4 py-2 bg-white text-gray-700 hover:bg-gray-100 rounded-lg font-medium flex items-center gap-2"
+                title="Return to Draft Board to draft remaining players"
+              >
+                <ChevronLeft className="w-5 h-5" />
+                Back to Draft Board
               </button>
             )}
             <button

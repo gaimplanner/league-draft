@@ -60,6 +60,9 @@ export const useDraft = (_divisionId?: string) => {
   // Synchronous lock to prevent concurrent operations (prevents race conditions from rapid clicks)
   const operationInProgress = useRef(false);
 
+  // Flag to override auto-complete detection (when user explicitly goes back to draft)
+  const overrideCompleteDetection = useRef(false);
+
   // Load state from a division object (called when selecting a division)
   const loadDivisionState = useCallback((division: Division) => {
     currentDivisionId.current = division.id;
@@ -83,11 +86,14 @@ export const useDraft = (_divisionId?: string) => {
 
     // If draft is complete, ensure we go to complete phase even if division.phase
     // hasn't been updated yet (race condition fix)
-    if (division.draftState?.isDraftComplete) {
+    // BUT: skip this if user explicitly requested to go back to draft board
+    if (division.draftState?.isDraftComplete && !overrideCompleteDetection.current) {
       setPhase('complete');
     } else {
       setPhase(division.phase);
     }
+    // Reset the override flag after use
+    overrideCompleteDetection.current = false;
   }, []);
 
   const resetDraft = useCallback(async (
@@ -407,6 +413,13 @@ export const useDraft = (_divisionId?: string) => {
     setMandatoryPickError(null);
   }, []);
 
+  // Go back to draft board from complete phase (bypasses auto-complete detection)
+  const returnToDraftBoard = useCallback(() => {
+    overrideCompleteDetection.current = true;
+    setPendingComplete(false);
+    setPhase('draft');
+  }, []);
+
   return {
     phase,
     setPhase,
@@ -429,5 +442,6 @@ export const useDraft = (_divisionId?: string) => {
     error,
     mandatoryPickError,
     clearMandatoryPickError,
+    returnToDraftBoard,
   };
 };
