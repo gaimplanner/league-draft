@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   AlertTriangle,
   Check,
@@ -8,25 +8,24 @@ import {
   ArrowRight,
   Search,
 } from 'lucide-react';
-import { EvaluationCSVRecord, RegistrationCSVRecord } from './DualCSVUpload';
+import { ParsedCSVData } from '../../types';
+import { RegistrationCSVRecord, ParsedRegistrationData } from './DualCSVUpload';
 
-interface MatchResult {
-  evalIndex: number;
-  regIndex: number | null;
-  evalPlayer: EvaluationCSVRecord;
-  regPlayer: RegistrationCSVRecord | null;
-  matchType: 'exact' | 'fuzzy' | 'none';
-  matchScore: number;
+// Result of verification - which rows to exclude and which DNE players to add
+export interface VerificationResult {
+  /** Row indices (0-based) in the eval CSV to exclude from import */
+  excludedRowIndices: Set<number>;
+  /** Registration records that have no matching eval record - will be added as DNE */
+  dnePlayers: RegistrationCSVRecord[];
 }
 
 interface CSVVerificationStepProps {
-  evalData: EvaluationCSVRecord[];
-  regData: RegistrationCSVRecord[];
-  onComplete: (
-    verifiedEval: EvaluationCSVRecord[],
-    excludedBibs: Set<string>,
-    dnePlayers: RegistrationCSVRecord[]
-  ) => void;
+  /** Raw evaluation CSV data (headers + rows) */
+  evalCSVData: ParsedCSVData;
+  /** Parsed registration data for matching */
+  regData: ParsedRegistrationData;
+  /** Called when verification is complete with exclusions and DNE players */
+  onComplete: (result: VerificationResult) => void;
   onBack: () => void;
 }
 
@@ -66,20 +65,52 @@ function nameSimilarity(a: string, b: string): number {
   return 1 - distance / Math.max(len1, len2);
 }
 
+interface EvalRowInfo {
+  rowIndex: number;
+  firstName: string;
+  lastName: string;
+  bib: string;
+  row: Record<string, string>;
+}
+
+interface MatchResult {
+  evalRowIndex: number;
+  regIndex: number | null;
+  evalInfo: EvalRowInfo;
+  regPlayer: RegistrationCSVRecord | null;
+  matchType: 'exact' | 'fuzzy' | 'none';
+  matchScore: number;
+}
+
 /**
  * Verification step for CSV-based import.
  * Shows matches, unmatched evaluations (to exclude), and unmatched registrations (DNE).
  */
 export function CSVVerificationStep({
-  evalData,
+  evalCSVData,
   regData,
   onComplete,
   onBack,
 }: CSVVerificationStepProps) {
-  // Track excluded eval players and DNE reg players
-  const [excludedBibs, setExcludedBibs] = useState<Set<string>>(new Set());
+  // Extract eval row info (firstName, lastName, bib) from raw CSV
+  const evalRows = useMemo(() => {
+    const headers = evalCSVData.headers;
+    const firstCol = headers.find(h => h.toLowerCase().includes('first')) || '';
+    const lastCol = headers.find(h => h.toLowerCase().includes('last')) || '';
+    const bibCol = headers.find(h => h.toLowerCase().includes('bib')) || '';
+
+    return evalCSVData.rows.map((row, index): EvalRowInfo => ({
+      rowIndex: index,
+      firstName: row[firstCol] || '',
+      lastName: row[lastCol] || '',
+      bib: row[bibCol] || '',
+      row,
+    }));
+  }, [evalCSVData]);
+
+  // Track excluded eval rows and DNE reg players
+  const [excludedRowIndices, setExcludedRowIndices] = useState<Set<number>>(new Set());
   const [dneRegIndices, setDneRegIndices] = useState<Set<number>>(new Set());
-  const [manualMatches] = useState<Map<number, number>>(new Map()); // evalIndex -> regIndex
   const [searchTerm, setSearchTerm] = useState('');
 
   // Perform matching
@@ -87,35 +118,16 @@ export function CSVVerificationStep({
     const results: MatchResult[] = [];
     const matchedRegIndices = new Set<number>();
 
-    // Add manual matches first
-    manualMatches.forEach((regIndex) => {
-      matchedRegIndices.add(regIndex);
-    });
-
-    evalData.forEach((evalPlayer, evalIndex) => {
-      // Check for manual match
-      if (manualMatches.has(evalIndex)) {
-        const regIndex = manualMatches.get(evalIndex)!;
-        results.push({
-          evalIndex,
-          regIndex,
-          evalPlayer,
-          regPlayer: regData[regIndex],
-          matchType: 'exact',
-          matchScore: 1,
-        });
-        return;
-      }
-
-      const evalFullName = `${evalPlayer.firstName} ${evalPlayer.lastName}`.toLowerCase();
+    evalRows.forEach((evalInfo) => {
+      const evalFullName = `${evalInfo.firstName} ${evalInfo.lastName}`.toLowerCase();
 
       // Try to find match in registration
       let bestMatch: { regIndex: number; score: number; regPlayer: RegistrationCSVRecord } | null = null;
 
-      for (let regIndex = 0; regIndex < regData.length; regIndex++) {
+      for (let regIndex = 0; regIndex < regData.records.length; regIndex++) {
         if (matchedRegIndices.has(regIndex)) continue;
 
-        const regPlayer = regData[regIndex];
+        const regPlayer = regData.records[regIndex];
         const regFullName = `${regPlayer.firstName} ${regPlayer.lastName}`.toLowerCase();
 
         // Exact match
@@ -134,18 +146,18 @@ export function CSVVerificationStep({
       if (bestMatch && bestMatch.score >= 0.8) {
         matchedRegIndices.add(bestMatch.regIndex);
         results.push({
-          evalIndex,
+          evalRowIndex: evalInfo.rowIndex,
           regIndex: bestMatch.regIndex,
-          evalPlayer,
+          evalInfo,
           regPlayer: bestMatch.regPlayer,
           matchType: bestMatch.score === 1 ? 'exact' : 'fuzzy',
           matchScore: bestMatch.score,
         });
       } else {
         results.push({
-          evalIndex,
+          evalRowIndex: evalInfo.rowIndex,
           regIndex: null,
-          evalPlayer,
+          evalInfo,
           regPlayer: null,
           matchType: 'none',
           matchScore: 0,
@@ -154,43 +166,43 @@ export function CSVVerificationStep({
     });
 
     return { results, matchedRegIndices };
-  }, [evalData, regData, manualMatches]);
+  }, [evalRows, regData.records]);
 
   // Unmatched registrations (potential DNE players)
   const unmatchedReg = useMemo(() => {
-    return regData
+    return regData.records
       .map((player, index) => ({ player, index }))
       .filter(({ index }) => !matchResults.matchedRegIndices.has(index));
-  }, [regData, matchResults.matchedRegIndices]);
+  }, [regData.records, matchResults.matchedRegIndices]);
 
   // Stats
   const stats = useMemo(() => {
     const matched = matchResults.results.filter(r => r.regIndex !== null).length;
     const unmatched = matchResults.results.filter(r => r.regIndex === null).length;
-    const excluded = excludedBibs.size;
+    const excluded = excludedRowIndices.size;
     const dne = dneRegIndices.size;
 
     return { matched, unmatched, excluded, dne, unmatchedReg: unmatchedReg.length };
-  }, [matchResults, excludedBibs, dneRegIndices, unmatchedReg]);
+  }, [matchResults, excludedRowIndices, dneRegIndices, unmatchedReg]);
 
-  // Initialize excluded bibs for unmatched eval players
-  useMemo(() => {
-    const newExcluded = new Set<string>();
+  // Initialize excluded rows for unmatched eval players (on first render)
+  useEffect(() => {
+    const newExcluded = new Set<number>();
     matchResults.results.forEach(r => {
       if (r.regIndex === null) {
-        newExcluded.add(r.evalPlayer.bib);
+        newExcluded.add(r.evalRowIndex);
       }
     });
-    setExcludedBibs(newExcluded);
+    setExcludedRowIndices(newExcluded);
   }, [matchResults.results]);
 
-  const toggleExclude = (bib: string) => {
-    setExcludedBibs(prev => {
+  const toggleExclude = (rowIndex: number) => {
+    setExcludedRowIndices(prev => {
       const next = new Set(prev);
-      if (next.has(bib)) {
-        next.delete(bib);
+      if (next.has(rowIndex)) {
+        next.delete(rowIndex);
       } else {
-        next.add(bib);
+        next.add(rowIndex);
       }
       return next;
     });
@@ -209,8 +221,11 @@ export function CSVVerificationStep({
   };
 
   const handleComplete = () => {
-    const dnePlayers = Array.from(dneRegIndices).map(i => regData[i]);
-    onComplete(evalData, excludedBibs, dnePlayers);
+    const dnePlayers = Array.from(dneRegIndices).map(i => regData.records[i]);
+    onComplete({
+      excludedRowIndices,
+      dnePlayers,
+    });
   };
 
   // Filter for search
@@ -218,7 +233,7 @@ export function CSVVerificationStep({
     .filter(r => r.regIndex === null)
     .filter(r => {
       if (!searchTerm) return true;
-      const name = `${r.evalPlayer.firstName} ${r.evalPlayer.lastName}`.toLowerCase();
+      const name = `${r.evalInfo.firstName} ${r.evalInfo.lastName}`.toLowerCase();
       return name.includes(searchTerm.toLowerCase());
     });
 
@@ -227,6 +242,8 @@ export function CSVVerificationStep({
     const name = `${player.firstName} ${player.lastName}`.toLowerCase();
     return name.includes(searchTerm.toLowerCase());
   });
+
+  const totalPlayersAfterVerification = evalRows.length - excludedRowIndices.size + dneRegIndices.size;
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -306,11 +323,11 @@ export function CSVVerificationStep({
           </div>
 
           <div className="divide-y divide-gray-200 dark:divide-gray-700 max-h-64 overflow-y-auto">
-            {filteredUnmatchedEval.map(({ evalPlayer }) => (
+            {filteredUnmatchedEval.map(({ evalInfo }) => (
               <div
-                key={evalPlayer.bib}
+                key={evalInfo.rowIndex}
                 className={`px-4 py-3 flex items-center justify-between ${
-                  excludedBibs.has(evalPlayer.bib)
+                  excludedRowIndices.has(evalInfo.rowIndex)
                     ? 'bg-red-50/30 dark:bg-red-900/10'
                     : 'bg-green-50/30 dark:bg-green-900/10'
                 }`}
@@ -318,28 +335,25 @@ export function CSVVerificationStep({
                 <div className="flex items-center gap-3">
                   <input
                     type="checkbox"
-                    checked={excludedBibs.has(evalPlayer.bib)}
-                    onChange={() => toggleExclude(evalPlayer.bib)}
+                    checked={excludedRowIndices.has(evalInfo.rowIndex)}
+                    onChange={() => toggleExclude(evalInfo.rowIndex)}
                     className="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500"
                   />
                   <div>
                     <span className={`font-medium ${
-                      excludedBibs.has(evalPlayer.bib)
+                      excludedRowIndices.has(evalInfo.rowIndex)
                         ? 'text-red-700 dark:text-red-400 line-through'
                         : 'text-gray-900 dark:text-white'
                     }`}>
-                      {evalPlayer.firstName} {evalPlayer.lastName}
+                      {evalInfo.firstName} {evalInfo.lastName}
                     </span>
                     <span className="ml-2 text-sm text-gray-500 dark:text-gray-400">
-                      BIB {evalPlayer.bib}
+                      BIB {evalInfo.bib}
                     </span>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="text-sm text-gray-600 dark:text-gray-400">
-                    Score: {evalPlayer.totalScore}
-                  </span>
-                  {excludedBibs.has(evalPlayer.bib) ? (
+                  {excludedRowIndices.has(evalInfo.rowIndex) ? (
                     <span className="text-xs px-2 py-0.5 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded">
                       Excluded
                     </span>
@@ -427,7 +441,7 @@ export function CSVVerificationStep({
           className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium flex items-center gap-2"
         >
           <Check className="w-4 h-4" />
-          Continue with {evalData.length - excludedBibs.size + dneRegIndices.size} Players
+          Continue with {totalPlayersAfterVerification} Players
           <ArrowRight className="w-4 h-4" />
         </button>
       </div>

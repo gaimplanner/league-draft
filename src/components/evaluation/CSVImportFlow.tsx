@@ -1,14 +1,26 @@
 import { useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
-import { Player } from '../../types';
-import { DualCSVUpload, EvaluationCSVRecord, RegistrationCSVRecord } from './DualCSVUpload';
-import { CSVVerificationStep } from './CSVVerificationStep';
+import { ParsedCSVData } from '../../types';
+import { DualCSVUpload, ParsedRegistrationData, RegistrationCSVRecord } from './DualCSVUpload';
+import { CSVVerificationStep, VerificationResult } from './CSVVerificationStep';
 
-type CSVImportStep = 'upload' | 'verify' | 'complete';
+type CSVImportStep = 'upload' | 'verify';
+
+export interface DualCSVImportResult {
+  /** The raw evaluation CSV data (to be passed to column mapper) */
+  evalCSVData: ParsedCSVData;
+  /** Row indices to exclude from import */
+  excludedRowIndices: Set<number>;
+  /** DNE players to add after column mapping */
+  dnePlayers: RegistrationCSVRecord[];
+}
 
 interface CSVImportFlowProps {
-  teamCount: number;
-  onComplete: (players: Player[]) => void;
+  /**
+   * Called when both upload and verification are complete.
+   * Returns the eval CSV data for column mapping, plus exclusion/DNE info.
+   */
+  onComplete: (result: DualCSVImportResult) => void;
   onCancel: () => void;
 }
 
@@ -16,121 +28,34 @@ interface CSVImportFlowProps {
  * Complete flow for importing players from two CSVs:
  * 1. Upload evaluation CSV and registration CSV
  * 2. Verify matches and handle exclusions/DNE
- * 3. Convert to Player[] and return
+ * 3. Return CSV data for column mapping (does NOT create Players directly)
  */
-export function CSVImportFlow({ teamCount, onComplete, onCancel }: CSVImportFlowProps) {
+export function CSVImportFlow({ onComplete, onCancel }: CSVImportFlowProps) {
   const [step, setStep] = useState<CSVImportStep>('upload');
-  const [evalData, setEvalData] = useState<EvaluationCSVRecord[]>([]);
-  const [regData, setRegData] = useState<RegistrationCSVRecord[]>([]);
+  const [evalCSVData, setEvalCSVData] = useState<ParsedCSVData | null>(null);
+  const [regData, setRegData] = useState<ParsedRegistrationData | null>(null);
 
   const handleUploadComplete = (
-    eval_: EvaluationCSVRecord[],
-    reg: RegistrationCSVRecord[]
+    evalData: ParsedCSVData,
+    reg: ParsedRegistrationData
   ) => {
-    setEvalData(eval_);
+    setEvalCSVData(evalData);
     setRegData(reg);
     setStep('verify');
   };
 
-  const handleVerificationComplete = (
-    verifiedEval: EvaluationCSVRecord[],
-    excludedBibs: Set<string>,
-    dnePlayers: RegistrationCSVRecord[]
-  ) => {
-    // Filter out excluded players
-    const includedEval = verifiedEval.filter(p => !excludedBibs.has(p.bib));
+  const handleVerificationComplete = (result: VerificationResult) => {
+    if (!evalCSVData) return;
 
-    // Convert to Player[] format
-    const players: Player[] = [];
-
-    // Helper to create a player with all required fields
-    const createPlayer = (
-      id: string,
-      bib: string,
-      firstName: string,
-      lastName: string,
-      totalScore: number,
-      rank: number,
-      projectedRound: number,
-      isDNE: boolean = false
-    ): Player => ({
-      id,
-      bib,
-      firstName,
-      lastName,
-      name: `${firstName} ${lastName}`,
-      // Raw scores - default to 0
-      fieldScore: 0,
-      throwScore: 0,
-      hitPower: 0,
-      hitForm: 0,
-      hitContact: 0,
-      pitchingStrength: 0,
-      pitchingForm: 0,
-      catchScore: 0,
-      runningScore: 0,
-      // Subtotals - default to 0
-      fieldingSubtotal: 0,
-      hittingSubtotal: 0,
-      pitchingSubtotal: 0,
-      subjectiveTotal: 0,
-      objectiveTotal: 0,
-      officialAdjust: 0,
-      // Calculated
-      totalScore,
-      rank,
-      projectedRound,
-      // Player Info
-      littleLeagueAge: 0,
-      birthday: '',
-      isAllStar: false,
-      isDNE,
-      // Draft Rules
-      isCoachKid: false,
-      // Draft Status
-      isDrafted: false,
+    onComplete({
+      evalCSVData,
+      excludedRowIndices: result.excludedRowIndices,
+      dnePlayers: result.dnePlayers,
     });
-
-    // Add evaluated players
-    includedEval.forEach((evalPlayer, index) => {
-      players.push(createPlayer(
-        `player-${evalPlayer.bib}`,
-        evalPlayer.bib,
-        evalPlayer.firstName,
-        evalPlayer.lastName,
-        evalPlayer.totalScore,
-        index + 1,
-        Math.ceil((index + 1) / teamCount)
-      ));
-    });
-
-    // Sort by score and re-rank
-    players.sort((a, b) => b.totalScore - a.totalScore);
-    players.forEach((p, i) => {
-      p.rank = i + 1;
-      p.projectedRound = Math.ceil((i + 1) / teamCount);
-    });
-
-    // Add DNE players at the end
-    dnePlayers.forEach((dnePlayer, index) => {
-      const nextBib = Math.max(...players.map(p => parseInt(p.bib) || 0), 0) + index + 1;
-      players.push(createPlayer(
-        `player-dne-${nextBib}`,
-        String(nextBib),
-        dnePlayer.firstName,
-        dnePlayer.lastName,
-        0, // DNE players have 0 score
-        players.length + index + 1,
-        Math.ceil((players.length + index + 1) / teamCount),
-        true // isDNE
-      ));
-    });
-
-    onComplete(players);
   };
 
   const steps = ['upload', 'verify'] as const;
-  const currentStepIndex = steps.indexOf(step as 'upload' | 'verify');
+  const currentStepIndex = steps.indexOf(step);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
@@ -177,9 +102,9 @@ export function CSVImportFlow({ teamCount, onComplete, onCancel }: CSVImportFlow
           />
         )}
 
-        {step === 'verify' && (
+        {step === 'verify' && evalCSVData && regData && (
           <CSVVerificationStep
-            evalData={evalData}
+            evalCSVData={evalCSVData}
             regData={regData}
             onComplete={handleVerificationComplete}
             onBack={() => setStep('upload')}

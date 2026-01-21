@@ -9,7 +9,8 @@ import { DivisionCreator } from './components/DivisionCreator';
 import { FileUpload } from './components/FileUpload';
 import { ColumnMapper } from './components/ColumnMapper';
 import { ImportTypeSelector, EvaluationImport } from './components/evaluation';
-import { CSVImportFlow } from './components/evaluation/CSVImportFlow';
+import { CSVImportFlow, DualCSVImportResult } from './components/evaluation/CSVImportFlow';
+import { RegistrationCSVRecord } from './components/evaluation/DualCSVUpload';
 import { PlayerReview } from './components/PlayerReview';
 import { DraftConfig } from './components/DraftConfig';
 import { DraftBoard } from './components/DraftBoard';
@@ -89,6 +90,11 @@ function App() {
   const [mode, setMode] = useState<AppMode>('selector');
   const [csvData, setCSVData] = useState<ParsedCSVData | null>(null);
   const [importMode, setImportMode] = useState<'csv' | 'excel' | 'dualcsv' | null>(null);
+  // Dual CSV verification result - stores excluded rows and DNE players
+  const [dualCSVVerification, setDualCSVVerification] = useState<{
+    excludedRowIndices: Set<number>;
+    dnePlayers: RegistrationCSVRecord[];
+  } | null>(null);
 
   const {
     summaries,
@@ -279,8 +285,17 @@ function App() {
   const handleMappingComplete = async (mapping: ColumnMapping) => {
     if (!csvData || !activeDivision) return;
 
+    // If coming from dual CSV flow, filter out excluded rows before parsing
+    let dataToProcess = csvData;
+    if (dualCSVVerification && dualCSVVerification.excludedRowIndices.size > 0) {
+      dataToProcess = {
+        headers: csvData.headers,
+        rows: csvData.rows.filter((_, index) => !dualCSVVerification.excludedRowIndices.has(index)),
+      };
+    }
+
     const { players: loadedPlayers, coachAssignments } = parseCSVWithMapping(
-      csvData,
+      dataToProcess,
       mapping,
       activeDivision.teamCount,
       activeDivision.scoringMode,
@@ -290,6 +305,58 @@ function App() {
     // Process coach assignments from CSV
     let updatedTeams = [...activeDivision.teams];
     let updatedPlayers = [...loadedPlayers];
+
+    // If coming from dual CSV flow, add DNE players at the end
+    if (dualCSVVerification && dualCSVVerification.dnePlayers.length > 0) {
+      const maxBib = Math.max(...updatedPlayers.map(p => parseInt(p.bib) || 0), 0);
+
+      dualCSVVerification.dnePlayers.forEach((dnePlayer, index) => {
+        const nextBib = maxBib + index + 1;
+        const dnePlayerRecord: Player = {
+          id: `player-dne-${nextBib}-${Date.now()}`,
+          bib: String(nextBib),
+          firstName: dnePlayer.firstName,
+          lastName: dnePlayer.lastName,
+          name: `${dnePlayer.firstName} ${dnePlayer.lastName}`,
+          // All scores 0 for DNE
+          fieldScore: 0,
+          throwScore: 0,
+          hitPower: 0,
+          hitForm: 0,
+          hitContact: 0,
+          pitchingStrength: 0,
+          pitchingForm: 0,
+          catchScore: 0,
+          runningScore: 0,
+          fieldingSubtotal: 0,
+          hittingSubtotal: 0,
+          pitchingSubtotal: 0,
+          subjectiveTotal: 0,
+          objectiveTotal: 0,
+          officialAdjust: 0,
+          totalScore: 0,
+          rank: updatedPlayers.length + index + 1,
+          projectedRound: Math.ceil((updatedPlayers.length + index + 1) / activeDivision.teamCount),
+          littleLeagueAge: 0,
+          birthday: '',
+          isAllStar: false,
+          isDNE: true,
+          isCoachKid: false,
+          isDrafted: false,
+        };
+        updatedPlayers.push(dnePlayerRecord);
+      });
+
+      // Re-sort by score and re-rank (DNE players will be at the bottom with 0 score)
+      updatedPlayers.sort((a, b) => b.totalScore - a.totalScore);
+      updatedPlayers.forEach((p, i) => {
+        p.rank = i + 1;
+        p.projectedRound = Math.ceil((i + 1) / activeDivision.teamCount);
+      });
+    }
+
+    // Clear dual CSV verification state after processing
+    setDualCSVVerification(null);
 
     if (coachAssignments.length > 0) {
       // Group assignments by team name
@@ -975,11 +1042,16 @@ function App() {
             {/* Dual CSV Import Flow (Evaluation + Registration) */}
             {importMode === 'dualcsv' && (
               <CSVImportFlow
-                teamCount={activeDivision?.teamCount ?? 8}
-                onComplete={(importedPlayers) => {
-                  setPlayers(importedPlayers);
+                onComplete={(result: DualCSVImportResult) => {
+                  // Store the CSV data for column mapping
+                  setCSVData(result.evalCSVData);
+                  // Store verification result for post-mapping processing
+                  setDualCSVVerification({
+                    excludedRowIndices: result.excludedRowIndices,
+                    dnePlayers: result.dnePlayers,
+                  });
                   setImportMode(null);
-                  setPhase('review');
+                  setPhase('mapping');
                 }}
                 onCancel={() => setImportMode(null)}
               />

@@ -1,14 +1,7 @@
 import { useState } from 'react';
 import { Upload, AlertCircle, Loader2, Check, FileSpreadsheet, Users, ArrowRight } from 'lucide-react';
 import Papa from 'papaparse';
-
-export interface EvaluationCSVRecord {
-  bib: string;
-  firstName: string;
-  lastName: string;
-  totalScore: number;
-  [key: string]: string | number; // Additional category scores
-}
+import { ParsedCSVData } from '../../types';
 
 export interface RegistrationCSVRecord {
   firstName: string;
@@ -16,8 +9,14 @@ export interface RegistrationCSVRecord {
   division?: string;
 }
 
+export interface ParsedRegistrationData {
+  headers: string[];
+  records: RegistrationCSVRecord[];
+}
+
 interface DualCSVUploadProps {
-  onComplete: (evalData: EvaluationCSVRecord[], regData: RegistrationCSVRecord[]) => void;
+  /** Called with raw eval CSV data (for column mapping) and parsed registration data (for verification) */
+  onComplete: (evalCSVData: ParsedCSVData, regData: ParsedRegistrationData) => void;
   onCancel: () => void;
 }
 
@@ -30,7 +29,8 @@ interface ParsedFile {
 
 /**
  * Two-step CSV upload for evaluation data and registration data.
- * Allows verifying draft eligibility by comparing against registration list.
+ * Passes raw evaluation CSV data through for column mapping.
+ * Registration data is parsed for name matching only.
  */
 export function DualCSVUpload({ onComplete, onCancel }: DualCSVUploadProps) {
   const [evalFile, setEvalFile] = useState<ParsedFile | null>(null);
@@ -116,35 +116,30 @@ export function DualCSVUpload({ onComplete, onCancel }: DualCSVUploadProps) {
   const handleContinue = () => {
     if (!evalFile || !regFile) return;
 
-    // Map evaluation data
-    const evalHeaders = evalFile.headers;
-    const bibCol = evalHeaders.find(h => h.toLowerCase().includes('bib')) || '';
-    const evalFirstCol = evalHeaders.find(h => h.toLowerCase().includes('first')) || '';
-    const evalLastCol = evalHeaders.find(h => h.toLowerCase().includes('last')) || '';
-    const totalCol = evalHeaders.find(h =>
-      h.toLowerCase().includes('total') || h.toLowerCase().includes('score')
-    ) || '';
+    // Pass raw eval CSV data for column mapping (preserves all columns)
+    const evalCSVData: ParsedCSVData = {
+      headers: evalFile.headers,
+      rows: evalFile.data,
+    };
 
-    const evalData: EvaluationCSVRecord[] = evalFile.data.map(row => ({
-      bib: row[bibCol] || '',
-      firstName: row[evalFirstCol] || '',
-      lastName: row[evalLastCol] || '',
-      totalScore: parseFloat(row[totalCol]) || 0,
-    }));
-
-    // Map registration data
+    // Parse registration data for name matching
     const regHeaders = regFile.headers;
     const regFirstCol = regHeaders.find(h => h.toLowerCase().includes('first')) || '';
     const regLastCol = regHeaders.find(h => h.toLowerCase().includes('last')) || '';
     const divisionCol = regHeaders.find(h => h.toLowerCase().includes('division')) || '';
 
-    const regData: RegistrationCSVRecord[] = regFile.data.map(row => ({
+    const regRecords: RegistrationCSVRecord[] = regFile.data.map(row => ({
       firstName: row[regFirstCol] || '',
       lastName: row[regLastCol] || '',
       division: divisionCol ? row[divisionCol] : undefined,
     }));
 
-    onComplete(evalData, regData);
+    const regData: ParsedRegistrationData = {
+      headers: regHeaders,
+      records: regRecords,
+    };
+
+    onComplete(evalCSVData, regData);
   };
 
   const FileDropZone = ({
