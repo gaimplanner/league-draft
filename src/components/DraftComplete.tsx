@@ -1,11 +1,10 @@
-import { useState } from 'react';
-import { Download, ChevronLeft, FileText, Printer, Copy, Check, ArrowLeftRight } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { Download, FileText, Printer, Copy, Check, ArrowLeftRight } from 'lucide-react';
 import { DraftState, Division, Team } from '../types';
 import { exportToCSV } from '../utils/csvParser';
 import {
   generatePublicRosters,
   generateOfficialRecord,
-  downloadTextFile,
   downloadCSV,
   openPrintWindow,
   copyToClipboard,
@@ -14,6 +13,8 @@ import { TradeModal } from './TradeModal';
 import { CompleteRosters } from './CompleteRosters';
 import { TeamNameAssignment } from './shared';
 import { getTeamDisplayName } from '../utils/teamUtils';
+
+type MetricsView = 'full' | 'top8';
 
 interface DraftCompleteProps {
   draftState: DraftState;
@@ -27,12 +28,67 @@ interface DraftCompleteProps {
     reason: string
   ) => void;
   onUpdateTeam?: (teamId: string, updates: Partial<Team>) => void;
+  onReturnToDraftBoard?: () => void;
 }
 
-export const DraftComplete = ({ draftState, division, onReset, onExecuteTrade, onUpdateTeam }: DraftCompleteProps) => {
+export const DraftComplete = ({ draftState, division, onReset, onExecuteTrade, onUpdateTeam, onReturnToDraftBoard }: DraftCompleteProps) => {
   const [copiedRosters, setCopiedRosters] = useState(false);
   const [copiedRecord, setCopiedRecord] = useState(false);
   const [showTradeModal, setShowTradeModal] = useState(false);
+  const [metricsView, setMetricsView] = useState<MetricsView>('top8');
+
+  // Calculate team metrics
+  const teamMetrics = useMemo(() => {
+    const TOP_PICKS_COUNT = 8;
+
+    const metrics = draftState.teams.map(team => {
+      // Full roster score
+      const fullScore = team.totalScore;
+
+      // Top 8 picks score (sorted by draft pick order)
+      const sortedRoster = [...team.roster].sort((a, b) => {
+        const pickA = a.draftedAtPick ?? Infinity;
+        const pickB = b.draftedAtPick ?? Infinity;
+        return pickA - pickB;
+      });
+      const top8Players = sortedRoster.slice(0, TOP_PICKS_COUNT);
+      const top8Score = top8Players.reduce((sum, p) => sum + p.totalScore, 0);
+
+      return {
+        team,
+        fullScore,
+        top8Score,
+        playerCount: team.roster.length,
+        top8Count: top8Players.length,
+      };
+    });
+
+    // Calculate stats for full rosters
+    const fullScores = metrics.map(m => m.fullScore);
+    const fullHighest = Math.max(...fullScores);
+    const fullLowest = Math.min(...fullScores);
+    const fullSpread = fullHighest - fullLowest;
+    const fullAverage = fullScores.reduce((a, b) => a + b, 0) / fullScores.length;
+
+    // Calculate stats for top 8
+    const top8Scores = metrics.map(m => m.top8Score);
+    const top8Highest = Math.max(...top8Scores);
+    const top8Lowest = Math.min(...top8Scores);
+    const top8Spread = top8Highest - top8Lowest;
+    const top8Average = top8Scores.reduce((a, b) => a + b, 0) / top8Scores.length;
+
+    // Rank teams by selected view
+    const rankedByFull = [...metrics].sort((a, b) => b.fullScore - a.fullScore);
+    const rankedByTop8 = [...metrics].sort((a, b) => b.top8Score - a.top8Score);
+
+    return {
+      teams: metrics,
+      full: { highest: fullHighest, lowest: fullLowest, spread: fullSpread, average: fullAverage },
+      top8: { highest: top8Highest, lowest: top8Lowest, spread: top8Spread, average: top8Average },
+      rankedByFull,
+      rankedByTop8,
+    };
+  }, [draftState.teams]);
 
   const handleExport = () => {
     const csvContent = exportToCSV(draftState.teams);
@@ -45,7 +101,7 @@ export const DraftComplete = ({ draftState, division, onReset, onExecuteTrade, o
     const content = generatePublicRosters(draftState.teams, draftState.players);
     const divisionName = division?.name?.replace(/\s+/g, '-') || 'rosters';
     const timestamp = new Date().toISOString().split('T')[0];
-    downloadTextFile(content, `${divisionName}-rosters-${timestamp}.txt`);
+    downloadCSV(content, `${divisionName}-rosters-${timestamp}.csv`);
   };
 
   const handlePrintPublicRosters = () => {
@@ -74,7 +130,7 @@ export const DraftComplete = ({ draftState, division, onReset, onExecuteTrade, o
     );
     const divisionName = division?.name?.replace(/\s+/g, '-') || 'draft';
     const timestamp = new Date().toISOString().split('T')[0];
-    downloadTextFile(content, `${divisionName}-official-record-${timestamp}.txt`);
+    downloadCSV(content, `${divisionName}-official-record-${timestamp}.csv`);
   };
 
   const handlePrintOfficialRecord = () => {
@@ -133,12 +189,20 @@ export const DraftComplete = ({ draftState, division, onReset, onExecuteTrade, o
                 Make Trade
               </button>
             )}
+            {onReturnToDraftBoard && (
+              <button
+                onClick={onReturnToDraftBoard}
+                className="px-4 py-2 bg-white text-gray-700 hover:bg-gray-100 rounded-lg font-medium"
+                title="Return to Draft Board to draft remaining players"
+              >
+                Back to Draft Board
+              </button>
+            )}
             <button
               onClick={onReset}
-              className="px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg font-medium flex items-center gap-2"
+              className="px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg font-medium"
               title="Return to Draft Setup - this will delete all draft picks"
             >
-              <ChevronLeft className="w-5 h-5" />
               Return to Draft Setup
             </button>
           </div>
@@ -148,13 +212,13 @@ export const DraftComplete = ({ draftState, division, onReset, onExecuteTrade, o
         <div className="grid md:grid-cols-2 gap-6 mb-6">
           {/* Public Rosters Export */}
           <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700">
-            <div className="flex items-center gap-3 mb-4">
-              <FileText className="w-6 h-6 text-green-600 dark:text-green-400" />
+            <div className="flex items-start gap-3 mb-4">
+              <FileText className="w-6 h-6 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
               <div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white text-left">
                   Public Rosters
                 </h3>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
+                <p className="text-sm text-gray-600 dark:text-gray-400 text-left">
                   Alphabetical player lists for families (no scores)
                 </p>
               </div>
@@ -186,13 +250,13 @@ export const DraftComplete = ({ draftState, division, onReset, onExecuteTrade, o
 
           {/* Official Record Export */}
           <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700">
-            <div className="flex items-center gap-3 mb-4">
-              <FileText className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+            <div className="flex items-start gap-3 mb-4">
+              <FileText className="w-6 h-6 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
               <div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white text-left">
                   Official Draft Record
                 </h3>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
+                <p className="text-sm text-gray-600 dark:text-gray-400 text-left">
                   Complete pick history with flags and trades
                 </p>
               </div>
@@ -236,6 +300,127 @@ export const DraftComplete = ({ draftState, division, onReset, onExecuteTrade, o
             />
           </div>
         )}
+
+        {/* Team Balance Metrics */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+              Team Balance
+            </h2>
+            {/* Toggle between Full and Top 8 */}
+            <div className="flex bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
+              <button
+                onClick={() => setMetricsView('top8')}
+                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                  metricsView === 'top8'
+                    ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
+                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                }`}
+              >
+                Top 8 Picks
+              </button>
+              <button
+                onClick={() => setMetricsView('full')}
+                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                  metricsView === 'full'
+                    ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
+                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                }`}
+              >
+                Full Roster
+              </button>
+            </div>
+          </div>
+
+          {/* Stats Summary */}
+          <div className="grid grid-cols-4 gap-4 mb-6">
+            <div className="bg-green-50 dark:bg-green-900/30 rounded-lg p-4 text-center border border-green-200 dark:border-green-800">
+              <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                {metricsView === 'top8'
+                  ? teamMetrics.top8.highest.toFixed(1)
+                  : teamMetrics.full.highest.toFixed(1)}
+              </div>
+              <div className="text-sm text-gray-600 dark:text-gray-400">Highest</div>
+            </div>
+            <div className="bg-red-50 dark:bg-red-900/30 rounded-lg p-4 text-center border border-red-200 dark:border-red-800">
+              <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                {metricsView === 'top8'
+                  ? teamMetrics.top8.lowest.toFixed(1)
+                  : teamMetrics.full.lowest.toFixed(1)}
+              </div>
+              <div className="text-sm text-gray-600 dark:text-gray-400">Lowest</div>
+            </div>
+            <div className="bg-blue-50 dark:bg-blue-900/30 rounded-lg p-4 text-center border border-blue-200 dark:border-blue-800">
+              <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                {metricsView === 'top8'
+                  ? teamMetrics.top8.spread.toFixed(1)
+                  : teamMetrics.full.spread.toFixed(1)}
+              </div>
+              <div className="text-sm text-gray-600 dark:text-gray-400">Spread</div>
+            </div>
+            <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 text-center border border-gray-200 dark:border-gray-600">
+              <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                {metricsView === 'top8'
+                  ? teamMetrics.top8.average.toFixed(1)
+                  : teamMetrics.full.average.toFixed(1)}
+              </div>
+              <div className="text-sm text-gray-600 dark:text-gray-400">Average</div>
+            </div>
+          </div>
+
+          {/* Team Rankings */}
+          <div>
+            <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3 uppercase tracking-wide">
+              Team Rankings ({metricsView === 'top8' ? 'by Top 8 Picks' : 'by Full Roster'})
+            </h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {(metricsView === 'top8' ? teamMetrics.rankedByTop8 : teamMetrics.rankedByFull).map((m, index) => {
+                const score = metricsView === 'top8' ? m.top8Score : m.fullScore;
+                const highest = metricsView === 'top8' ? teamMetrics.top8.highest : teamMetrics.full.highest;
+                const lowest = metricsView === 'top8' ? teamMetrics.top8.lowest : teamMetrics.full.lowest;
+                const isHighest = score === highest;
+                const isLowest = score === lowest;
+
+                return (
+                  <div
+                    key={m.team.id}
+                    className={`p-3 rounded-lg border ${
+                      isHighest
+                        ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+                        : isLowest
+                        ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+                        : 'bg-gray-50 dark:bg-gray-700/50 border-gray-200 dark:border-gray-600'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className={`text-lg font-bold ${
+                          isHighest ? 'text-green-600 dark:text-green-400' :
+                          isLowest ? 'text-red-600 dark:text-red-400' :
+                          'text-gray-400 dark:text-gray-500'
+                        }`}>
+                          #{index + 1}
+                        </span>
+                        <span className="font-medium text-gray-900 dark:text-white truncate">
+                          {getTeamDisplayName(m.team)}
+                        </span>
+                      </div>
+                      <span className="font-bold text-gray-900 dark:text-white">
+                        {score.toFixed(1)}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-4">
+            {metricsView === 'top8'
+              ? 'Top 8 picks metric excludes late-round players to better reflect core team strength.'
+              : 'Full roster includes all drafted players.'}
+          </p>
+        </div>
 
         {/* Full Rosters */}
         <CompleteRosters teams={draftState.teams} />

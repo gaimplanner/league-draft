@@ -49,6 +49,7 @@ export const useDraft = (_divisionId?: string) => {
   const [pendingComplete, setPendingComplete] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [mandatoryPickError, setMandatoryPickError] = useState<string | null>(null);
 
   // Store draft state ID (needed for API draft operations)
   const draftStateId = useRef<string | null>(null);
@@ -58,6 +59,9 @@ export const useDraft = (_divisionId?: string) => {
 
   // Synchronous lock to prevent concurrent operations (prevents race conditions from rapid clicks)
   const operationInProgress = useRef(false);
+
+  // Flag to override auto-complete detection (when user explicitly goes back to draft)
+  const overrideCompleteDetection = useRef(false);
 
   // Load state from a division object (called when selecting a division)
   const loadDivisionState = useCallback((division: Division) => {
@@ -82,11 +86,14 @@ export const useDraft = (_divisionId?: string) => {
 
     // If draft is complete, ensure we go to complete phase even if division.phase
     // hasn't been updated yet (race condition fix)
-    if (division.draftState?.isDraftComplete) {
+    // BUT: skip this if user explicitly requested to go back to draft board
+    if (division.draftState?.isDraftComplete && !overrideCompleteDetection.current) {
       setPhase('complete');
     } else {
       setPhase(division.phase);
     }
+    // Reset the override flag after use
+    overrideCompleteDetection.current = false;
   }, []);
 
   const resetDraft = useCallback(async (
@@ -212,33 +219,44 @@ export const useDraft = (_divisionId?: string) => {
 
   const draftPlayer = useCallback(
     async (playerId: string) => {
-      // Synchronous lock check to prevent race conditions from rapid clicks
+      // Synchronous lock check AND set to prevent race conditions from rapid clicks
+      // Must be done atomically at the very start before any async operations
       if (operationInProgress.current) {
+        console.log('[draftPlayer] Blocked - operation already in progress');
         return;
       }
+      operationInProgress.current = true;
 
       // Guard against double-submit during API call (Issue #1)
       if (isLoading) {
+        console.log('[draftPlayer] Blocked - isLoading true');
+        operationInProgress.current = false;
         return;
       }
 
       if (!draftStateId.current) {
         setError('Draft not started');
+        operationInProgress.current = false;
         return;
       }
 
       const { currentTeamId, players, mandatoryPick } = draftState;
 
-      if (!currentTeamId) return;
+      if (!currentTeamId) {
+        operationInProgress.current = false;
+        return;
+      }
 
       // Validate mandatory pick
       if (mandatoryPick && mandatoryPick.playerId !== playerId) {
-        alert(`You must draft ${players.find(p => p.id === mandatoryPick.playerId)?.name} (${mandatoryPick.reason === 'coach-kid' ? "coach's kid" : 'sibling requirement'})`);
+        const playerName = players.find(p => p.id === mandatoryPick.playerId)?.name;
+        const reason = mandatoryPick.reason === 'coach-kid' ? "coach's kid" : 'sibling requirement';
+        setMandatoryPickError(`You must draft ${playerName} (${reason})`);
+        operationInProgress.current = false;
         return;
       }
 
       try {
-        operationInProgress.current = true;
         setIsLoading(true);
         const result = await api.draftPlayer({
           draftStateId: draftStateId.current,
@@ -399,6 +417,18 @@ export const useDraft = (_divisionId?: string) => {
     setPendingComplete(false);
   }, []);
 
+  // Clear mandatory pick error
+  const clearMandatoryPickError = useCallback(() => {
+    setMandatoryPickError(null);
+  }, []);
+
+  // Go back to draft board from complete phase (bypasses auto-complete detection)
+  const returnToDraftBoard = useCallback(() => {
+    overrideCompleteDetection.current = true;
+    setPendingComplete(false);
+    setPhase('draft');
+  }, []);
+
   return {
     phase,
     setPhase,
@@ -419,5 +449,8 @@ export const useDraft = (_divisionId?: string) => {
     cancelPendingComplete,
     isLoading,
     error,
+    mandatoryPickError,
+    clearMandatoryPickError,
+    returnToDraftBoard,
   };
 };

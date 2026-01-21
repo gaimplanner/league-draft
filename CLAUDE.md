@@ -114,6 +114,8 @@ App
 │   ├── Round Interstitial Modal (between-round order display)
 │   └── Draft Complete Modal (finalization prompt)
 └── DraftComplete
+    ├── Team Balance metrics (Top 8 / Full Roster toggle)
+    ├── Export options (Public Rosters CSV, Official Record CSV)
     └── TradeModal
 ```
 
@@ -161,7 +163,7 @@ Draft state uses functional updates: `setDraftState(prev => ({ ...prev, ... }))`
 ### Adding a new export format
 1. Add function to `src/utils/exports.ts`
 2. Call from appropriate component (SimulationModal, DraftComplete)
-3. Use `downloadTextFile()` helper
+3. Use `downloadCSV()` or `downloadTextFile()` helper
 
 ### Adding a draft rule
 1. Update `getMandatoryPick()` in `draftLogic.ts`

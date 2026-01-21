@@ -68,7 +68,11 @@ class DraftService:
         cls, draft_state_id: UUID, player_id: UUID, team_id: UUID
     ) -> DraftState:
         """Draft a player."""
+        import logging
+        logger = logging.getLogger(__name__)
+
         draft_state = DraftState.objects.select_for_update().get(id=draft_state_id)
+        logger.info(f"[draft_player] Starting pick. current_round={draft_state.current_round}, current_pick_in_round={draft_state.current_pick_in_round}, picks_so_far={draft_state.picks.count()}")
 
         if draft_state.is_draft_complete:
             raise ValueError("Draft is already complete")
@@ -84,10 +88,10 @@ class DraftService:
         ):
             raise ValueError("Must draft mandatory player first")
 
-        # Verify player is available
-        player = Player.objects.get(id=player_id)
+        # Verify player is available (use select_for_update to prevent race conditions)
+        player = Player.objects.select_for_update().get(id=player_id)
         if player.is_drafted:
-            raise ValueError("Player is not available")
+            raise ValueError("Player is already drafted")
 
         team = Team.objects.get(id=team_id)
         overall_pick = draft_state.picks.count() + 1
@@ -141,6 +145,16 @@ class DraftService:
         # Cannot skip if there's a mandatory pick
         if draft_state.mandatory_player_id:
             raise ValueError("Cannot skip - mandatory pick required")
+
+        # Cannot skip if remaining players >= remaining draft spots
+        # (all players must be drafted)
+        division = draft_state.division
+        available_players = division.players.filter(is_drafted=False).count()
+        total_picks = len(draft_state.draft_order) * division.roster_size
+        picks_made = draft_state.picks.count()
+        remaining_spots = total_picks - picks_made
+        if available_players >= remaining_spots:
+            raise ValueError("Cannot skip - all remaining players must be drafted")
 
         overall_pick = draft_state.picks.count() + 1
 
@@ -314,12 +328,17 @@ class DraftService:
     @classmethod
     def _advance_to_next_pick(cls, draft_state: DraftState) -> None:
         """Advance to the next pick."""
+        import logging
+        logger = logging.getLogger(__name__)
+
         division = draft_state.division
         draft_order = draft_state.draft_order
         team_count = len(draft_order)
         roster_size = division.roster_size
         total_picks = team_count * roster_size
         current_picks = draft_state.picks.count()
+
+        logger.info(f"[_advance_to_next_pick] team_count={team_count}, roster_size={roster_size}, total_picks={total_picks}, current_picks={current_picks}")
 
         if current_picks >= total_picks:
             # Draft complete

@@ -26,7 +26,10 @@ export function generatePublicRosters(teams: Team[], _players: Player[]): string
       // Get roster sorted alphabetically by last name
       const roster = team.roster
         .sort((a, b) => a.lastName.localeCompare(b.lastName))
-        .map(p => `  ${p.lastName}, ${p.firstName}`)
+        .map(p => {
+          const bibStr = p.bib ? ` (#${p.bib})` : '';
+          return `  ${p.lastName}, ${p.firstName}${bibStr}`;
+        })
         .join('\n');
 
       // Get manager name (headCoach is the primary field for manager's name)

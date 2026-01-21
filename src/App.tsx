@@ -124,6 +124,9 @@ function App() {
     finalizeDraft,
     cancelPendingComplete,
     isLoading,
+    mandatoryPickError,
+    clearMandatoryPickError,
+    returnToDraftBoard,
   } = useDraft(activeDivision?.id);
 
   const { players, updatePlayer, updatePlayerField, linkSiblings, unlinkSibling, setAllPlayers } = usePlayerScoring(
@@ -877,13 +880,17 @@ function App() {
   const DivisionHeader = () => (
     <div className="fixed top-0 left-0 right-0 z-50 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-2 flex items-center justify-between">
       <div className="flex items-center gap-3">
-        <button
-          onClick={handleBackToSelector}
-          className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors text-sm"
-        >
-          ← Divisions
-        </button>
-        <span className="text-gray-300 dark:text-gray-600">|</span>
+        {phase !== 'draft' && (
+          <>
+            <button
+              onClick={handleBackToSelector}
+              className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors text-sm"
+            >
+              ← Divisions
+            </button>
+            <span className="text-gray-300 dark:text-gray-600">|</span>
+          </>
+        )}
         <span className="font-semibold text-gray-900 dark:text-white">
           {activeDivision.name}
         </span>
@@ -1111,6 +1118,8 @@ function App() {
             onFinalizeDraft={finalizeDraft}
             onCancelComplete={cancelPendingComplete}
             isLoading={isLoading}
+            mandatoryPickError={mandatoryPickError}
+            onClearMandatoryPickError={clearMandatoryPickError}
           />
         )}
 
@@ -1147,6 +1156,7 @@ function App() {
               onReset={handleReset}
               onExecuteTrade={executeTrade}
               onUpdateTeam={handleUpdateTeam}
+              onReturnToDraftBoard={returnToDraftBoard}
             />
           </div>
         )}

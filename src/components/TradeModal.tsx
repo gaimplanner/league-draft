@@ -343,7 +343,7 @@ export const TradeModal = ({ teams, players, onExecuteTrade, onClose }: TradeMod
               type="text"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              placeholder="e.g., Carpool arrangement, Extended family, balancing ages, etc."
+              placeholder="e.g., Carpool arrangement, extended family, balancing ages, etc."
               maxLength={200}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
             />
