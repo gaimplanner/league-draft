@@ -64,13 +64,8 @@ export const DivisionSelector = ({
     }
   };
 
-  // Filter out incomplete live-draft divisions (no players imported yet)
-  // But always show league-generated divisions since they need setup before import
-  const validDivisions = divisions.filter(d =>
-    d.playerCount > 0 || d.mode === 'league-generated'
-  );
-
-  const sortedDivisions = [...validDivisions].sort((a, b) => {
+  // Show all divisions - they persist as soon as they're created
+  const sortedDivisions = [...divisions].sort((a, b) => {
     // In-progress first, then by creation date (newest first)
     if (a.phase === 'complete' && b.phase !== 'complete') return 1;
     if (a.phase !== 'complete' && b.phase === 'complete') return -1;
@@ -132,7 +127,7 @@ export const DivisionSelector = ({
         </button>
 
         {/* Division List */}
-        {validDivisions.length > 0 && (
+        {sortedDivisions.length > 0 && (
           <div className="space-y-4">
             <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-300 px-1">
               Existing Divisions
@@ -228,7 +223,7 @@ export const DivisionSelector = ({
         )}
 
         {/* Empty State */}
-        {validDivisions.length === 0 && (
+        {sortedDivisions.length === 0 && (
           <div className="text-center py-12">
             <div className="text-gray-400 dark:text-gray-600 mb-2">
               <Users className="w-16 h-16 mx-auto" />
