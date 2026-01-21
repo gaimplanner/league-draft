@@ -118,8 +118,16 @@ export const DraftBoard = ({
   const currentPickNumber = (draftState.currentRound - 1) * draftState.teams.length + draftState.currentPickInRound;
   const isFinalRound = draftState.currentRound === totalRounds;
 
+  // Calculate if skip is allowed (can't skip if all remaining players must be drafted)
+  const remainingSpots = totalPicks - draftState.picks.length;
+  const canSkip = availablePlayers.length < remainingSpots;
+
   const handleSkipPick = () => {
     if (!currentTeam) return;
+    if (!canSkip) {
+      window.alert('Cannot skip - all remaining players must be drafted.');
+      return;
+    }
     if (window.confirm(`Skip pick for ${getTeamDisplayName(currentTeam)}? They will have one fewer player.`)) {
       onSkipPick();
     }
@@ -249,8 +257,9 @@ export const DraftBoard = ({
                 {isFinalRound && (
                   <button
                     onClick={handleSkipPick}
-                    className="px-2 py-1 bg-yellow-500 hover:bg-yellow-600 text-white rounded text-xs font-medium flex items-center gap-1"
-                    title="Skip this team's pick"
+                    disabled={!canSkip || isLoading}
+                    className="px-2 py-1 bg-yellow-500 hover:bg-yellow-600 text-white rounded text-xs font-medium flex items-center gap-1 disabled:opacity-30 disabled:cursor-not-allowed"
+                    title={canSkip ? "Skip this team's pick" : "Cannot skip - all remaining players must be drafted"}
                   >
                     ⏭️ <span className="hidden sm:inline">Skip</span>
                   </button>

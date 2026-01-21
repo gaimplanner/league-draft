@@ -146,6 +146,16 @@ class DraftService:
         if draft_state.mandatory_player_id:
             raise ValueError("Cannot skip - mandatory pick required")
 
+        # Cannot skip if remaining players >= remaining draft spots
+        # (all players must be drafted)
+        division = draft_state.division
+        available_players = division.players.filter(is_drafted=False).count()
+        total_picks = len(draft_state.draft_order) * division.roster_size
+        picks_made = draft_state.picks.count()
+        remaining_spots = total_picks - picks_made
+        if available_players >= remaining_spots:
+            raise ValueError("Cannot skip - all remaining players must be drafted")
+
         overall_pick = draft_state.picks.count() + 1
 
         # Create a skipped pick record (no player assigned)
