@@ -84,10 +84,10 @@ class DraftService:
         ):
             raise ValueError("Must draft mandatory player first")
 
-        # Verify player is available
-        player = Player.objects.get(id=player_id)
+        # Verify player is available (use select_for_update to prevent race conditions)
+        player = Player.objects.select_for_update().get(id=player_id)
         if player.is_drafted:
-            raise ValueError("Player is not available")
+            raise ValueError("Player is already drafted")
 
         team = Team.objects.get(id=team_id)
         overall_pick = draft_state.picks.count() + 1

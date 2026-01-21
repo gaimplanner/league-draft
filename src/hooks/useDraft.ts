@@ -219,35 +219,44 @@ export const useDraft = (_divisionId?: string) => {
 
   const draftPlayer = useCallback(
     async (playerId: string) => {
-      // Synchronous lock check to prevent race conditions from rapid clicks
+      // Synchronous lock check AND set to prevent race conditions from rapid clicks
+      // Must be done atomically at the very start before any async operations
       if (operationInProgress.current) {
+        console.log('[draftPlayer] Blocked - operation already in progress');
         return;
       }
+      operationInProgress.current = true;
 
       // Guard against double-submit during API call (Issue #1)
       if (isLoading) {
+        console.log('[draftPlayer] Blocked - isLoading true');
+        operationInProgress.current = false;
         return;
       }
 
       if (!draftStateId.current) {
         setError('Draft not started');
+        operationInProgress.current = false;
         return;
       }
 
       const { currentTeamId, players, mandatoryPick } = draftState;
 
-      if (!currentTeamId) return;
+      if (!currentTeamId) {
+        operationInProgress.current = false;
+        return;
+      }
 
       // Validate mandatory pick
       if (mandatoryPick && mandatoryPick.playerId !== playerId) {
         const playerName = players.find(p => p.id === mandatoryPick.playerId)?.name;
         const reason = mandatoryPick.reason === 'coach-kid' ? "coach's kid" : 'sibling requirement';
         setMandatoryPickError(`You must draft ${playerName} (${reason})`);
+        operationInProgress.current = false;
         return;
       }
 
       try {
-        operationInProgress.current = true;
         setIsLoading(true);
         const result = await api.draftPlayer({
           draftStateId: draftStateId.current,
