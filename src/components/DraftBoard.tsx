@@ -529,33 +529,76 @@ export const DraftBoard = ({
       </div>
 
       {/* Mandatory Pick Error Modal */}
-      {mandatoryPickError && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-sm w-full shadow-xl">
-            <div className="flex items-start gap-3">
-              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-yellow-100 dark:bg-yellow-900/30 flex items-center justify-center">
-                <AlertCircle className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
+      {mandatoryPickError && draftState.mandatoryPick && (() => {
+        const mandatoryPlayer = draftState.players.find(p => p.id === draftState.mandatoryPick?.playerId);
+        const reason = draftState.mandatoryPick.reason === 'coach-kid' ? "Coach's kid" : 'Sibling requirement';
+
+        return (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white dark:bg-gray-800 rounded-xl p-6 max-w-md w-full shadow-2xl">
+              {/* Header */}
+              <div className="flex items-center gap-3 mb-4">
+                <div className="flex-shrink-0 w-12 h-12 rounded-full bg-yellow-100 dark:bg-yellow-900/30 flex items-center justify-center">
+                  <AlertCircle className="w-6 h-6 text-yellow-600 dark:text-yellow-400" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-white">
+                    Mandatory Pick
+                  </h3>
+                  <p className="text-sm text-yellow-600 dark:text-yellow-400 font-medium">
+                    {reason}
+                  </p>
+                </div>
               </div>
-              <div className="flex-1">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
-                  Mandatory Pick Required
-                </h3>
-                <p className="text-gray-600 dark:text-gray-400 text-sm">
-                  {mandatoryPickError}
-                </p>
+
+              {/* Player Info */}
+              {mandatoryPlayer && (
+                <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 mb-5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-lg font-semibold text-gray-900 dark:text-white">
+                        {mandatoryPlayer.name}
+                      </p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                        BIB #{mandatoryPlayer.bib} · Age {mandatoryPlayer.littleLeagueAge} · Rank #{mandatoryPlayer.rank}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                        {mandatoryPlayer.totalScore.toFixed(1)}
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">points</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex gap-3">
+                <button
+                  onClick={onClearMandatoryPickError}
+                  className="flex-1 px-4 py-2.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg font-medium transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    if (mandatoryPlayer) {
+                      onClearMandatoryPickError?.();
+                      onDraftPlayer(mandatoryPlayer.id);
+                    }
+                  }}
+                  disabled={isLoading}
+                  className="flex-1 px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isLoading ? 'Drafting...' : 'Draft Player'}
+                  {!isLoading && <ChevronRight className="w-4 h-4" />}
+                </button>
               </div>
-            </div>
-            <div className="mt-4 flex justify-end">
-              <button
-                onClick={onClearMandatoryPickError}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
-              >
-                OK
-              </button>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Draft Complete Confirmation Modal */}
       {pendingComplete && (
