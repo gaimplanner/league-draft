@@ -5,7 +5,6 @@ import { exportToCSV } from '../utils/csvParser';
 import {
   generatePublicRosters,
   generateOfficialRecord,
-  downloadTextFile,
   downloadCSV,
   openPrintWindow,
   copyToClipboard,
@@ -102,7 +101,7 @@ export const DraftComplete = ({ draftState, division, onReset, onExecuteTrade, o
     const content = generatePublicRosters(draftState.teams, draftState.players);
     const divisionName = division?.name?.replace(/\s+/g, '-') || 'rosters';
     const timestamp = new Date().toISOString().split('T')[0];
-    downloadTextFile(content, `${divisionName}-rosters-${timestamp}.txt`);
+    downloadCSV(content, `${divisionName}-rosters-${timestamp}.csv`);
   };
 
   const handlePrintPublicRosters = () => {
@@ -131,7 +130,7 @@ export const DraftComplete = ({ draftState, division, onReset, onExecuteTrade, o
     );
     const divisionName = division?.name?.replace(/\s+/g, '-') || 'draft';
     const timestamp = new Date().toISOString().split('T')[0];
-    downloadTextFile(content, `${divisionName}-official-record-${timestamp}.txt`);
+    downloadCSV(content, `${divisionName}-official-record-${timestamp}.csv`);
   };
 
   const handlePrintOfficialRecord = () => {
@@ -213,13 +212,13 @@ export const DraftComplete = ({ draftState, division, onReset, onExecuteTrade, o
         <div className="grid md:grid-cols-2 gap-6 mb-6">
           {/* Public Rosters Export */}
           <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700">
-            <div className="flex items-center gap-3 mb-4">
-              <FileText className="w-6 h-6 text-green-600 dark:text-green-400" />
+            <div className="flex items-start gap-3 mb-4">
+              <FileText className="w-6 h-6 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
               <div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white text-left">
                   Public Rosters
                 </h3>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
+                <p className="text-sm text-gray-600 dark:text-gray-400 text-left">
                   Alphabetical player lists for families (no scores)
                 </p>
               </div>
@@ -251,13 +250,13 @@ export const DraftComplete = ({ draftState, division, onReset, onExecuteTrade, o
 
           {/* Official Record Export */}
           <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700">
-            <div className="flex items-center gap-3 mb-4">
-              <FileText className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+            <div className="flex items-start gap-3 mb-4">
+              <FileText className="w-6 h-6 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
               <div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white text-left">
                   Official Draft Record
                 </h3>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
+                <p className="text-sm text-gray-600 dark:text-gray-400 text-left">
                   Complete pick history with flags and trades
                 </p>
               </div>
