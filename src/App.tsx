@@ -1140,13 +1140,20 @@ function App() {
 
         {phase === 'complete' && (
           <div>
-            {/* Back button - separate bar above content */}
-            <div className="bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-2">
+            {/* Back buttons - separate bar above content */}
+            <div className="bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-2 flex items-center gap-4">
               <button
                 onClick={handleBackToSelector}
                 className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors text-sm flex items-center gap-1"
               >
                 ← Back to Divisions
+              </button>
+              <span className="text-gray-300 dark:text-gray-600">|</span>
+              <button
+                onClick={() => setPhase('draft')}
+                className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 transition-colors text-sm flex items-center gap-1 font-medium"
+              >
+                ← Back to Draft Board
               </button>
             </div>
             <DraftComplete
