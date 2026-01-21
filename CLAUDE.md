@@ -12,7 +12,10 @@ This file provides context for AI assistants working on this codebase.
 Top-level container. Presets: Majors (10-12), AAA (8-10), AA (7-10), Custom. Each division has its own teams, players, and draft state.
 
 ### Player
-Imported from CSV or Excel. Has skill scores, total score, rank, and flags (isCoachKid, siblingId, isAllStar, isDNE). Draft status tracked via isDrafted, draftedByTeamId, draftedInRound, draftedAtPick.
+Imported from CSV, Excel, or dual CSV flow. Has skill scores, total score, rank, and flags (isCoachKid, siblingId, isAllStar, isDNE). Draft status tracked via isDrafted, draftedByTeamId, draftedInRound, draftedAtPick.
+
+- `sibling`: Text field from CSV (display name of sibling - raw import data)
+- `siblingId`: Actual link to another player (set when siblings are confirmed/linked)
 
 ### Team
 Has name, roster (drafted players), totalScore, draftPosition, coachKids array, assistantCoaches, and ageBreakdown.
@@ -76,6 +79,9 @@ Has name, roster (drafted players), totalScore, draftPosition, coachKids array, 
 | `src/utils/passwordValidation.ts` | Client-side password validation matching Django validators |
 | `src/components/profile/*.tsx` | Profile page, member management, invitations |
 | `src/components/JoinPage.tsx` | League invitation acceptance flow |
+| `src/components/evaluation/CSVImportFlow.tsx` | Dual CSV import orchestration (upload → verify → mapping) |
+| `src/components/evaluation/DualCSVUpload.tsx` | Two-step CSV upload for eval + registration |
+| `src/components/evaluation/CSVVerificationStep.tsx` | Match/exclude/DNE player verification UI |
 
 ### Component Hierarchy
 ```
@@ -92,6 +98,9 @@ App
 ├── FileUpload → ColumnMapper (CSV flow)
 ├── EvaluationImport (Excel flow)
 │   └── PlayerSummaryTable, DetectionModal
+├── CSVImportFlow (Dual CSV flow with registration verification)
+│   ├── DualCSVUpload (upload eval + registration CSVs)
+│   └── CSVVerificationStep (match players, exclude/DNE)
 ├── PlayerReview (CSV flow)
 │   └── PlayerReviewTable (spreadsheet-style table)
 ├── DraftConfig
@@ -111,12 +120,22 @@ App
 ## Data Flow
 
 ### Import → Draft
-1. CSV/Excel uploaded and parsed
-2. Players created with scores calculated
-3. Coach's kids and siblings detected/confirmed
-4. Teams configured with names and draft order
-5. Draft started with resolvedPlayers (lockedToRound set for conflicts)
-6. Each pick updates player.isDrafted, team.roster, checks for mandatory picks
+1. CSV/Excel/Dual CSV uploaded and parsed
+2. For dual CSV: Registration verification (match players, exclude unregistered, add DNE)
+3. Column mapping (for CSV flows) - maps all columns to Player fields
+4. Players created with scores calculated
+5. Coach's kids and siblings detected/confirmed
+6. Teams configured with names and draft order
+7. Draft started with resolvedPlayers (lockedToRound set for conflicts)
+8. Each pick updates player.isDrafted, team.roster, checks for mandatory picks
+
+### Dual CSV Import Flow
+1. Upload evaluation CSV (BIB, First, Last, scores) + registration CSV (First, Last)
+2. CSVVerificationStep matches players by name (exact + fuzzy Levenshtein matching)
+3. User can exclude evaluated players not in registration (default: excluded)
+4. User can add registered players without evaluations as DNE (score 0)
+5. After verification, goes to normal column mapping flow
+6. handleMappingComplete filters excluded rows and adds DNE players
 
 ### Simulation
 Uses same logic as real draft but on cloned data. Returns SimulationResult with teams and players.

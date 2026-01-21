@@ -10,7 +10,7 @@ A comprehensive draft management system for Little League baseball divisions. St
 - Configurable age limits and max players per age group
 - Independent draft states with full persistence
 
-### Dual Import Methods
+### Three Import Methods
 
 **CSV Import:**
 - Flexible column mapping interface
@@ -22,6 +22,13 @@ A comprehensive draft management system for Little League baseball divisions. St
 - Field-level scoring weights with real-time recalculation
 - Auto-detection of coach's kids and siblings
 - Direct team name and assistant coach assignment
+
+**Dual CSV with Registration Verification:**
+- Upload evaluation CSV + registration CSV
+- Automatically matches players by name (exact and fuzzy matching)
+- Exclude evaluated players not in registration list (unpaid/unregistered)
+- Add registered players without evaluations as DNE (Did Not Evaluate) with 0 scores
+- Ensures only eligible players are included in draft
 
 ### Pre-Draft Player Review
 - Unified spreadsheet-style table view for both CSV and Excel imports
@@ -138,6 +145,8 @@ Switch between two views using the toggle bar:
 - **Multi-tenant isolation**: Users can only access their league's data
 
 ### Data Persistence
+- **Division saved immediately**: Divisions persist as soon as "Create Division" is clicked
+- Resume at any point: Close browser and return to continue where you left off
 - Automatic save after each action
 - Resume incomplete drafts
 - Division state snapshots
@@ -335,7 +344,10 @@ src/
 │   │   ├── JoinLinkSection.tsx# Shareable join link management
 │   │   ├── ProfileTab.tsx     # Edit user profile
 │   │   └── ChangePasswordModal.tsx
-│   ├── evaluation/            # Excel import components
+│   ├── evaluation/            # Import components (Excel, dual CSV)
+│   │   ├── CSVImportFlow.tsx      # Dual CSV import orchestration
+│   │   ├── DualCSVUpload.tsx      # Eval + registration CSV upload
+│   │   └── CSVVerificationStep.tsx # Match/exclude/DNE verification
 │   └── teamBuilder/           # Team Builder components
 │       ├── TeamBuilderResults.tsx  # Results with happiness indicators
 │       ├── NameMatchResolver.tsx   # Unmatched name resolution UI
