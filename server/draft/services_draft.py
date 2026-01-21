@@ -68,7 +68,11 @@ class DraftService:
         cls, draft_state_id: UUID, player_id: UUID, team_id: UUID
     ) -> DraftState:
         """Draft a player."""
+        import logging
+        logger = logging.getLogger(__name__)
+
         draft_state = DraftState.objects.select_for_update().get(id=draft_state_id)
+        logger.info(f"[draft_player] Starting pick. current_round={draft_state.current_round}, current_pick_in_round={draft_state.current_pick_in_round}, picks_so_far={draft_state.picks.count()}")
 
         if draft_state.is_draft_complete:
             raise ValueError("Draft is already complete")
@@ -314,12 +318,17 @@ class DraftService:
     @classmethod
     def _advance_to_next_pick(cls, draft_state: DraftState) -> None:
         """Advance to the next pick."""
+        import logging
+        logger = logging.getLogger(__name__)
+
         division = draft_state.division
         draft_order = draft_state.draft_order
         team_count = len(draft_order)
         roster_size = division.roster_size
         total_picks = team_count * roster_size
         current_picks = draft_state.picks.count()
+
+        logger.info(f"[_advance_to_next_pick] team_count={team_count}, roster_size={roster_size}, total_picks={total_picks}, current_picks={current_picks}")
 
         if current_picks >= total_picks:
             # Draft complete
