@@ -537,11 +537,11 @@ export const DraftBoard = ({
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-white dark:bg-gray-800 rounded-xl p-6 max-w-md w-full shadow-2xl">
               {/* Header */}
-              <div className="flex items-center gap-3 mb-4">
+              <div className="flex items-start gap-3 mb-4">
                 <div className="flex-shrink-0 w-12 h-12 rounded-full bg-yellow-100 dark:bg-yellow-900/30 flex items-center justify-center">
                   <AlertCircle className="w-6 h-6 text-yellow-600 dark:text-yellow-400" />
                 </div>
-                <div>
+                <div className="text-left">
                   <h3 className="text-xl font-bold text-gray-900 dark:text-white">
                     Mandatory Pick
                   </h3>
@@ -554,8 +554,8 @@ export const DraftBoard = ({
               {/* Player Info */}
               {mandatoryPlayer && (
                 <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 mb-5">
-                  <div className="flex items-center justify-between">
-                    <div>
+                  <div className="flex items-start justify-between">
+                    <div className="text-left">
                       <p className="text-lg font-semibold text-gray-900 dark:text-white">
                         {mandatoryPlayer.name}
                       </p>
