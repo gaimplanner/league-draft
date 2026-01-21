@@ -402,6 +402,11 @@ export const useDraft = (_divisionId?: string) => {
     setPendingComplete(false);
   }, []);
 
+  // Clear mandatory pick error
+  const clearMandatoryPickError = useCallback(() => {
+    setMandatoryPickError(null);
+  }, []);
+
   return {
     phase,
     setPhase,
@@ -423,6 +428,6 @@ export const useDraft = (_divisionId?: string) => {
     isLoading,
     error,
     mandatoryPickError,
-    clearMandatoryPickError: () => setMandatoryPickError(null),
+    clearMandatoryPickError,
   };
 };
