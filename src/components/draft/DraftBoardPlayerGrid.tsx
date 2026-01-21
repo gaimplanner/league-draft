@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Search, X, ChevronDown, ChevronUp, Lock } from 'lucide-react';
+import { Search, X, ChevronDown, ChevronUp, Lock, Users } from 'lucide-react';
 import { Player, Team } from '../../types';
 import { getTeamDisplayName } from '../../utils/teamUtils';
 
@@ -21,7 +21,7 @@ interface DraftBoardPlayerGridProps {
   isPublicView: boolean;
 }
 
-type SortField = 'rank' | 'bib' | 'name' | 'age' | 'school' | 'round' | 'fielding' | 'hitting' | 'pitching' | 'catch' | 'running' | 'total';
+type SortField = 'rank' | 'bib' | 'name' | 'age' | 'school' | 'allstar' | 'sibling' | 'team' | 'draftedRound' | 'round' | 'fielding' | 'hitting' | 'pitching' | 'catch' | 'running' | 'total';
 type SortDirection = 'asc' | 'desc';
 
 export const DraftBoardPlayerGrid = ({
@@ -40,21 +40,48 @@ export const DraftBoardPlayerGrid = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [sortField, setSortField] = useState<SortField>('rank');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const [showAllPlayers, setShowAllPlayers] = useState(false);
 
-  // Filter available (undrafted) players
-  const availablePlayers = useMemo(() => {
+  // Filter players based on showAllPlayers toggle
+  const filteredPlayers = useMemo(() => {
     return players
-      .filter((p) => !p.isDrafted)
+      .filter((p) => showAllPlayers || !p.isDrafted)
       .filter((p) =>
         searchTerm === '' ||
         p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         p.bib.toLowerCase().includes(searchTerm.toLowerCase())
       );
-  }, [players, searchTerm]);
+  }, [players, searchTerm, showAllPlayers]);
+
+  // Helper to get team name for a player
+  const getPlayerTeamName = (player: Player): string | null => {
+    // If drafted, show the team that drafted them
+    if (player.isDrafted && player.draftedByTeamId) {
+      const team = teams.find(t => t.id === player.draftedByTeamId);
+      return team ? getTeamDisplayName(team) : null;
+    }
+    // If locked (coach's kid or sibling), show locked team
+    if (player.isCoachKid && player.coachTeamId) {
+      const team = teams.find(t => t.id === player.coachTeamId);
+      return team ? getTeamDisplayName(team) : null;
+    }
+    if (player.lockedToTeamId) {
+      const team = teams.find(t => t.id === player.lockedToTeamId);
+      return team ? getTeamDisplayName(team) : null;
+    }
+    return null;
+  };
+
+  // Helper to get sibling BIB
+  const getSiblingBib = (player: Player): string | null => {
+    if (!player.siblingId) return null;
+    const sibling = players.find(p => p.id === player.siblingId);
+    return sibling ? sibling.bib : null;
+  };
 
   // Sort players
   const sortedPlayers = useMemo(() => {
-    return [...availablePlayers].sort((a, b) => {
+    return [...filteredPlayers].sort((a, b) => {
       let aVal: number | string = 0;
       let bVal: number | string = 0;
 
@@ -78,6 +105,22 @@ export const DraftBoardPlayerGrid = ({
         case 'school':
           aVal = a.school || '';
           bVal = b.school || '';
+          break;
+        case 'allstar':
+          aVal = a.isAllStar ? 1 : 0;
+          bVal = b.isAllStar ? 1 : 0;
+          break;
+        case 'sibling':
+          aVal = getSiblingBib(a) || 'zzz';
+          bVal = getSiblingBib(b) || 'zzz';
+          break;
+        case 'team':
+          aVal = getPlayerTeamName(a) || 'zzz';
+          bVal = getPlayerTeamName(b) || 'zzz';
+          break;
+        case 'draftedRound':
+          aVal = a.draftedInRound ?? 999;
+          bVal = b.draftedInRound ?? 999;
           break;
         case 'round':
           aVal = a.lockedToRound ?? a.projectedRound;
@@ -119,7 +162,7 @@ export const DraftBoardPlayerGrid = ({
         ? (aVal as number) - (bVal as number)
         : (bVal as number) - (aVal as number);
     });
-  }, [availablePlayers, sortField, sortDirection]);
+  }, [filteredPlayers, sortField, sortDirection, teams, players]);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -127,7 +170,7 @@ export const DraftBoardPlayerGrid = ({
     } else {
       setSortField(field);
       // Default to descending for score fields, ascending for others
-      const scoreFields: SortField[] = ['fielding', 'hitting', 'pitching', 'catch', 'running', 'total'];
+      const scoreFields: SortField[] = ['fielding', 'hitting', 'pitching', 'catch', 'running', 'total', 'allstar'];
       setSortDirection(scoreFields.includes(field) ? 'desc' : 'asc');
     }
   };
@@ -143,6 +186,9 @@ export const DraftBoardPlayerGrid = ({
   );
 
   const isPlayerRestricted = (player: Player) => {
+    // Already drafted
+    if (player.isDrafted) return true;
+
     // Coach's kid for another team
     const isCoachKidForOtherTeam = player.isCoachKid &&
       player.coachTeamId &&
@@ -157,6 +203,7 @@ export const DraftBoardPlayerGrid = ({
 
   const isPlayerAgeMaxed = (player: Player) => {
     if (!enforceAgeLimit || maxPerAge <= 0) return false;
+    if (player.isDrafted) return false;
     const currentCount = currentTeamAgeBreakdown[player.littleLeagueAge] || 0;
     return currentCount >= maxPerAge;
   };
@@ -173,25 +220,16 @@ export const DraftBoardPlayerGrid = ({
     onDraftPlayer(player.id);
   };
 
-  const getLockedTeamName = (player: Player): string | null => {
-    if (player.isCoachKid && player.coachTeamId) {
-      const team = teams.find(t => t.id === player.coachTeamId);
-      return team ? getTeamDisplayName(team) : null;
-    }
-    if (player.lockedToTeamId) {
-      const team = teams.find(t => t.id === player.lockedToTeamId);
-      return team ? getTeamDisplayName(team) : null;
-    }
-    return null;
-  };
-
   // Calculate column count for empty state
   const getColumnCount = () => {
-    let count = 8; // rank, bib, name, age, school, round, flags, action
+    let count = 11; // proj, rank, bib, allstar, name, age, school, team, flags, sibling, action
+    if (showAllPlayers) count += 1; // drafted round column
     if (showScores) count += 6; // F, H, P, C, R, Total
     if (isPublicView) count -= 1; // no action column
     return count;
   };
+
+  const availableCount = players.filter(p => !p.isDrafted).length;
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
@@ -216,8 +254,26 @@ export const DraftBoardPlayerGrid = ({
               </button>
             )}
           </div>
+
+          {/* Show All Toggle */}
+          <button
+            onClick={() => setShowAllPlayers(!showAllPlayers)}
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+              showAllPlayers
+                ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
+            }`}
+            title={showAllPlayers ? 'Showing all players' : 'Showing available only'}
+          >
+            <Users className="w-4 h-4" />
+            <span className="hidden sm:inline">{showAllPlayers ? 'All Players' : 'Available Only'}</span>
+          </button>
+
           <span className="text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
-            {sortedPlayers.length} available
+            {showAllPlayers
+              ? `${sortedPlayers.length} players (${availableCount} available)`
+              : `${sortedPlayers.length} available`
+            }
           </span>
         </div>
       </div>
@@ -232,8 +288,17 @@ export const DraftBoardPlayerGrid = ({
                 className="px-2 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-300 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 w-16"
                 title="Projected Round"
               >
-                Proj. Rnd<SortIndicator field="round" />
+                Proj<SortIndicator field="round" />
               </th>
+              {showAllPlayers && (
+                <th
+                  onClick={() => handleSort('draftedRound')}
+                  className="px-2 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-300 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 w-14"
+                  title="Round Drafted"
+                >
+                  Drafted<SortIndicator field="draftedRound" />
+                </th>
+              )}
               <th
                 onClick={() => handleSort('rank')}
                 className="px-2 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-300 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 w-14"
@@ -245,6 +310,13 @@ export const DraftBoardPlayerGrid = ({
                 className="px-2 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-300 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 w-14"
               >
                 BIB<SortIndicator field="bib" />
+              </th>
+              <th
+                onClick={() => handleSort('allstar')}
+                className="px-1 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-300 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 w-8"
+                title="All-Star"
+              >
+                <span>⭐</span><SortIndicator field="allstar" />
               </th>
               <th
                 onClick={() => handleSort('name')}
@@ -263,6 +335,12 @@ export const DraftBoardPlayerGrid = ({
                 className="px-2 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 w-24"
               >
                 School<SortIndicator field="school" />
+              </th>
+              <th
+                onClick={() => handleSort('team')}
+                className="px-2 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 w-24"
+              >
+                Team<SortIndicator field="team" />
               </th>
               {showScores && (
                 <>
@@ -309,8 +387,15 @@ export const DraftBoardPlayerGrid = ({
                   </th>
                 </>
               )}
-              <th className="px-2 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-300 w-28">
+              <th className="px-2 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-300 w-16">
                 Flags
+              </th>
+              <th
+                onClick={() => handleSort('sibling')}
+                className="px-2 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-300 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 w-14"
+                title="Sibling BIB"
+              >
+                Sib<SortIndicator field="sibling" />
               </th>
               {!isPublicView && (
                 <th className="px-2 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-300 w-16">
@@ -323,21 +408,27 @@ export const DraftBoardPlayerGrid = ({
             {sortedPlayers.map((player) => {
               const isMandatory = mandatoryPick?.playerId === player.id;
               const isRestricted = isPlayerRestricted(player);
-              const isAgeMaxed = isPlayerAgeMaxed(player) && !isRestricted;
-              const lockedTeamName = getLockedTeamName(player);
+              const isAgeMaxed = isPlayerAgeMaxed(player);
+              const teamName = getPlayerTeamName(player);
+              const siblingBib = getSiblingBib(player);
               const effectiveRound = player.lockedToRound ?? player.projectedRound;
               const hasRoundOverride = player.lockedToRound && player.lockedToRound !== player.projectedRound;
+              const isLockedToTeam = (player.isCoachKid && player.coachTeamId) || player.lockedToTeamId;
+              const isLockedToOtherTeam = isLockedToTeam && !player.isDrafted &&
+                ((player.isCoachKid && player.coachTeamId !== currentTeamId) ||
+                 (player.lockedToTeamId && player.lockedToTeamId !== currentTeamId));
 
               return (
                 <tr
                   key={player.id}
                   className={`
                     hover:bg-gray-50 dark:hover:bg-gray-700/50
-                    ${isRestricted ? 'opacity-50 bg-red-50/50 dark:bg-red-900/10' : ''}
-                    ${isMandatory && !isPublicView ? 'bg-yellow-50 dark:bg-yellow-900/20' : ''}
+                    ${player.isDrafted ? 'opacity-50 bg-gray-100 dark:bg-gray-800' : ''}
+                    ${isLockedToOtherTeam && !player.isDrafted ? 'opacity-50 bg-red-50/50 dark:bg-red-900/10' : ''}
+                    ${isMandatory && !isPublicView && !player.isDrafted ? 'bg-yellow-50 dark:bg-yellow-900/20' : ''}
                   `}
                 >
-                  {/* Round */}
+                  {/* Projected Round */}
                   <td className="px-2 py-1.5 text-center">
                     <span className={`tabular-nums ${
                       hasRoundOverride
@@ -349,6 +440,19 @@ export const DraftBoardPlayerGrid = ({
                     </span>
                   </td>
 
+                  {/* Drafted Round (only when showing all players) */}
+                  {showAllPlayers && (
+                    <td className="px-2 py-1.5 text-center">
+                      {player.isDrafted && player.draftedInRound ? (
+                        <span className="text-xs text-gray-600 dark:text-gray-400 font-medium">
+                          R{player.draftedInRound}
+                        </span>
+                      ) : (
+                        <span className="text-gray-300 dark:text-gray-600">-</span>
+                      )}
+                    </td>
+                  )}
+
                   {/* Rank */}
                   <td className="px-2 py-1.5 text-center text-gray-500 dark:text-gray-400 tabular-nums font-medium">
                     {player.rank}
@@ -359,6 +463,11 @@ export const DraftBoardPlayerGrid = ({
                     <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 px-1.5 py-0.5 rounded font-mono">
                       {player.bib}
                     </span>
+                  </td>
+
+                  {/* All-Star */}
+                  <td className="px-1 py-1.5 text-center">
+                    {player.isAllStar && <span title="All-Star">⭐</span>}
                   </td>
 
                   {/* Name */}
@@ -380,6 +489,27 @@ export const DraftBoardPlayerGrid = ({
                   {/* School */}
                   <td className="px-2 py-1.5 text-left text-gray-500 dark:text-gray-400 text-xs truncate max-w-[6rem]" title={player.school || undefined}>
                     {player.school || '-'}
+                  </td>
+
+                  {/* Team */}
+                  <td className="px-2 py-1.5 text-left">
+                    {teamName ? (
+                      <span
+                        className={`inline-flex items-center gap-0.5 text-xs font-medium truncate max-w-[5.5rem] ${
+                          player.isDrafted
+                            ? 'text-gray-600 dark:text-gray-400'
+                            : isLockedToOtherTeam
+                            ? 'text-red-600 dark:text-red-400'
+                            : 'text-blue-600 dark:text-blue-400'
+                        }`}
+                        title={player.isDrafted ? `Drafted by ${teamName}` : (player.isCoachKid ? `Coach's Kid (${teamName})` : `Locked to ${teamName}`)}
+                      >
+                        {!player.isDrafted && isLockedToTeam && <Lock className="w-2.5 h-2.5 flex-shrink-0" />}
+                        <span className="truncate">{teamName}</span>
+                      </span>
+                    ) : (
+                      <span className="text-gray-300 dark:text-gray-600">-</span>
+                    )}
                   </td>
 
                   {/* Score Columns */}
@@ -418,58 +548,9 @@ export const DraftBoardPlayerGrid = ({
                     </>
                   )}
 
-                  {/* Flags */}
+                  {/* Flags (DNE, SIB, Age Warning) */}
                   <td className="px-2 py-1.5">
                     <div className="flex items-center justify-center gap-1 flex-wrap">
-                      {/* Locked to team (coach's kid or sibling) - unified lock treatment */}
-                      {lockedTeamName ? (
-                        <span
-                          className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-semibold rounded ${
-                            isRestricted
-                              ? 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200'
-                              : 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200'
-                          }`}
-                          title={player.isCoachKid
-                            ? `Coach's Kid (${lockedTeamName})`
-                            : `Sibling locked to ${lockedTeamName}`}
-                        >
-                          <Lock className="w-2.5 h-2.5" />
-                          <span className="max-w-[60px] truncate">{lockedTeamName}</span>
-                        </span>
-                      ) : (
-                        <>
-                          {/* Coach's Kid without team assignment */}
-                          {player.isCoachKid && (
-                            <span
-                              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200"
-                              title="Coach's Kid (unassigned)"
-                            >
-                              <Lock className="w-2.5 h-2.5" />
-                            </span>
-                          )}
-
-                          {/* Sibling - only show if actually linked (siblingId set) */}
-                          {player.siblingId && (
-                            <span
-                              className="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200"
-                              title={`Sibling: ${player.sibling || 'linked'}`}
-                            >
-                              SIB
-                            </span>
-                          )}
-                        </>
-                      )}
-
-                      {/* All-Star */}
-                      {player.isAllStar && (
-                        <span
-                          className="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200"
-                          title="All-Star"
-                        >
-                          AS
-                        </span>
-                      )}
-
                       {/* DNE */}
                       {player.isDNE && (
                         <span
@@ -477,6 +558,16 @@ export const DraftBoardPlayerGrid = ({
                           title="Did Not Evaluate"
                         >
                           DNE
+                        </span>
+                      )}
+
+                      {/* Sibling badge */}
+                      {player.siblingId && (
+                        <span
+                          className="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200"
+                          title={`Sibling: ${player.sibling || 'linked'}`}
+                        >
+                          SIB
                         </span>
                       )}
 
@@ -490,6 +581,17 @@ export const DraftBoardPlayerGrid = ({
                         </span>
                       )}
                     </div>
+                  </td>
+
+                  {/* Sibling BIB */}
+                  <td className="px-2 py-1.5 text-center">
+                    {siblingBib ? (
+                      <span className="text-xs text-purple-600 dark:text-purple-400 font-medium" title={`Sibling: ${player.sibling || 'linked'}`}>
+                        {siblingBib}
+                      </span>
+                    ) : (
+                      <span className="text-gray-300 dark:text-gray-600">-</span>
+                    )}
                   </td>
 
                   {/* Action */}
@@ -532,15 +634,15 @@ export const DraftBoardPlayerGrid = ({
         <div className="flex items-center gap-4 text-[10px] text-gray-500 dark:text-gray-400 flex-wrap">
           <div className="flex items-center gap-1">
             <Lock className="w-3 h-3" />
-            <span>= Coach's Kid</span>
+            <span>= Locked to team</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <span>⭐</span>
+            <span>= All-Star</span>
           </div>
           <div className="flex items-center gap-1">
             <span className="px-1 py-0.5 bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 rounded font-semibold">SIB</span>
             <span>= Sibling</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <span className="px-1 py-0.5 bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 rounded font-semibold">AS</span>
-            <span>= All-Star</span>
           </div>
           <div className="flex items-center gap-1">
             <span className="px-1 py-0.5 bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200 rounded font-semibold">DNE</span>
