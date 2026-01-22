@@ -1521,15 +1521,18 @@ export interface SkillTieredDraftConfig {
   forceEvenTeams: boolean;         // If true, teams differ by at most 1 player
 
   // Request weights for tiebreaking within skill tier
+  // Goal: Every player with requests should have at least 1 satisfied
   twoWayTeammateWeight: number;    // Weight for two-way friend requests (default: 100)
   oneWayTeammateWeight: number;    // Weight for one-way friend requests (default: 50)
-  coachRequestWeight: number;      // Weight for coach requests (default: 30)
-  schoolSameGradeWeight: number;   // Weight for school + same grade (default: 20)
-  schoolDiffGradeWeight: number;   // Weight for school only (default: 10)
+  coachRequestWeight: number;      // Weight for coach requests (default: 50, same as teammate for happiness)
 
-  // Deferral settings
+  // School clustering - secondary signal only, NOT counted for happiness
+  schoolSameGradeWeight: number;   // Weight for school + same grade (default: 5)
+  schoolDiffGradeWeight: number;   // Weight for school only (default: 2)
+
+  // Deferral settings - defer players who have requests satisfiable elsewhere
   enableDeferral: boolean;         // Allow deferring players who can be happy elsewhere
-  deferralThreshold: number;       // Min request score on another team to defer (default: 50)
+  deferralThreshold: number;       // Min request score on another team to defer (default: 30)
 
   // Balance settings
   maxAutoTrades: number;           // Max number of suggested trades
@@ -1541,11 +1544,11 @@ export const DEFAULT_SKILL_TIERED_CONFIG: SkillTieredDraftConfig = {
   forceEvenTeams: false,
   twoWayTeammateWeight: 100,
   oneWayTeammateWeight: 50,
-  coachRequestWeight: 30,
-  schoolSameGradeWeight: 20,
-  schoolDiffGradeWeight: 10,
+  coachRequestWeight: 50,          // Same as one-way teammate (both count equally for happiness)
+  schoolSameGradeWeight: 5,        // Low weight - secondary tiebreaker only
+  schoolDiffGradeWeight: 2,        // Very low weight - minimal influence
   enableDeferral: true,
-  deferralThreshold: 50,
+  deferralThreshold: 30,           // Lower threshold - defer if any request can be satisfied
   maxAutoTrades: 10,
 };
 
@@ -1722,15 +1725,13 @@ export function runSkillTieredDraft(
     }
   };
 
-  // Helper: calculate request tiebreak score for a player on a given team
-  const calculateTiebreakScore = (
+  // Helper: calculate REQUEST score for a player on a given team (coach + teammate requests)
+  // This is what counts for happiness - at least 1 request satisfied
+  const calculateRequestScore = (
     playerId: string,
     teamId: string,
     team: TeamBuilderTeam
   ): number => {
-    const player = playerMap.get(playerId);
-    if (!player) return 0;
-
     const requests = playerRequests.get(playerId) || [];
     let score = 0;
 
@@ -1751,29 +1752,64 @@ export function runSkillTieredDraft(
       }
     }
 
-    // School clustering bonus
-    if (player.school) {
-      for (const assignedId of team.assignedPlayerIds) {
-        const teammate = playerMap.get(assignedId);
-        if (teammate?.school?.toLowerCase() === player.school.toLowerCase()) {
-          if (teammate.grade && player.grade && teammate.grade === player.grade) {
-            score += fullConfig.schoolSameGradeWeight;
-          } else {
-            score += fullConfig.schoolDiffGradeWeight;
-          }
-        }
-      }
-    }
-
     return score;
   };
 
-  // Helper: check if player could be happy on another team (for deferral)
+  // Helper: calculate SCHOOL score (secondary tiebreaker, NOT for happiness)
+  const calculateSchoolScore = (
+    playerId: string,
+    team: TeamBuilderTeam
+  ): number => {
+    const player = playerMap.get(playerId);
+    if (!player?.school) return 0;
+
+    let score = 0;
+    for (const assignedId of team.assignedPlayerIds) {
+      const teammate = playerMap.get(assignedId);
+      if (teammate?.school?.toLowerCase() === player.school.toLowerCase()) {
+        if (teammate.grade && player.grade && teammate.grade === player.grade) {
+          score += fullConfig.schoolSameGradeWeight;
+        } else {
+          score += fullConfig.schoolDiffGradeWeight;
+        }
+      }
+    }
+    return score;
+  };
+
+  // Helper: check if player has any requests (coach or teammate)
+  const playerHasRequests = (playerId: string): boolean => {
+    const requests = playerRequests.get(playerId) || [];
+    return requests.some(r =>
+      (r.status === 'auto-confirmed' || r.status === 'user-confirmed') &&
+      r.resolvedTargetId
+    );
+  };
+
+  // Helper: combined tiebreak score (requests + school as secondary)
+  const calculateTiebreakScore = (
+    playerId: string,
+    teamId: string,
+    team: TeamBuilderTeam
+  ): number => {
+    const requestScore = calculateRequestScore(playerId, teamId, team);
+    const schoolScore = calculateSchoolScore(playerId, team);
+    // Request score is primary, school is secondary tiebreaker
+    return requestScore + schoolScore;
+  };
+
+  // Helper: check if player could satisfy a REQUEST on another team (for deferral)
+  // Only considers coach/teammate requests, NOT school clustering
   const canBeHappyElsewhere = (
     playerId: string,
     currentTeamId: string
   ): { canDefer: boolean; bestAlternateTeamId?: string; bestScore?: number } => {
     if (!fullConfig.enableDeferral) {
+      return { canDefer: false };
+    }
+
+    // Only defer players who have requests
+    if (!playerHasRequests(playerId)) {
       return { canDefer: false };
     }
 
@@ -1784,7 +1820,8 @@ export function runSkillTieredDraft(
       if (team.id === currentTeamId) continue;
       if (!canAcceptPlayer(team)) continue;
 
-      const score = calculateTiebreakScore(playerId, team.id, team);
+      // Use REQUEST score only (not school) for deferral decision
+      const score = calculateRequestScore(playerId, team.id, team);
       if (score > bestScore) {
         bestScore = score;
         bestTeamId = team.id;
@@ -1950,45 +1987,69 @@ export function runSkillTieredDraft(
         continue;
       }
 
-      // Score each eligible player by tiebreak score on this team
+      // Score each eligible player - separate request score from school score
       const scoredPlayers = eligiblePlayers.map(p => ({
         player: p,
+        hasRequests: playerHasRequests(p.id),
+        requestScore: calculateRequestScore(p.id, teamId, team),
+        schoolScore: calculateSchoolScore(p.id, team),
         tiebreakScore: calculateTiebreakScore(p.id, teamId, team),
       }));
 
-      // Sort by tiebreak score (descending), then by totalScore (descending) as final tiebreaker
+      // Sort priority:
+      // 1. Players with requests who can be satisfied HERE (requestScore > 0)
+      // 2. Players with no requests (balance picks)
+      // 3. Players with requests but can't be satisfied here (will be deferred)
+      // Within each group, sort by requestScore, then schoolScore, then totalScore
       scoredPlayers.sort((a, b) => {
-        const scoreDiff = b.tiebreakScore - a.tiebreakScore;
-        if (Math.abs(scoreDiff) < 0.01) {
-          return b.player.totalScore - a.player.totalScore;
+        // First: prioritize players with satisfiable requests on THIS team
+        const aCanBeSatisfied = a.hasRequests && a.requestScore > 0;
+        const bCanBeSatisfied = b.hasRequests && b.requestScore > 0;
+        if (aCanBeSatisfied && !bCanBeSatisfied) return -1;
+        if (!aCanBeSatisfied && bCanBeSatisfied) return 1;
+
+        // Second: players without requests come before players with unsatisfiable requests
+        if (!a.hasRequests && b.hasRequests && b.requestScore === 0) return -1;
+        if (!b.hasRequests && a.hasRequests && a.requestScore === 0) return 1;
+
+        // Within same priority tier: sort by request score (descending)
+        if (Math.abs(a.requestScore - b.requestScore) > 0.01) {
+          return b.requestScore - a.requestScore;
         }
-        return scoreDiff;
+
+        // Then by school score (secondary tiebreaker)
+        if (Math.abs(a.schoolScore - b.schoolScore) > 0.01) {
+          return b.schoolScore - a.schoolScore;
+        }
+
+        // Finally by total skill score
+        return b.player.totalScore - a.player.totalScore;
       });
 
       // Try to pick the best player
       let picked = false;
-      for (const { player, tiebreakScore } of scoredPlayers) {
-        // Check for deferral (unless we must pick now for minimum)
-        if (!mustPickNow && tiebreakScore === 0 && fullConfig.enableDeferral) {
-          const { canDefer, bestScore } = canBeHappyElsewhere(player.id, teamId);
-          if (canDefer && bestScore !== undefined && bestScore >= fullConfig.deferralThreshold) {
-            // Defer this player - they can be happier elsewhere
+      for (const { player, hasRequests, requestScore, tiebreakScore } of scoredPlayers) {
+        // Check for deferral: only defer if player has requests AND can't be satisfied here
+        // but CAN be satisfied elsewhere
+        if (!mustPickNow && hasRequests && requestScore === 0 && fullConfig.enableDeferral) {
+          const { canDefer } = canBeHappyElsewhere(player.id, teamId);
+          if (canDefer) {
+            // Defer this player - they have requests satisfiable elsewhere
             deferredThisRound.add(player.id);
             continue;
           }
         }
 
-        // Determine reason
+        // Determine reason based on REQUEST score (not school)
         let reason: AssignmentReason = 'balance';
-        if (tiebreakScore >= fullConfig.twoWayTeammateWeight) {
+        if (requestScore >= fullConfig.twoWayTeammateWeight) {
           reason = 'two-way-friend';
-        } else if (tiebreakScore >= fullConfig.oneWayTeammateWeight) {
+        } else if (requestScore >= fullConfig.oneWayTeammateWeight) {
           reason = 'one-way-friend';
-        } else if (tiebreakScore >= fullConfig.coachRequestWeight) {
+        } else if (requestScore >= fullConfig.coachRequestWeight) {
           reason = 'coach-request';
-        } else if (tiebreakScore >= fullConfig.schoolSameGradeWeight) {
-          reason = 'school-cluster';
         }
+        // Note: school-cluster is no longer used as a reason since it doesn't count for happiness
 
         const wasDeferred = deferredThisRound.has(player.id);
         const pickInRound = getNextPickInRound(round);
@@ -2165,29 +2226,16 @@ export function runSkillTieredDraft(
 
     // Calculate happiness score
     // Coach request counts the same as a teammate request for happiness
+    // School clustering does NOT count for happiness - only coach/teammate requests
     let score: HappinessScore;
     const totalRequests = teammateRequestsTotal + (hasCoachRequest ? 1 : 0);
     const totalHonored = teammateRequestsHonored + (coachRequestHonored ? 1 : 0);
 
-    // Check for school clustering bonus (partial happiness)
-    let hasSchoolBonus = false;
-    if (player.school) {
-      for (const assignedId of team.assignedPlayerIds) {
-        if (assignedId === player.id) continue;
-        const teammate = playerMap.get(assignedId);
-        if (teammate?.school?.toLowerCase() === player.school.toLowerCase() &&
-            teammate.grade && player.grade && teammate.grade === player.grade) {
-          hasSchoolBonus = true;
-          break;
-        }
-      }
-    }
-
     if (totalRequests === 0) {
-      score = hasSchoolBonus ? 'some' : 'no-requests';
+      score = 'no-requests';
     } else if (totalHonored === totalRequests) {
       score = 'all';
-    } else if (totalHonored > 0 || hasSchoolBonus) {
+    } else if (totalHonored > 0) {
       score = 'some';
     } else {
       score = 'none';
