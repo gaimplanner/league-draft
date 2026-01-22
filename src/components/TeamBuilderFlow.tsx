@@ -839,6 +839,15 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
       };
     });
 
+    // Debug logging for testing
+    console.log('=== Algorithm Run Debug ===');
+    console.log('evalPlayers:', evalPlayers.length);
+    console.log('teams:', teams.length);
+    console.log('registrationPlayers:', registrationPlayers.length);
+    console.log('resolvedRequests:', resolvedRequests.length);
+    console.log('normalizationResult:', normalizationResult ? 'present' : 'null');
+    console.log('algorithmMode:', algorithmMode);
+
     if (algorithmMode === 'skill-tiered') {
       // Run skill-tiered draft algorithm (simulates real draft)
       const result = runSkillTieredDraft(
@@ -1014,21 +1023,87 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
 
   const handleRerun = useCallback(() => {
     // Go back to configure step so user can adjust algorithm settings before re-running
-    setStep('configure');
     setAlgorithmResult(null);
     // Clear final results so algorithm runs fresh
     setFinalPlayers([]);
     setFinalTeams([]);
-  }, []);
+
+    // If resolvedRequests is empty but players have request data, rebuild it
+    if (resolvedRequests.length === 0 && evalPlayers.some(p => p.coachRequest || (p.teammateRequests && p.teammateRequests.length > 0))) {
+      console.log('Rebuilding resolvedRequests from player data...');
+
+      // Build coach info from teams
+      const coachInfos: CoachInfo[] = teams.map(t => ({
+        teamId: t.id,
+        teamName: t.teamName || t.headCoach,
+        coachName: t.headCoach,
+        assistantCoach: t.assistantCoach,
+      }));
+
+      // Build player data for normalization from stored evalPlayers
+      const playersForNormalization = evalPlayers.map(p => ({
+        id: p.id,
+        bib: p.bib,
+        firstName: p.firstName,
+        lastName: p.lastName,
+        coachRequest: p.coachRequest,
+        teammateRequests: p.teammateRequests,
+        school: p.school,
+      }));
+
+      const normResult = normalizeRequestData(playersForNormalization, coachInfos);
+      setNormalizationResult(normResult);
+
+      const preparedRequests = prepareRequestsForConfirmation(normResult, requestsFirstConfig);
+      setResolvedRequests(preparedRequests);
+
+      console.log(`Rebuilt ${preparedRequests.length} requests from player data`);
+    }
+
+    setStep('configure');
+  }, [resolvedRequests, evalPlayers, teams, requestsFirstConfig]);
 
   // Quick re-run that skips configure and runs algorithm immediately with current settings
   const handleQuickRerun = useCallback(() => {
     setAlgorithmResult(null);
     setFinalPlayers([]);
     setFinalTeams([]);
+
+    // If resolvedRequests is empty but players have request data, rebuild it
+    if (resolvedRequests.length === 0 && evalPlayers.some(p => p.coachRequest || (p.teammateRequests && p.teammateRequests.length > 0))) {
+      console.log('Rebuilding resolvedRequests from player data...');
+
+      // Build coach info from teams
+      const coachInfos: CoachInfo[] = teams.map(t => ({
+        teamId: t.id,
+        teamName: t.teamName || t.headCoach,
+        coachName: t.headCoach,
+        assistantCoach: t.assistantCoach,
+      }));
+
+      // Build player data for normalization from stored evalPlayers
+      const playersForNormalization = evalPlayers.map(p => ({
+        id: p.id,
+        bib: p.bib,
+        firstName: p.firstName,
+        lastName: p.lastName,
+        coachRequest: p.coachRequest,
+        teammateRequests: p.teammateRequests,
+        school: p.school,
+      }));
+
+      const normResult = normalizeRequestData(playersForNormalization, coachInfos);
+      setNormalizationResult(normResult);
+
+      const preparedRequests = prepareRequestsForConfirmation(normResult, requestsFirstConfig);
+      setResolvedRequests(preparedRequests);
+
+      console.log(`Rebuilt ${preparedRequests.length} requests from player data`);
+    }
+
     // Go to generate step which shows the run button
     setStep('generate');
-  }, []);
+  }, [resolvedRequests, evalPlayers, teams, requestsFirstConfig]);
 
   const handleFinalize = useCallback(() => {
     if (onComplete && algorithmResult) {

@@ -28,8 +28,13 @@ export async function parseExcelFile(file: File): Promise<ImportedWorkbook> {
         for (const sheetName of workbook.SheetNames) {
           const sheet = workbook.Sheets[sheetName];
 
-          // Check for Registration Data tab
-          if (sheetName.toLowerCase() === 'registration data') {
+          // Check for Registration Data tab (flexible matching)
+          const sheetNameLower = sheetName.toLowerCase();
+          if (sheetNameLower === 'registration data' ||
+              sheetNameLower === 'registration' ||
+              sheetNameLower === 'reg data' ||
+              sheetNameLower.includes('registration')) {
+            console.log(`Found registration tab: "${sheetName}"`);
             registrationData = parseRegistrationDataSheet(sheet);
             continue;
           }
