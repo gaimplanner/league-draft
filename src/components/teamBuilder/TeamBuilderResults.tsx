@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import {
   AlertTriangle,
   ChevronDown,
@@ -19,12 +19,14 @@ import {
 } from '../../utils/teamBuilderAlgorithm';
 import { Player } from '../../types';
 import { generateHappinessReportCSV, downloadCSV, HappinessReportPlayer } from '../../utils/exports';
+import { PlayerDetailDrawer } from './PlayerDetailDrawer';
 
 interface TeamBuilderResultsProps {
   result: TeamBuilderResult;
   players: Player[];
   onRerun?: () => void;
   onSwap?: (player1Id: string, player2Id: string) => void;
+  onMovePlayer?: (playerId: string, toTeamId: string) => void;
 }
 
 /**
@@ -35,12 +37,35 @@ export const TeamBuilderResults = ({
   result,
   players,
   onRerun,
+  onSwap,
+  onMovePlayer,
 }: TeamBuilderResultsProps) => {
   const [expandedTeamId, setExpandedTeamId] = useState<string | null>(null);
   const [view, setView] = useState<'teams' | 'players' | 'stats'>('teams');
   const [playerSearch, setPlayerSearch] = useState('');
+  const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
 
   const playerMap = new Map(players.map(p => [p.id, p]));
+
+  // Get selected player details for drawer
+  const selectedPlayer = selectedPlayerId ? playerMap.get(selectedPlayerId) : null;
+  const selectedPlayerHappiness = selectedPlayerId
+    ? result.playerHappiness.find(h => h.playerId === selectedPlayerId)
+    : null;
+  const selectedPlayerAssignment = selectedPlayerId
+    ? result.assignments.find(a => a.playerId === selectedPlayerId)
+    : null;
+  const selectedPlayerTeam = selectedPlayerAssignment
+    ? result.teamSummaries.find(t => t.teamId === selectedPlayerAssignment.teamId)
+    : null;
+
+  const handleCloseDrawer = useCallback(() => {
+    setSelectedPlayerId(null);
+  }, []);
+
+  const handlePlayerClick = useCallback((playerId: string) => {
+    setSelectedPlayerId(playerId);
+  }, []);
 
   const toggleTeam = (teamId: string) => {
     setExpandedTeamId(expandedTeamId === teamId ? null : teamId);
@@ -346,7 +371,11 @@ export const TeamBuilderResults = ({
                           const coachRequestGranted = happiness.coachRequestHonored === true;
 
                           return (
-                            <tr key={player.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
+                            <tr
+                              key={player.id}
+                              onClick={() => handlePlayerClick(player.id)}
+                              className="hover:bg-gray-50 dark:hover:bg-gray-700/30 cursor-pointer"
+                            >
                               <td className="px-4 py-2 text-gray-600 dark:text-gray-400">
                                 {assignment.round}.{assignment.pick}
                               </td>
@@ -526,7 +555,11 @@ export const TeamBuilderResults = ({
                   }
 
                   return (
-                    <tr key={happiness.playerId} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
+                    <tr
+                      key={happiness.playerId}
+                      onClick={() => handlePlayerClick(happiness.playerId)}
+                      className="hover:bg-gray-50 dark:hover:bg-gray-700/30 cursor-pointer"
+                    >
                       <td className="px-4 py-3 text-gray-900 dark:text-white">
                         {player.name}
                       </td>
@@ -714,6 +747,20 @@ export const TeamBuilderResults = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Player Detail Drawer */}
+      {selectedPlayer && selectedPlayerHappiness && selectedPlayerTeam && (
+        <PlayerDetailDrawer
+          player={selectedPlayer}
+          happiness={selectedPlayerHappiness}
+          currentTeam={selectedPlayerTeam}
+          result={result}
+          allPlayers={players}
+          onClose={handleCloseDrawer}
+          onMovePlayer={onMovePlayer}
+          onSwapPlayers={onSwap}
+        />
       )}
     </div>
   );
