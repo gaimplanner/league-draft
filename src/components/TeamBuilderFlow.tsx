@@ -16,6 +16,7 @@ import {
   User,
   X,
   Edit3,
+  RefreshCw,
 } from 'lucide-react';
 import { Division, Player, Team, ResolvedRequest, RequestsFirstConfig, DEFAULT_REQUESTS_FIRST_CONFIG, TradeCandidate, AppPhase } from '../types';
 import { RegistrationRecord } from '../types/evaluation';
@@ -1012,8 +1013,21 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
   // -----------------------------------------------------------------------------
 
   const handleRerun = useCallback(() => {
-    setStep('generate');
+    // Go back to configure step so user can adjust algorithm settings before re-running
+    setStep('configure');
     setAlgorithmResult(null);
+    // Clear final results so algorithm runs fresh
+    setFinalPlayers([]);
+    setFinalTeams([]);
+  }, []);
+
+  // Quick re-run that skips configure and runs algorithm immediately with current settings
+  const handleQuickRerun = useCallback(() => {
+    setAlgorithmResult(null);
+    setFinalPlayers([]);
+    setFinalTeams([]);
+    // Go to generate step which shows the run button
+    setStep('generate');
   }, []);
 
   const handleFinalize = useCallback(() => {
@@ -2636,10 +2650,19 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
             <div className="flex justify-between pt-6 border-t border-gray-200 dark:border-gray-700">
               <div className="flex gap-3">
                 <button
-                  onClick={handleRerun}
-                  className="px-6 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-50 dark:hover:bg-gray-700"
+                  onClick={handleQuickRerun}
+                  className="px-6 py-2 border border-purple-500 text-purple-600 dark:text-purple-400 rounded-lg font-medium hover:bg-purple-50 dark:hover:bg-purple-900/20 flex items-center gap-2"
+                  title="Re-run algorithm with current settings (quick test)"
                 >
-                  Adjust & Re-run
+                  <RefreshCw className="w-4 h-4" />
+                  Re-run
+                </button>
+                <button
+                  onClick={handleRerun}
+                  className="px-6 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2"
+                >
+                  <Settings className="w-4 h-4" />
+                  Adjust Settings
                 </button>
                 <button
                   onClick={() => setShowSwapModal(true)}
