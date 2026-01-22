@@ -317,6 +317,23 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
   ) => {
     setEvalPlayers(players);
 
+    // Build coachKids arrays from players who have isCoachKid=true
+    // Players have coachTeamId set as "team-0", "team-1", etc. from EvaluationImport
+    const coachKidsByTeamIndex = new Map<number, string[]>();
+    for (const player of players) {
+      if (player.isCoachKid && player.coachTeamId) {
+        // Extract team index from coachTeamId (e.g., "team-0" -> 0)
+        const match = player.coachTeamId.match(/^team-(\d+)$/);
+        if (match) {
+          const teamIndex = parseInt(match[1], 10);
+          if (!coachKidsByTeamIndex.has(teamIndex)) {
+            coachKidsByTeamIndex.set(teamIndex, []);
+          }
+          coachKidsByTeamIndex.get(teamIndex)!.push(player.id);
+        }
+      }
+    }
+
     // Update teams with coach info from eval import
     // IMPORTANT: Preserve existing coach names if they were already set in Setup step
     // Note: teamNames from evaluation actually contains head coach names, not actual team names
@@ -325,9 +342,26 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
       // headCoach is the manager's last name - only update if not already set
       headCoach: team.headCoach || teamNames[index] || '',
       assistantCoach: team.assistantCoach || assistantCoaches[index] || '',
+      // Populate coachKids array from detected coach kids
+      coachKids: coachKidsByTeamIndex.get(index) || team.coachKids || [],
       // teamName stays empty until actual team name (e.g., "Guardians") is assigned
     }));
     setTeams(updatedTeams);
+
+    // Also update players with the actual team IDs (not "team-0" format)
+    const playersWithRealTeamIds = players.map(player => {
+      if (player.isCoachKid && player.coachTeamId) {
+        const match = player.coachTeamId.match(/^team-(\d+)$/);
+        if (match) {
+          const teamIndex = parseInt(match[1], 10);
+          if (teamIndex < updatedTeams.length) {
+            return { ...player, coachTeamId: updatedTeams[teamIndex].id };
+          }
+        }
+      }
+      return player;
+    });
+    setEvalPlayers(playersWithRealTeamIds);
 
     // Persist the updated teams and players (mark as local update to prevent sync loop)
     isLocalUpdate.current = true;
@@ -335,12 +369,12 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
       onUpdateTeams(updatedTeams);
     }
     if (onUpdatePlayers) {
-      onUpdatePlayers(players);
+      onUpdatePlayers(playersWithRealTeamIds);
     }
 
     // If registration data was parsed from the same Excel file, process it
     if (parsedRegistrationData && parsedRegistrationData.length > 0) {
-      const evalPlayerList = players.map(p => ({
+      const evalPlayerList = playersWithRealTeamIds.map(p => ({
         bib: p.bib,
         firstName: p.firstName,
         lastName: p.lastName,
