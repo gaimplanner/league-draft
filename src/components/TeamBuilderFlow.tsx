@@ -11,6 +11,11 @@ import {
   ArrowLeftRight,
   Search,
   ClipboardCheck,
+  ChevronDown,
+  ChevronUp,
+  User,
+  X,
+  Edit3,
 } from 'lucide-react';
 import { Division, Player, Team, ResolvedRequest, RequestsFirstConfig, DEFAULT_REQUESTS_FIRST_CONFIG, TradeCandidate, AppPhase } from '../types';
 import { RegistrationRecord } from '../types/evaluation';
@@ -26,6 +31,9 @@ import {
   TeamBuilderPlayer,
   DEFAULT_TEAM_BUILDER_CONFIG,
   applyAssignments,
+  TeamSummary,
+  PlayerHappiness,
+  AssignmentResult,
 } from '../utils/teamBuilderAlgorithm';
 import {
   RegistrationData,
@@ -38,6 +46,12 @@ import {
   NormalizationResult,
   prepareRequestsForConfirmation,
 } from '../utils/teamBuilderParser';
+import {
+  autoDetectCoachKids,
+  autoDetectSiblings,
+  CoachKidMatch,
+  SiblingMatch,
+} from '../utils/coachKidDetection';
 import * as XLSX from 'xlsx';
 
 // -----------------------------------------------------------------------------
@@ -135,6 +149,22 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
   // Player search for debugging request resolution
   const [playerSearchQuery, setPlayerSearchQuery] = useState('');
 
+  // Category drill-down state for Request Resolution Summary
+  type RequestCategory = 'coach' | 'buddy' | 'two-way' | null;
+  const [expandedCategory, setExpandedCategory] = useState<RequestCategory>(null);
+  const [categorySearchQuery, setCategorySearchQuery] = useState('');
+  const [editingRequestId, setEditingRequestId] = useState<string | null>(null);
+
+  // Teams panel expanded state
+  const [teamsExpanded, setTeamsExpanded] = useState(false);
+
+  // Auto-detection modal state
+  const [showAutoDetectModal, setShowAutoDetectModal] = useState(false);
+  const [autoDetectedMatches, setAutoDetectedMatches] = useState<CoachKidMatch[]>([]);
+  const [siblingMatches, setSiblingMatches] = useState<SiblingMatch[]>([]);
+  const [selectedMatches, setSelectedMatches] = useState<Set<string>>(new Set());
+  const [selectedSiblingPairs, setSelectedSiblingPairs] = useState<Set<string>>(new Set());
+
   // Track if we initiated the last teams update to prevent sync loops
   const isLocalUpdate = useRef(false);
 
@@ -149,6 +179,78 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
     // External update (e.g., navigating back) - sync from parent
     setTeams(division.teams);
   }, [division.teams]);
+
+  // Reconstruct algorithm result when resuming with persisted results
+  useEffect(() => {
+    if (hasResults && !algorithmResult && finalPlayers.length > 0 && finalTeams.length > 0) {
+      // Reconstruct assignments from player data
+      const assignments: AssignmentResult[] = finalPlayers
+        .filter(p => p.draftedByTeamId)
+        .map(p => ({
+          playerId: p.id,
+          teamId: p.draftedByTeamId!,
+          round: p.draftedInRound || 1,
+          pick: p.draftedAtPick || 1,
+          reason: p.isCoachKid ? 'coach-kid' as const : 'balance' as const,
+        }));
+
+      // Build team summaries
+      const meanScore = finalPlayers.length > 0
+        ? finalPlayers.reduce((sum, p) => sum + p.totalScore, 0) / finalTeams.length / (finalPlayers.length / finalTeams.length)
+        : 0;
+
+      const teamSummaries: TeamSummary[] = finalTeams.map(team => {
+        const teamPlayers = finalPlayers.filter(p => p.draftedByTeamId === team.id);
+        const totalScore = teamPlayers.reduce((sum, p) => sum + p.totalScore, 0);
+        const avgScore = teamPlayers.length > 0 ? totalScore / teamPlayers.length : 0;
+        return {
+          teamId: team.id,
+          teamName: team.teamName || '',
+          coachName: team.headCoach || '',
+          rosterCount: teamPlayers.length,
+          totalScore,
+          averageScore: avgScore,
+          meanDelta: avgScore - meanScore,
+          meanDeltaPercent: meanScore > 0 ? ((avgScore - meanScore) / meanScore) * 100 : 0,
+        };
+      });
+
+      // Build player happiness (simplified - mark as no-requests since we don't have request data)
+      const playerHappiness: PlayerHappiness[] = finalPlayers.map(p => ({
+        playerId: p.id,
+        score: 'no-requests' as const,
+        coachRequestHonored: null,
+        teammateRequestsHonored: 0,
+        teammateRequestsTotal: 0,
+        twoWayRequestsHonored: 0,
+        twoWayRequestsTotal: 0,
+      }));
+
+      // Build reconstructed result
+      const reconstructedResult: TeamBuilderResult = {
+        assignments,
+        teamSummaries,
+        playerHappiness,
+        warnings: ['Results restored from saved data. Re-run algorithm for full happiness analysis.'],
+        stats: {
+          totalPlayers: finalPlayers.length,
+          lockedPlayers: finalPlayers.filter(p => p.isCoachKid || p.siblingId).length,
+          topTalentPlayers: 0,
+          requestBasedPlayers: 0,
+          balanceBasedPlayers: assignments.length,
+          twoWayRequestsHonored: 0,
+          twoWayRequestsTotal: 0,
+          oneWayRequestsHonored: 0,
+          oneWayRequestsTotal: 0,
+          coachRequestsHonored: 0,
+          coachRequestsTotal: 0,
+          averageHappiness: 1,
+        },
+      };
+
+      setAlgorithmResult(reconstructedResult);
+    }
+  }, [hasResults, algorithmResult, finalPlayers, finalTeams]);
 
   // -----------------------------------------------------------------------------
   // Step 1: Import
@@ -503,6 +605,139 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
     }
     setStep('generate');
   }, [onUpdateTeams, teams]);
+
+  // -----------------------------------------------------------------------------
+  // Auto-Detection Handlers
+  // -----------------------------------------------------------------------------
+
+  const handleRunAutoDetection = useCallback(() => {
+    const coachMatches = autoDetectCoachKids(evalPlayers, teams);
+    const siblingPairs = autoDetectSiblings(evalPlayers);
+
+    setAutoDetectedMatches(coachMatches);
+    setSiblingMatches(siblingPairs);
+
+    if (coachMatches.length > 0 || siblingPairs.length > 0) {
+      // Pre-select ALL matches including already marked/linked
+      setSelectedMatches(new Set(coachMatches.map(m => m.playerId)));
+      setSelectedSiblingPairs(new Set(siblingPairs.map(s => `${s.player1Id}-${s.player2Id}`)));
+      setShowAutoDetectModal(true);
+    }
+  }, [evalPlayers, teams]);
+
+  const handleToggleMatch = useCallback((playerId: string) => {
+    setSelectedMatches(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(playerId)) {
+        newSet.delete(playerId);
+      } else {
+        newSet.add(playerId);
+      }
+      return newSet;
+    });
+  }, []);
+
+  const handleToggleSiblingPair = useCallback((pairKey: string) => {
+    setSelectedSiblingPairs(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(pairKey)) {
+        newSet.delete(pairKey);
+      } else {
+        newSet.add(pairKey);
+      }
+      return newSet;
+    });
+  }, []);
+
+  const handleApplyDetection = useCallback(() => {
+    // Apply coach kid assignments
+    let updatedPlayers = [...evalPlayers];
+    let updatedTeams = [...teams];
+
+    autoDetectedMatches.forEach(match => {
+      if (selectedMatches.has(match.playerId)) {
+        // Mark player as coach kid
+        updatedPlayers = updatedPlayers.map(p =>
+          p.id === match.playerId
+            ? { ...p, isCoachKid: true, coachTeamId: match.teamId }
+            : p
+        );
+        // Add to team's coachKids array
+        updatedTeams = updatedTeams.map(t =>
+          t.id === match.teamId
+            ? { ...t, coachKids: t.coachKids.includes(match.playerId) ? t.coachKids : [...t.coachKids, match.playerId] }
+            : t
+        );
+      } else {
+        // Not selected - clear coach kid status if previously set
+        updatedPlayers = updatedPlayers.map(p =>
+          p.id === match.playerId
+            ? { ...p, isCoachKid: false, coachTeamId: undefined }
+            : p
+        );
+        // Remove from team's coachKids array
+        updatedTeams = updatedTeams.map(t => ({
+          ...t,
+          coachKids: t.coachKids.filter(id => id !== match.playerId),
+        }));
+      }
+    });
+
+    // Apply sibling links
+    siblingMatches.forEach(match => {
+      const pairKey = `${match.player1Id}-${match.player2Id}`;
+      if (selectedSiblingPairs.has(pairKey)) {
+        // Link siblings bidirectionally
+        updatedPlayers = updatedPlayers.map(p => {
+          if (p.id === match.player1Id) {
+            return { ...p, siblingId: match.player2Id, sibling: match.player2Name };
+          }
+          if (p.id === match.player2Id) {
+            return { ...p, siblingId: match.player1Id, sibling: match.player1Name };
+          }
+          return p;
+        });
+      } else {
+        // Clear sibling links if previously set
+        updatedPlayers = updatedPlayers.map(p => {
+          if (p.id === match.player1Id || p.id === match.player2Id) {
+            return { ...p, siblingId: undefined, sibling: undefined };
+          }
+          return p;
+        });
+      }
+    });
+
+    // Update state
+    setEvalPlayers(updatedPlayers);
+    setTeams(updatedTeams);
+
+    // Persist changes
+    if (onUpdatePlayers) {
+      onUpdatePlayers(updatedPlayers);
+    }
+    if (onUpdateTeams) {
+      isLocalUpdate.current = true;
+      onUpdateTeams(updatedTeams);
+    }
+
+    // Close modal and reset
+    setShowAutoDetectModal(false);
+    setAutoDetectedMatches([]);
+    setSiblingMatches([]);
+    setSelectedMatches(new Set());
+    setSelectedSiblingPairs(new Set());
+  }, [evalPlayers, teams, autoDetectedMatches, siblingMatches, selectedMatches, selectedSiblingPairs, onUpdatePlayers, onUpdateTeams]);
+
+  const handleSelectAllDetection = useCallback(() => {
+    setSelectedMatches(new Set(autoDetectedMatches.map(m => m.playerId)));
+    setSelectedSiblingPairs(new Set(siblingMatches.map(s => `${s.player1Id}-${s.player2Id}`)));
+  }, [autoDetectedMatches, siblingMatches]);
+
+  const handleDeselectAllDetection = useCallback(() => {
+    setSelectedMatches(new Set());
+    setSelectedSiblingPairs(new Set());
+  }, []);
 
   // -----------------------------------------------------------------------------
   // Step 4: Generate
@@ -936,10 +1171,10 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
           <div className="space-y-6">
             <div className="text-center mb-8">
               <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-                Import Player Data
+                Upload Evaluation Spreadsheet
               </h2>
               <p className="text-gray-600 dark:text-gray-400">
-                First, import evaluation data (skills), then registration data (requests).
+                Upload your Excel file with evaluation data and registration info.
               </p>
             </div>
 
@@ -950,6 +1185,7 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
                 initialAssistantCoaches={teams.map(t => t.assistantCoach || '')}
                 onComplete={handleEvalImportComplete}
                 onCancel={onBack}
+                hideNavigation={true}
               />
             ) : (
               <div className="space-y-6">
@@ -1330,95 +1566,217 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
               </div>
             </div>
 
-            {/* Teams */}
-            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                Teams ({teams.length})
-              </h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                Coach requests will match against both head coach and assistant coach names.
-              </p>
-              <div className="grid grid-cols-2 gap-4">
-                {teams.map((team, index) => (
-                  <div
-                    key={team.id}
-                    className="border border-gray-200 dark:border-gray-600 rounded-lg p-4"
-                  >
-                    <div className="flex items-center gap-3 mb-2">
-                      <span className="w-8 h-8 bg-purple-100 dark:bg-purple-900/30 rounded-full flex items-center justify-center text-purple-700 dark:text-purple-300 font-medium">
-                        {index + 1}
-                      </span>
-                      <div className="flex-1 flex gap-2">
-                        <input
-                          type="text"
-                          value={team.headCoach}
-                          onChange={(e) => handleUpdateTeam(team.id, { headCoach: e.target.value })}
-                          placeholder="Head Coach"
-                          className="flex-1 px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
-                        />
-                        <input
-                          type="text"
-                          value={team.assistantCoach || ''}
-                          onChange={(e) => handleUpdateTeam(team.id, { assistantCoach: e.target.value })}
-                          placeholder="Asst. Coach"
-                          className="flex-1 px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
-                        />
-                      </div>
-                    </div>
-                    {team.coachKids.length > 0 && (
-                      <p className="text-xs text-gray-500 dark:text-gray-400 ml-11">
-                        {team.coachKids.length} coach kid{team.coachKids.length !== 1 ? 's' : ''} locked
-                      </p>
-                    )}
+            {/* Teams & Detection - Collapsible Panel */}
+            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+              <div className="px-4 py-3 flex items-center justify-between">
+                <button
+                  onClick={() => setTeamsExpanded(!teamsExpanded)}
+                  className="flex items-center gap-4 hover:bg-gray-50 dark:hover:bg-gray-700 -ml-2 px-2 py-1 rounded-lg transition-colors"
+                >
+                  <span className="font-medium text-gray-900 dark:text-white flex items-center gap-2">
+                    {teamsExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                    Teams & Detection
+                  </span>
+                  <div className="flex items-center gap-3 text-sm text-gray-600 dark:text-gray-400">
+                    <span>{teams.length} teams</span>
+                    {(() => {
+                      const coachKidCount = teams.reduce((sum, t) => sum + t.coachKids.length, 0);
+                      return coachKidCount > 0 ? (
+                        <span className="text-blue-600 dark:text-blue-400">
+                          <span className="inline-block w-2 h-2 rounded-full bg-blue-500 mr-1"></span>
+                          {coachKidCount} coach kids
+                        </span>
+                      ) : null;
+                    })()}
                   </div>
-                ))}
+                </button>
+                {/* Detection Button */}
+                <button
+                  onClick={handleRunAutoDetection}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-purple-500 hover:bg-purple-600 text-white rounded-lg font-medium text-sm"
+                  title="Auto-detect coach's kids by matching last names"
+                >
+                  <Wand2 className="w-4 h-4" />
+                  <span className="hidden sm:inline">Find Coach Kids & Siblings</span>
+                  <span className="sm:hidden">Detect</span>
+                </button>
               </div>
+
+              {teamsExpanded && (
+                <div className="px-4 pb-4 border-t border-gray-200 dark:border-gray-700">
+                  <div className="mt-4 space-y-4">
+                    {/* Team Names & Coaches Grid - 4 columns like the reference */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                      {teams.map((team) => {
+                        const teamCoachKids = evalPlayers.filter(p =>
+                          team.coachKids.includes(p.id) ||
+                          (p.isCoachKid && p.coachTeamId === team.id)
+                        );
+                        return (
+                          <div key={team.id} className="space-y-2">
+                            <div>
+                              <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
+                                Head Coach (Last Name)
+                              </label>
+                              <input
+                                type="text"
+                                value={team.headCoach}
+                                onChange={(e) => handleUpdateTeam(team.id, { headCoach: e.target.value })}
+                                placeholder="Last name only (e.g., Smith)"
+                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
+                                Assistant Coach (Last Name)
+                              </label>
+                              <input
+                                type="text"
+                                value={team.assistantCoach || ''}
+                                onChange={(e) => handleUpdateTeam(team.id, { assistantCoach: e.target.value })}
+                                placeholder="Last name only"
+                                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400"
+                              />
+                            </div>
+                            {teamCoachKids.length > 0 && (
+                              <p className="text-xs text-gray-500 dark:text-gray-400">
+                                Coach's Kids: {teamCoachKids.map(p => `${p.firstName} ${p.lastName}`).join(', ')}
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Clear buttons */}
+                    {(() => {
+                      const coachKidCount = teams.reduce((sum, t) => sum + t.coachKids.length, 0);
+                      return coachKidCount > 0 ? (
+                        <div className="flex items-center gap-3 pt-2 border-t border-gray-200 dark:border-gray-700">
+                          <button
+                            onClick={() => {
+                              // Clear coach kids from all teams
+                              teams.forEach(team => {
+                                if (team.coachKids.length > 0) {
+                                  handleUpdateTeam(team.id, { coachKids: [] });
+                                }
+                              });
+                            }}
+                            className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                          >
+                            Clear Coach Kids
+                          </button>
+                        </div>
+                      ) : null;
+                    })()}
+                  </div>
+                </div>
+              )}
             </div>
 
-            {/* Request Resolution Summary */}
-            {normalizationResult && (
+            {/* Request Resolution Summary - Interactive */}
+            {normalizationResult && resolvedRequests.length > 0 && (
               <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
                   Request Resolution Summary
                 </h3>
                 <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                  You'll review and confirm all matches on the next screen.
+                  Click a category to view details and make changes.
                 </p>
                 <div className="grid grid-cols-3 gap-4 mb-4">
-                  {/* Coach Requests */}
-                  <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
-                    <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
-                      {normalizationResult.stats.coachRequestsResolved}/{normalizationResult.stats.playersWithCoachRequest}
+                  {/* Coach Requests - Clickable */}
+                  <button
+                    onClick={() => {
+                      setExpandedCategory(expandedCategory === 'coach' ? null : 'coach');
+                      setCategorySearchQuery('');
+                    }}
+                    className={`p-4 rounded-lg text-left transition-all ${
+                      expandedCategory === 'coach'
+                        ? 'bg-purple-100 dark:bg-purple-900/40 ring-2 ring-purple-500'
+                        : 'bg-purple-50 dark:bg-purple-900/20 hover:bg-purple-100 dark:hover:bg-purple-900/30'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+                        {resolvedRequests.filter(r => r.requestType === 'coach' && r.resolvedTargetId).length}/{resolvedRequests.filter(r => r.requestType === 'coach').length}
+                      </div>
+                      {expandedCategory === 'coach' ? (
+                        <ChevronUp className="w-5 h-5 text-purple-500" />
+                      ) : (
+                        <ChevronDown className="w-5 h-5 text-purple-400" />
+                      )}
                     </div>
                     <div className="text-sm text-purple-700 dark:text-purple-300 font-medium">
                       Coach Requests
                     </div>
                     <div className="text-xs text-purple-600 dark:text-purple-400 mt-1">
-                      {normalizationResult.stats.playersWithCoachRequest > 0
-                        ? `${Math.round((normalizationResult.stats.coachRequestsResolved / normalizationResult.stats.playersWithCoachRequest) * 100)}% auto-matched`
-                        : 'No requests'}
+                      {(() => {
+                        const coachReqs = resolvedRequests.filter(r => r.requestType === 'coach');
+                        const resolved = coachReqs.filter(r => r.resolvedTargetId).length;
+                        return coachReqs.length > 0
+                          ? `${Math.round((resolved / coachReqs.length) * 100)}% matched`
+                          : 'No requests';
+                      })()}
                     </div>
-                  </div>
+                  </button>
 
-                  {/* Teammate Requests */}
-                  <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                    <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                      {normalizationResult.stats.teammateRequestsResolved}/{normalizationResult.stats.totalTeammateRequests}
+                  {/* Buddy Requests - Clickable */}
+                  <button
+                    onClick={() => {
+                      setExpandedCategory(expandedCategory === 'buddy' ? null : 'buddy');
+                      setCategorySearchQuery('');
+                    }}
+                    className={`p-4 rounded-lg text-left transition-all ${
+                      expandedCategory === 'buddy'
+                        ? 'bg-blue-100 dark:bg-blue-900/40 ring-2 ring-blue-500'
+                        : 'bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                        {resolvedRequests.filter(r => r.requestType === 'teammate' && !r.isTwoWay && r.resolvedTargetId).length}/{resolvedRequests.filter(r => r.requestType === 'teammate' && !r.isTwoWay).length}
+                      </div>
+                      {expandedCategory === 'buddy' ? (
+                        <ChevronUp className="w-5 h-5 text-blue-500" />
+                      ) : (
+                        <ChevronDown className="w-5 h-5 text-blue-400" />
+                      )}
                     </div>
                     <div className="text-sm text-blue-700 dark:text-blue-300 font-medium">
                       Buddy Requests
                     </div>
                     <div className="text-xs text-blue-600 dark:text-blue-400 mt-1">
-                      {normalizationResult.stats.totalTeammateRequests > 0
-                        ? `${Math.round((normalizationResult.stats.teammateRequestsResolved / normalizationResult.stats.totalTeammateRequests) * 100)}% auto-matched`
-                        : 'No requests'}
+                      {(() => {
+                        const buddyReqs = resolvedRequests.filter(r => r.requestType === 'teammate' && !r.isTwoWay);
+                        const resolved = buddyReqs.filter(r => r.resolvedTargetId).length;
+                        return buddyReqs.length > 0
+                          ? `${Math.round((resolved / buddyReqs.length) * 100)}% matched`
+                          : 'No requests';
+                      })()}
                     </div>
-                  </div>
+                  </button>
 
-                  {/* Two-Way Requests */}
-                  <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                    <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-                      {normalizationResult.stats.twoWayRequestsFound}
+                  {/* Two-Way Matches - Clickable */}
+                  <button
+                    onClick={() => {
+                      setExpandedCategory(expandedCategory === 'two-way' ? null : 'two-way');
+                      setCategorySearchQuery('');
+                    }}
+                    className={`p-4 rounded-lg text-left transition-all ${
+                      expandedCategory === 'two-way'
+                        ? 'bg-green-100 dark:bg-green-900/40 ring-2 ring-green-500'
+                        : 'bg-green-50 dark:bg-green-900/20 hover:bg-green-100 dark:hover:bg-green-900/30'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+                        {Math.floor(resolvedRequests.filter(r => r.isTwoWay).length / 2)}
+                      </div>
+                      {expandedCategory === 'two-way' ? (
+                        <ChevronUp className="w-5 h-5 text-green-500" />
+                      ) : (
+                        <ChevronDown className="w-5 h-5 text-green-400" />
+                      )}
                     </div>
                     <div className="text-sm text-green-700 dark:text-green-300 font-medium">
                       Two-Way Matches
@@ -1426,14 +1784,287 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
                     <div className="text-xs text-green-600 dark:text-green-400 mt-1">
                       Both kids requested each other
                     </div>
-                  </div>
+                  </button>
                 </div>
 
+                {/* Expanded Category Detail View */}
+                {expandedCategory && (
+                  <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                    {/* Category Header & Search */}
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                        {expandedCategory === 'coach' && <User className="w-4 h-4 text-purple-500" />}
+                        {expandedCategory === 'buddy' && <Users className="w-4 h-4 text-blue-500" />}
+                        {expandedCategory === 'two-way' && <Users className="w-4 h-4 text-green-500" />}
+                        {expandedCategory === 'coach' && 'Coach Requests'}
+                        {expandedCategory === 'buddy' && 'Buddy Requests (One-Way)'}
+                        {expandedCategory === 'two-way' && 'Two-Way Matches'}
+                      </h4>
+                      <div className="relative w-64">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <input
+                          type="text"
+                          value={categorySearchQuery}
+                          onChange={(e) => setCategorySearchQuery(e.target.value)}
+                          placeholder="Search by name..."
+                          className="w-full pl-9 pr-4 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Request List */}
+                    <div className="space-y-2 max-h-96 overflow-y-auto">
+                      {(() => {
+                        // Filter requests by category
+                        let categoryRequests = resolvedRequests.filter(r => {
+                          if (expandedCategory === 'coach') return r.requestType === 'coach';
+                          if (expandedCategory === 'buddy') return r.requestType === 'teammate' && !r.isTwoWay;
+                          if (expandedCategory === 'two-way') return r.isTwoWay;
+                          return false;
+                        });
+
+                        // Apply search filter
+                        if (categorySearchQuery.trim()) {
+                          const query = categorySearchQuery.toLowerCase().trim();
+                          categoryRequests = categoryRequests.filter(r => {
+                            const player = normalizationResult.players.find(p => p.id === r.playerId);
+                            const playerName = player ? `${player.firstName} ${player.lastName}`.toLowerCase() : '';
+                            const targetName = r.resolvedTargetName?.toLowerCase() || '';
+                            const rawRequest = r.rawRequestString.toLowerCase();
+                            return playerName.includes(query) || targetName.includes(query) || rawRequest.includes(query);
+                          });
+                        }
+
+                        // For two-way, deduplicate (show each pair once)
+                        if (expandedCategory === 'two-way') {
+                          const seen = new Set<string>();
+                          categoryRequests = categoryRequests.filter(r => {
+                            const pairKey = [r.playerId, r.resolvedTargetId].sort().join('-');
+                            if (seen.has(pairKey)) return false;
+                            seen.add(pairKey);
+                            return true;
+                          });
+                        }
+
+                        if (categoryRequests.length === 0) {
+                          return (
+                            <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                              {categorySearchQuery ? 'No matches found.' : 'No requests in this category.'}
+                            </div>
+                          );
+                        }
+
+                        return categoryRequests.map(req => {
+                          const player = normalizationResult.players.find(p => p.id === req.playerId);
+                          const targetTeam = req.requestType === 'coach' && req.resolvedTargetId
+                            ? teams.find(t => t.id === req.resolvedTargetId)
+                            : null;
+                          const isEditing = editingRequestId === req.id;
+
+                          return (
+                            <div
+                              key={req.id}
+                              className={`p-3 rounded-lg border ${
+                                req.status === 'needs-review'
+                                  ? 'border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/10'
+                                  : req.status === 'unresolvable'
+                                  ? 'border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50'
+                                  : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3 flex-1 min-w-0">
+                                  {/* Player name */}
+                                  <div className="flex-shrink-0">
+                                    <span className="font-medium text-gray-900 dark:text-white">
+                                      {player?.firstName} {player?.lastName}
+                                    </span>
+                                  </div>
+
+                                  {/* Arrow and raw request */}
+                                  <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 min-w-0">
+                                    <span className="text-xs">requested</span>
+                                    <span className="text-sm italic truncate">"{req.rawRequestString}"</span>
+                                  </div>
+
+                                  {/* Resolution */}
+                                  <div className="flex items-center gap-2 flex-shrink-0">
+                                    <span className="text-gray-400">→</span>
+                                    {req.resolvedTargetId ? (
+                                      <span className={`font-medium ${
+                                        expandedCategory === 'coach' ? 'text-purple-600 dark:text-purple-400' :
+                                        expandedCategory === 'two-way' ? 'text-green-600 dark:text-green-400' :
+                                        'text-blue-600 dark:text-blue-400'
+                                      }`}>
+                                        {req.resolvedTargetName}
+                                        {targetTeam && ` (${targetTeam.headCoach})`}
+                                      </span>
+                                    ) : (
+                                      <span className="text-red-500 dark:text-red-400 italic">Not matched</span>
+                                    )}
+                                  </div>
+
+                                  {/* Two-way badge */}
+                                  {req.isTwoWay && expandedCategory !== 'two-way' && (
+                                    <span className="px-1.5 py-0.5 text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded flex-shrink-0">
+                                      TWO-WAY
+                                    </span>
+                                  )}
+
+                                  {/* Confidence score */}
+                                  {req.resolvedTargetId && (
+                                    <span className={`text-xs px-1.5 py-0.5 rounded flex-shrink-0 ${
+                                      req.confidenceScore >= 0.9 ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300' :
+                                      req.confidenceScore >= 0.5 ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300' :
+                                      'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+                                    }`}>
+                                      {Math.round(req.confidenceScore * 100)}%
+                                    </span>
+                                  )}
+                                </div>
+
+                                {/* Edit button */}
+                                <button
+                                  onClick={() => setEditingRequestId(isEditing ? null : req.id)}
+                                  className={`p-1.5 rounded-lg transition-colors flex-shrink-0 ${
+                                    isEditing
+                                      ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400'
+                                      : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
+                                  }`}
+                                >
+                                  <Edit3 className="w-4 h-4" />
+                                </button>
+                              </div>
+
+                              {/* Inline edit panel */}
+                              {isEditing && (
+                                <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+                                  <div className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                                    Select a match or mark as unresolvable:
+                                  </div>
+                                  <div className="flex flex-wrap gap-2">
+                                    {/* Current match option */}
+                                    {req.resolvedTargetId && (
+                                      <button
+                                        onClick={() => {
+                                          // Already selected, do nothing
+                                          setEditingRequestId(null);
+                                        }}
+                                        className="px-3 py-1.5 text-sm rounded-lg border-2 border-green-500 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 flex items-center gap-1"
+                                      >
+                                        <Check className="w-3 h-3" />
+                                        {req.resolvedTargetName}
+                                      </button>
+                                    )}
+
+                                    {/* Suggested matches */}
+                                    {req.suggestedMatches?.filter(m => m.id !== req.resolvedTargetId).slice(0, 3).map(match => (
+                                      <button
+                                        key={match.id}
+                                        onClick={() => {
+                                          handleUpdateRequest(req.id, match.id, match.name);
+                                          setEditingRequestId(null);
+                                        }}
+                                        className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"
+                                      >
+                                        {match.name} ({Math.round(match.score * 100)}%)
+                                      </button>
+                                    ))}
+
+                                    {/* Coach team options */}
+                                    {req.requestType === 'coach' && teams.filter(t => t.id !== req.resolvedTargetId).slice(0, 4).map(team => (
+                                      <button
+                                        key={team.id}
+                                        onClick={() => {
+                                          handleUpdateRequest(req.id, team.id, team.headCoach || team.teamName || '');
+                                          setEditingRequestId(null);
+                                        }}
+                                        className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"
+                                      >
+                                        {team.headCoach || team.teamName || `Team ${team.draftPosition}`}
+                                      </button>
+                                    ))}
+
+                                    {/* Mark as unresolvable */}
+                                    <button
+                                      onClick={() => {
+                                        handleUpdateRequest(req.id, null, null);
+                                        setEditingRequestId(null);
+                                      }}
+                                      className={`px-3 py-1.5 text-sm rounded-lg border flex items-center gap-1 ${
+                                        req.status === 'unresolvable'
+                                          ? 'border-gray-500 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
+                                          : 'border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400'
+                                      }`}
+                                    >
+                                      <X className="w-3 h-3" />
+                                      Unresolvable
+                                    </button>
+                                  </div>
+
+                                  {/* Teammate search for more options */}
+                                  {req.requestType === 'teammate' && (
+                                    <div className="mt-2">
+                                      <input
+                                        type="text"
+                                        placeholder="Search for a player..."
+                                        className="w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400"
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Enter') {
+                                            const query = (e.target as HTMLInputElement).value.toLowerCase().trim();
+                                            const match = normalizationResult.players.find(p =>
+                                              p.id !== req.playerId &&
+                                              (`${p.firstName} ${p.lastName}`.toLowerCase().includes(query) ||
+                                               p.firstName.toLowerCase().includes(query) ||
+                                               p.lastName.toLowerCase().includes(query))
+                                            );
+                                            if (match) {
+                                              handleUpdateRequest(req.id, match.id, `${match.firstName} ${match.lastName}`);
+                                              setEditingRequestId(null);
+                                            }
+                                          }
+                                        }}
+                                      />
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
+
+                    {/* Close button */}
+                    <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 flex justify-end">
+                      <button
+                        onClick={() => setExpandedCategory(null)}
+                        className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {/* Schools */}
-                {normalizationResult.stats.uniqueSchools > 0 && (
+                {normalizationResult.schools.length > 0 && !expandedCategory && (
                   <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
-                    <div className="text-sm text-gray-600 dark:text-gray-400">
-                      <span className="font-medium">{normalizationResult.stats.uniqueSchools} schools</span> detected for clustering
+                    <div className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                      <span className="font-medium">{normalizationResult.schools.length} schools</span> detected for clustering
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {normalizationResult.schools
+                        .sort((a, b) => b.playerCount - a.playerCount)
+                        .map((school) => (
+                          <span
+                            key={school.schoolId}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 dark:bg-gray-700 rounded-full text-sm"
+                          >
+                            <span className="text-gray-700 dark:text-gray-300">{school.normalizedName}</span>
+                            <span className="text-xs text-gray-500 dark:text-gray-400">({school.playerCount})</span>
+                          </span>
+                        ))}
                     </div>
                   </div>
                 )}
@@ -1932,6 +2563,165 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
           </div>
         )}
       </div>
+
+      {/* Auto-Detection Modal */}
+      {showAutoDetectModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  Auto-Detection Results
+                </h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                  Found {autoDetectedMatches.length} coach kid{autoDetectedMatches.length !== 1 ? 's' : ''} and {siblingMatches.length} sibling pair{siblingMatches.length !== 1 ? 's' : ''}
+                </p>
+              </div>
+              <button
+                onClick={() => setShowAutoDetectModal(false)}
+                className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-6">
+              {/* Coach Kids */}
+              {autoDetectedMatches.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <User className="w-4 h-4 text-blue-500" />
+                    <h4 className="font-medium text-gray-900 dark:text-white">
+                      Coach's Kids ({autoDetectedMatches.length})
+                    </h4>
+                  </div>
+                  <div className="space-y-2">
+                    {autoDetectedMatches.map(match => (
+                      <label
+                        key={match.playerId}
+                        className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                          selectedMatches.has(match.playerId)
+                            ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                            : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedMatches.has(match.playerId)}
+                          onChange={() => handleToggleMatch(match.playerId)}
+                          className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                        />
+                        <div className="flex-1">
+                          <div className="font-medium text-gray-900 dark:text-white">
+                            {match.playerName}
+                          </div>
+                          <div className="text-sm text-gray-500 dark:text-gray-400">
+                            {match.reason}
+                          </div>
+                        </div>
+                        {match.alreadyMarked && (
+                          <span className="text-xs px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded">
+                            Already marked
+                          </span>
+                        )}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Siblings */}
+              {siblingMatches.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Users className="w-4 h-4 text-green-500" />
+                    <h4 className="font-medium text-gray-900 dark:text-white">
+                      Siblings ({siblingMatches.length} pairs)
+                    </h4>
+                  </div>
+                  <div className="space-y-2">
+                    {siblingMatches.map(match => {
+                      const pairKey = `${match.player1Id}-${match.player2Id}`;
+                      return (
+                        <label
+                          key={pairKey}
+                          className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                            selectedSiblingPairs.has(pairKey)
+                              ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
+                              : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedSiblingPairs.has(pairKey)}
+                            onChange={() => handleToggleSiblingPair(pairKey)}
+                            className="w-4 h-4 text-green-600 rounded border-gray-300 focus:ring-green-500"
+                          />
+                          <div className="flex-1">
+                            <div className="font-medium text-gray-900 dark:text-white">
+                              {match.player1Name} & {match.player2Name}
+                            </div>
+                            <div className="text-sm text-gray-500 dark:text-gray-400">
+                              {match.reason}
+                            </div>
+                          </div>
+                          {match.alreadyLinked && (
+                            <span className="text-xs px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded">
+                              Already linked
+                            </span>
+                          )}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {autoDetectedMatches.length === 0 && siblingMatches.length === 0 && (
+                <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                  No matches found. Make sure team coach names are filled in.
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleSelectAllDetection}
+                  className="text-sm text-purple-600 dark:text-purple-400 hover:underline"
+                >
+                  Select All
+                </button>
+                <span className="text-gray-300 dark:text-gray-600">|</span>
+                <button
+                  onClick={handleDeselectAllDetection}
+                  className="text-sm text-gray-500 dark:text-gray-400 hover:underline"
+                >
+                  Deselect All
+                </button>
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setShowAutoDetectModal(false)}
+                  className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleApplyDetection}
+                  className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium flex items-center gap-2"
+                >
+                  <Check className="w-4 h-4" />
+                  Apply ({selectedMatches.size + selectedSiblingPairs.size} selected)
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

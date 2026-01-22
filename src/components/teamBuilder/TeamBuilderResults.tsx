@@ -64,21 +64,6 @@ export const TeamBuilderResults = ({
     }
   };
 
-  const getReasonLabel = (reason: AssignmentResult['reason']): string => {
-    switch (reason) {
-      case 'coach-kid': return 'Coach Kid';
-      case 'assistant-coach-kid': return 'Asst. Coach Kid';
-      case 'sibling-lock': return 'Sibling';
-      case 'manual-lock': return 'Locked';
-      case 'top-talent': return 'Top Talent';
-      case 'two-way-friend': return 'Two-Way Friend';
-      case 'one-way-friend': return 'One-Way Friend';
-      case 'coach-request': return 'Coach Request';
-      case 'school-cluster': return 'School';
-      case 'balance': return 'Balance';
-    }
-  };
-
   const getTeamPlayers = (teamId: string): Array<{
     player: Player;
     assignment: AssignmentResult;
@@ -325,11 +310,17 @@ export const TeamBuilderResults = ({
                           <th className="px-4 py-2 text-left text-gray-500 dark:text-gray-400 font-medium">
                             Player
                           </th>
-                          <th className="px-4 py-2 text-left text-gray-500 dark:text-gray-400 font-medium">
+                          <th className="px-4 py-2 text-right text-gray-500 dark:text-gray-400 font-medium">
                             Score
                           </th>
-                          <th className="px-4 py-2 text-left text-gray-500 dark:text-gray-400 font-medium">
-                            Reason
+                          <th className="px-4 py-2 text-center text-gray-500 dark:text-gray-400 font-medium">
+                            Coach
+                          </th>
+                          <th className="px-4 py-2 text-center text-gray-500 dark:text-gray-400 font-medium">
+                            Friends
+                          </th>
+                          <th className="px-4 py-2 text-center text-gray-500 dark:text-gray-400 font-medium">
+                            School
                           </th>
                           <th className="px-4 py-2 text-center text-gray-500 dark:text-gray-400 font-medium">
                             Happy
@@ -337,32 +328,81 @@ export const TeamBuilderResults = ({
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                        {teamPlayers.map(({ player, assignment, happiness }) => (
-                          <tr key={player.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
-                            <td className="px-4 py-2 text-gray-600 dark:text-gray-400">
-                              {assignment.round}.{assignment.pick}
-                            </td>
-                            <td className="px-4 py-2 text-gray-900 dark:text-white">
-                              {player.name}
-                              {player.isCoachKid && (
-                                <span className="ml-1 text-xs text-blue-600 dark:text-blue-400">
-                                  (CK)
-                                </span>
-                              )}
-                            </td>
-                            <td className="px-4 py-2 text-gray-600 dark:text-gray-400">
-                              {player.totalScore.toFixed(1)}
-                            </td>
-                            <td className="px-4 py-2">
-                              <span className="px-2 py-0.5 text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded">
-                                {getReasonLabel(assignment.reason)}
-                              </span>
-                            </td>
-                            <td className="px-4 py-2 text-center" title={getHappinessLabel(happiness.score)}>
-                              {getHappinessEmoji(happiness.score)}
-                            </td>
-                          </tr>
-                        ))}
+                        {teamPlayers.map(({ player, assignment, happiness }) => {
+                          // Check if player has school match with same-grade teammate on this team
+                          const tbPlayer = player as TeamBuilderPlayer;
+                          let hasSchoolMatch = false;
+                          if (tbPlayer.school && tbPlayer.grade) {
+                            const teammatesWithSchoolAndGrade = teamPlayers.filter(tp =>
+                              tp.player.id !== player.id &&
+                              (tp.player as TeamBuilderPlayer).school?.toLowerCase() === tbPlayer.school?.toLowerCase() &&
+                              (tp.player as TeamBuilderPlayer).grade === tbPlayer.grade
+                            );
+                            hasSchoolMatch = teammatesWithSchoolAndGrade.length > 0;
+                          }
+
+                          // Coach request: Y if they requested this coach and got it
+                          const hasCoachRequest = happiness.coachRequestHonored !== null;
+                          const coachRequestGranted = happiness.coachRequestHonored === true;
+
+                          return (
+                            <tr key={player.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
+                              <td className="px-4 py-2 text-gray-600 dark:text-gray-400">
+                                {assignment.round}.{assignment.pick}
+                              </td>
+                              <td className="px-4 py-2 text-gray-900 dark:text-white">
+                                {player.name}
+                                {player.isCoachKid && (
+                                  <span className="ml-1 text-xs text-blue-600 dark:text-blue-400">
+                                    (CK)
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-400">
+                                {player.totalScore.toFixed(1)}
+                              </td>
+                              <td className="px-4 py-2 text-center">
+                                {!hasCoachRequest ? (
+                                  <span className="text-gray-400">-</span>
+                                ) : (
+                                  <span className={coachRequestGranted
+                                    ? 'text-green-600 dark:text-green-400 font-medium'
+                                    : 'text-red-500 dark:text-red-400'
+                                  }>
+                                    {player.coachRequest || 'Requested'}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-4 py-2 text-center">
+                                {happiness.teammateRequestsTotal === 0 ? (
+                                  <span className="text-gray-400">-</span>
+                                ) : (
+                                  <span className={
+                                    happiness.teammateRequestsHonored === happiness.teammateRequestsTotal
+                                      ? 'text-green-600 dark:text-green-400 font-medium'
+                                      : happiness.teammateRequestsHonored > 0
+                                      ? 'text-amber-600 dark:text-amber-400'
+                                      : 'text-red-500 dark:text-red-400'
+                                  }>
+                                    {happiness.teammateRequestsHonored}/{happiness.teammateRequestsTotal}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-4 py-2 text-center">
+                                {!tbPlayer.school ? (
+                                  <span className="text-gray-400">-</span>
+                                ) : hasSchoolMatch ? (
+                                  <span className="text-green-600 dark:text-green-400 font-medium">Y</span>
+                                ) : (
+                                  <span className="text-gray-400">N</span>
+                                )}
+                              </td>
+                              <td className="px-4 py-2 text-center" title={getHappinessLabel(happiness.score)}>
+                                {getHappinessEmoji(happiness.score)}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>

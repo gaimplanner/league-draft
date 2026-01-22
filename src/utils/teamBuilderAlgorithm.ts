@@ -1335,6 +1335,8 @@ export function findBalancingTrades(
   }
 
   // Determine which players are tradeable
+  // A player is ONLY tradeable if they have NO requests at all
+  // If they have any requests (satisfied or not), trading them could break those requests
   const isPlayerTradeable = (playerId: string): boolean => {
     const player = playerMap.get(playerId);
     if (!player) return false;
@@ -1353,25 +1355,10 @@ export function findBalancingTrades(
       r => (r.status === 'auto-confirmed' || r.status === 'user-confirmed') && r.resolvedTargetId
     );
 
-    // If no confirmed requests, player is tradeable
-    if (confirmedRequests.length === 0) return true;
-
-    // Check if all requests are satisfied
-    const teamId = playerTeamMap.get(playerId);
-    const team = teams.find(t => t.id === teamId);
-    if (!team) return false;
-
-    for (const req of confirmedRequests) {
-      if (req.requestType === 'coach') {
-        // Coach request satisfied if on requested team
-        if (req.resolvedTargetId !== teamId) return false;
-      } else {
-        // Teammate request satisfied if teammate is on same team
-        if (!team.assignedPlayerIds.includes(req.resolvedTargetId!)) return false;
-      }
-    }
-
-    return true;
+    // Only tradeable if they have NO confirmed requests
+    // If they have any requests (coach or teammate), trading them would potentially
+    // break satisfied requests or move them away from where they want to be
+    return confirmedRequests.length === 0;
   };
 
   // Get tradeable players per team with their scores

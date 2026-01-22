@@ -15,9 +15,11 @@ interface EvaluationImportProps {
   initialAssistantCoaches?: string[];
   onComplete: (players: Player[], teamNames: string[], assistantCoaches: string[], registrationData?: RegistrationRecord[]) => void;
   onCancel: () => void;
+  /** Hide the internal navigation (back button and step indicator) when embedded in another flow */
+  hideNavigation?: boolean;
 }
 
-export function EvaluationImport({ teamCount, initialTeamNames, initialAssistantCoaches, onComplete, onCancel }: EvaluationImportProps) {
+export function EvaluationImport({ teamCount, initialTeamNames, initialAssistantCoaches, onComplete, onCancel, hideNavigation = false }: EvaluationImportProps) {
   const {
     state,
     totalWeight,
@@ -99,48 +101,50 @@ export function EvaluationImport({ teamCount, initialTeamNames, initialAssistant
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
-      {/* Header */}
-      <div className="max-w-6xl mx-auto mb-6">
-        <button
-          onClick={handleBack}
-          className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 mb-4"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Back to Import Selection
-        </button>
+    <div className={hideNavigation ? '' : 'min-h-screen bg-gray-50 dark:bg-gray-900 p-4'}>
+      {/* Header - hidden when embedded in another flow */}
+      {!hideNavigation && (
+        <div className="max-w-6xl mx-auto mb-6">
+          <button
+            onClick={handleBack}
+            className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 mb-4"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back to Import Selection
+          </button>
 
-        {/* Step Indicator */}
-        <div className="flex items-center gap-2 text-sm">
-          {steps.map((step, index) => {
-            const currentIndex = getCurrentStepIndex();
-            const isActive = state.step === step || (state.step === 'weights' && step === 'summary');
-            const isComplete = currentIndex > index;
+          {/* Step Indicator */}
+          <div className="flex items-center gap-2 text-sm">
+            {steps.map((step, index) => {
+              const currentIndex = getCurrentStepIndex();
+              const isActive = state.step === step || (state.step === 'weights' && step === 'summary');
+              const isComplete = currentIndex > index;
 
-            return (
-              <div key={step} className="flex items-center">
-                {index > 0 && (
-                  <div className="w-8 h-px bg-gray-300 dark:bg-gray-600 mx-2" />
-                )}
-                <div
-                  className={`px-3 py-1 rounded-full ${
-                    isActive
-                      ? 'bg-green-500 text-white'
-                      : isComplete
-                      ? 'bg-green-200 dark:bg-green-900 text-green-800 dark:text-green-200'
-                      : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
-                  }`}
-                >
-                  {step === 'upload' && 'Upload'}
-                  {step === 'overview' && 'Overview'}
-                  {step === 'registration' && 'Verify'}
-                  {step === 'summary' && 'Summary'}
+              return (
+                <div key={step} className="flex items-center">
+                  {index > 0 && (
+                    <div className="w-8 h-px bg-gray-300 dark:bg-gray-600 mx-2" />
+                  )}
+                  <div
+                    className={`px-3 py-1 rounded-full ${
+                      isActive
+                        ? 'bg-green-500 text-white'
+                        : isComplete
+                        ? 'bg-green-200 dark:bg-green-900 text-green-800 dark:text-green-200'
+                        : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
+                    }`}
+                  >
+                    {step === 'upload' && 'Upload'}
+                    {step === 'overview' && 'Overview'}
+                    {step === 'registration' && 'Verify'}
+                    {step === 'summary' && 'Summary'}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Content */}
       <div className="max-w-6xl mx-auto">
