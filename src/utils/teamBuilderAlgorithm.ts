@@ -1832,7 +1832,13 @@ export function runSkillTieredDraft(
   // PHASE 0: Place coach kids first
   // =========================================================================
 
-  let globalPick = 1;
+  // Track picks per round for proper round.pickInRound display
+  const roundPickCounts = new Map<number, number>();
+  const getNextPickInRound = (round: number): number => {
+    const current = roundPickCounts.get(round) || 0;
+    roundPickCounts.set(round, current + 1);
+    return current + 1;
+  };
 
   // Sort coach kids by projected round to place them in order
   const coachKids = players.filter(p => p.isCoachKid && p.coachTeamId);
@@ -1853,7 +1859,8 @@ export function runSkillTieredDraft(
     }
 
     const round = coachKid.lockedToRound ?? coachKid.projectedRound;
-    assignPlayer(coachKid.id, team.id, round, globalPick++, 'coach-kid');
+    const pickInRound = getNextPickInRound(round);
+    assignPlayer(coachKid.id, team.id, round, pickInRound, 'coach-kid');
 
     // Lock any siblings to this team
     lockSiblingsToTeam(coachKid.id, team.id);
@@ -1874,7 +1881,8 @@ export function runSkillTieredDraft(
     }
 
     const round = sibling.lockedToRound ?? sibling.projectedRound;
-    assignPlayer(siblingId, teamId, round, globalPick++, 'sibling-lock');
+    const pickInRound = getNextPickInRound(round);
+    assignPlayer(siblingId, teamId, round, pickInRound, 'sibling-lock');
   }
 
   // =========================================================================
@@ -1914,7 +1922,8 @@ export function runSkillTieredDraft(
 
       if (mandatorySibling) {
         const [siblingId] = mandatorySibling;
-        assignPlayer(siblingId, teamId, round, globalPick++, 'sibling-lock');
+        const pickInRound = getNextPickInRound(round);
+        assignPlayer(siblingId, teamId, round, pickInRound, 'sibling-lock');
         lockSiblingsToTeam(siblingId, teamId);
         continue;
       }
@@ -1982,7 +1991,8 @@ export function runSkillTieredDraft(
         }
 
         const wasDeferred = deferredThisRound.has(player.id);
-        if (assignPlayer(player.id, teamId, round, globalPick++, reason, wasDeferred, tiebreakScore)) {
+        const pickInRound = getNextPickInRound(round);
+        if (assignPlayer(player.id, teamId, round, pickInRound, reason, wasDeferred, tiebreakScore)) {
           lockSiblingsToTeam(player.id, teamId);
           picked = true;
           break;
@@ -1993,7 +2003,8 @@ export function runSkillTieredDraft(
       if (!picked && eligiblePlayers.length > 0) {
         const bestByScore = eligiblePlayers.sort((a, b) => b.totalScore - a.totalScore)[0];
         const tiebreakScore = calculateTiebreakScore(bestByScore.id, teamId, team);
-        assignPlayer(bestByScore.id, teamId, round, globalPick++, 'balance', true, tiebreakScore);
+        const pickInRound = getNextPickInRound(round);
+        assignPlayer(bestByScore.id, teamId, round, pickInRound, 'balance', true, tiebreakScore);
         lockSiblingsToTeam(bestByScore.id, teamId);
       }
     }
@@ -2018,7 +2029,9 @@ export function runSkillTieredDraft(
       if (lockedTeamId) {
         const team = teamMap.get(lockedTeamId);
         if (team && canAcceptPlayer(team)) {
-          assignPlayer(player.id, lockedTeamId, totalRounds + 1, globalPick++, 'sibling-lock');
+          const overflowRound = totalRounds + 1;
+          const pickInRound = getNextPickInRound(overflowRound);
+          assignPlayer(player.id, lockedTeamId, overflowRound, pickInRound, 'sibling-lock');
           continue;
         }
       }
@@ -2041,7 +2054,9 @@ export function runSkillTieredDraft(
           }
         }
 
-        assignPlayer(player.id, bestTeam.id, totalRounds + 1, globalPick++, 'balance');
+        const overflowRound = totalRounds + 1;
+        const pickInRound = getNextPickInRound(overflowRound);
+        assignPlayer(player.id, bestTeam.id, overflowRound, pickInRound, 'balance');
         lockSiblingsToTeam(player.id, bestTeam.id);
       } else {
         warnings.push(`Could not place player ${player.name} - all teams full`);
