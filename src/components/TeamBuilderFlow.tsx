@@ -255,6 +255,48 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
     }
   }, [hasResults, algorithmResult, finalPlayers, finalTeams]);
 
+  // Rebuild resolvedRequests from persisted player data when starting at configure step
+  // This handles the case where user navigated away and came back, or is doing a re-run
+  useEffect(() => {
+    // Only run if:
+    // 1. We're at configure or generate step (where we need resolvedRequests for algorithm)
+    // 2. resolvedRequests is empty (not already built)
+    // 3. Players have request data (from previous session)
+    const hasPlayerRequestData = evalPlayers.some(p => p.coachRequest || (p.teammateRequests && p.teammateRequests.length > 0));
+
+    if ((step === 'configure' || step === 'generate') && resolvedRequests.length === 0 && hasPlayerRequestData) {
+      console.log('Rebuilding resolvedRequests from persisted player data on mount...');
+
+      // Build coach info from teams
+      const coachInfos: CoachInfo[] = teams.map(t => ({
+        teamId: t.id,
+        teamName: t.teamName || t.headCoach,
+        coachName: t.headCoach,
+        assistantCoach: t.assistantCoach,
+      }));
+
+      // Build player data for normalization from stored evalPlayers
+      const playersForNormalization = evalPlayers.map(p => ({
+        id: p.id,
+        bib: p.bib,
+        firstName: p.firstName,
+        lastName: p.lastName,
+        coachRequest: p.coachRequest,
+        teammateRequests: p.teammateRequests,
+        school: p.school,
+      }));
+
+      const normResult = normalizeRequestData(playersForNormalization, coachInfos);
+      setNormalizationResult(normResult);
+
+      const preparedRequests = prepareRequestsForConfirmation(normResult, requestsFirstConfig);
+      setResolvedRequests(preparedRequests);
+
+      console.log(`Rebuilt ${preparedRequests.length} requests from persisted player data`);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]); // Only run when step changes, not on every state update
+
   // -----------------------------------------------------------------------------
   // Step 1: Import
   // -----------------------------------------------------------------------------
@@ -554,18 +596,39 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
     }));
 
     // Build player data for normalization by merging eval and registration
-    const playersForNormalization = evalPlayers.map(evalPlayer => {
+    // ALSO persist the registration data to player objects so it survives refresh/re-run
+    const mergedPlayers = evalPlayers.map(evalPlayer => {
       const regPlayer = registrationPlayers.find(r => r.evalBib === evalPlayer.bib);
-      return {
-        id: evalPlayer.id,
-        bib: evalPlayer.bib,
-        firstName: evalPlayer.firstName,
-        lastName: evalPlayer.lastName,
-        coachRequest: regPlayer?.coachRequest,
-        teammateRequests: regPlayer?.teammateRequests,
-        school: regPlayer?.school,
-      };
+      if (regPlayer) {
+        return {
+          ...evalPlayer,
+          coachRequest: regPlayer.coachRequest || undefined,
+          teammateRequests: regPlayer.teammateRequests.length > 0 ? regPlayer.teammateRequests : undefined,
+          school: regPlayer.school || undefined,
+          grade: regPlayer.grade ?? undefined,
+        };
+      }
+      return evalPlayer;
     });
+
+    // Update local state with merged players
+    setEvalPlayers(mergedPlayers);
+
+    // Persist merged players to division so data survives navigation/refresh
+    if (onUpdatePlayers) {
+      onUpdatePlayers(mergedPlayers);
+    }
+
+    // Build player data for normalization
+    const playersForNormalization = mergedPlayers.map(p => ({
+      id: p.id,
+      bib: p.bib,
+      firstName: p.firstName,
+      lastName: p.lastName,
+      coachRequest: p.coachRequest,
+      teammateRequests: p.teammateRequests,
+      school: p.school,
+    }));
 
     const normResult = normalizeRequestData(playersForNormalization, coachInfos);
     setNormalizationResult(normResult);
@@ -581,7 +644,7 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
 
     // Go to request confirmation step
     setStep('confirm-requests');
-  }, [registrationData, evalPlayers, registrationPlayers, teams, requestsFirstConfig]);
+  }, [registrationData, evalPlayers, registrationPlayers, teams, requestsFirstConfig, onUpdatePlayers]);
 
   // Handle updating a request from the confirmation UI
   const handleUpdateRequest = useCallback((
