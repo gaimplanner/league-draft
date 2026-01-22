@@ -1506,3 +1506,743 @@ export function applyTrade(
 
   return { teams: newTeams, assignments: newAssignments };
 }
+
+// -----------------------------------------------------------------------------
+// Skill-Tiered Draft Algorithm
+// -----------------------------------------------------------------------------
+
+/**
+ * Configuration for the skill-tiered draft algorithm.
+ */
+export interface SkillTieredDraftConfig {
+  // Roster constraints
+  maxRosterSize: number;           // Hard max per team (e.g., 13)
+  minRosterSize: number;           // Minimum players per team (e.g., 10)
+  forceEvenTeams: boolean;         // If true, teams differ by at most 1 player
+
+  // Request weights for tiebreaking within skill tier
+  twoWayTeammateWeight: number;    // Weight for two-way friend requests (default: 100)
+  oneWayTeammateWeight: number;    // Weight for one-way friend requests (default: 50)
+  coachRequestWeight: number;      // Weight for coach requests (default: 30)
+  schoolSameGradeWeight: number;   // Weight for school + same grade (default: 20)
+  schoolDiffGradeWeight: number;   // Weight for school only (default: 10)
+
+  // Deferral settings
+  enableDeferral: boolean;         // Allow deferring players who can be happy elsewhere
+  deferralThreshold: number;       // Min request score on another team to defer (default: 50)
+
+  // Balance settings
+  maxAutoTrades: number;           // Max number of suggested trades
+}
+
+export const DEFAULT_SKILL_TIERED_CONFIG: SkillTieredDraftConfig = {
+  maxRosterSize: 13,
+  minRosterSize: 10,
+  forceEvenTeams: false,
+  twoWayTeammateWeight: 100,
+  oneWayTeammateWeight: 50,
+  coachRequestWeight: 30,
+  schoolSameGradeWeight: 20,
+  schoolDiffGradeWeight: 10,
+  enableDeferral: true,
+  deferralThreshold: 50,
+  maxAutoTrades: 10,
+};
+
+/**
+ * Extended result type for skill-tiered draft algorithm.
+ */
+export interface SkillTieredDraftResult extends TeamBuilderResult {
+  draftLog: DraftLogEntry[];
+  suggestedTrades: TradeCandidate[];
+}
+
+/**
+ * Log entry for each pick in the skill-tiered draft.
+ */
+export interface DraftLogEntry {
+  round: number;
+  pick: number;
+  teamId: string;
+  teamName: string;
+  playerId: string;
+  playerName: string;
+  reason: AssignmentReason;
+  wasDeferred: boolean;
+  tiebreakScore?: number;
+}
+
+/**
+ * Run the skill-tiered draft algorithm.
+ *
+ * This algorithm simulates a real draft process:
+ * 1. Place coach kids first on their assigned teams
+ * 2. Calculate initial draft order based on team scores (from top 2 coach kids)
+ * 3. For each round, players in that skill tier (projectedRound) are available
+ * 4. Picking team selects based on request tiebreakers (not just best score)
+ * 5. Draft order recalculated each round (lowest score team picks first)
+ * 6. Players can be deferred if they can be happy on another team
+ */
+export function runSkillTieredDraft(
+  players: TeamBuilderPlayer[],
+  teams: Team[],
+  resolvedRequests: ResolvedRequest[],
+  config: Partial<SkillTieredDraftConfig> = {}
+): SkillTieredDraftResult {
+  const fullConfig = { ...DEFAULT_SKILL_TIERED_CONFIG, ...config };
+  const warnings: string[] = [];
+  const assignments: AssignmentResult[] = [];
+  const draftLog: DraftLogEntry[] = [];
+
+  // Initialize working copies
+  const workingTeams: TeamBuilderTeam[] = teams.map(t => ({
+    ...t,
+    assignedPlayerIds: [],
+    currentScore: 0,
+  }));
+
+  const unassignedPlayers = new Set(players.map(p => p.id));
+  const playerMap = new Map(players.map(p => [p.id, p]));
+  const teamMap = new Map(workingTeams.map(t => [t.id, t]));
+
+  // Build request lookup maps
+  const playerRequests = new Map<string, ResolvedRequest[]>();
+  for (const req of resolvedRequests) {
+    if (!playerRequests.has(req.playerId)) {
+      playerRequests.set(req.playerId, []);
+    }
+    playerRequests.get(req.playerId)!.push(req);
+  }
+
+  // Track sibling locks
+  const siblingLocks = new Map<string, string>(); // playerId -> teamId
+
+  // Calculate total rounds needed
+  const totalPlayers = players.length;
+  const numTeams = workingTeams.length;
+  const totalRounds = Math.ceil(totalPlayers / numTeams);
+
+  // Calculate target roster sizes for even teams
+  const baseRosterSize = Math.floor(totalPlayers / numTeams);
+  const extraPlayers = totalPlayers % numTeams;
+
+  // Helper: get max size for a team when forceEvenTeams is enabled
+  const getMaxSizeForTeam = (team: TeamBuilderTeam): number => {
+    if (!fullConfig.forceEvenTeams) {
+      return fullConfig.maxRosterSize;
+    }
+    const teamIndex = workingTeams.indexOf(team);
+    return teamIndex < extraPlayers ? baseRosterSize + 1 : baseRosterSize;
+  };
+
+  // Helper: check if team can accept more players
+  const canAcceptPlayer = (team: TeamBuilderTeam): boolean => {
+    return team.assignedPlayerIds.length < getMaxSizeForTeam(team);
+  };
+
+  // Helper: assign a player to a team
+  const assignPlayer = (
+    playerId: string,
+    teamId: string,
+    round: number,
+    pick: number,
+    reason: AssignmentReason,
+    wasDeferred: boolean = false,
+    tiebreakScore?: number
+  ): boolean => {
+    const player = playerMap.get(playerId);
+    const team = teamMap.get(teamId);
+
+    if (!player || !team) {
+      warnings.push(`Failed to assign player ${playerId} to team ${teamId}`);
+      return false;
+    }
+
+    if (!canAcceptPlayer(team)) {
+      warnings.push(`Team ${team.teamName || team.headCoach} is full, cannot assign ${player.name}`);
+      return false;
+    }
+
+    team.assignedPlayerIds.push(playerId);
+    team.currentScore += player.totalScore;
+    unassignedPlayers.delete(playerId);
+
+    assignments.push({
+      playerId,
+      teamId,
+      round,
+      pick,
+      reason,
+    });
+
+    draftLog.push({
+      round,
+      pick,
+      teamId,
+      teamName: team.teamName || team.headCoach,
+      playerId,
+      playerName: player.name,
+      reason,
+      wasDeferred,
+      tiebreakScore,
+    });
+
+    return true;
+  };
+
+  // Helper: lock siblings to a team when one is drafted
+  const lockSiblingsToTeam = (playerId: string, teamId: string) => {
+    const player = playerMap.get(playerId);
+    if (!player) return;
+
+    // Find all siblings (forward and reverse links)
+    const toProcess = [playerId];
+    const processed = new Set<string>([playerId]);
+
+    while (toProcess.length > 0) {
+      const currentId = toProcess.shift()!;
+      const current = playerMap.get(currentId);
+      if (!current) continue;
+
+      // Check siblingId (forward)
+      if (current.siblingId && !processed.has(current.siblingId)) {
+        siblingLocks.set(current.siblingId, teamId);
+        processed.add(current.siblingId);
+        toProcess.push(current.siblingId);
+      }
+
+      // Check reverse (players whose siblingId points to current)
+      for (const [otherId, other] of playerMap) {
+        if (other.siblingId === currentId && !processed.has(otherId)) {
+          siblingLocks.set(otherId, teamId);
+          processed.add(otherId);
+          toProcess.push(otherId);
+        }
+      }
+    }
+  };
+
+  // Helper: calculate request tiebreak score for a player on a given team
+  const calculateTiebreakScore = (
+    playerId: string,
+    teamId: string,
+    team: TeamBuilderTeam
+  ): number => {
+    const player = playerMap.get(playerId);
+    if (!player) return 0;
+
+    const requests = playerRequests.get(playerId) || [];
+    let score = 0;
+
+    for (const req of requests) {
+      if (req.status !== 'auto-confirmed' && req.status !== 'user-confirmed') continue;
+      if (!req.resolvedTargetId) continue;
+
+      if (req.requestType === 'coach') {
+        // Coach request satisfied if this is the requested team
+        if (req.resolvedTargetId === teamId) {
+          score += fullConfig.coachRequestWeight;
+        }
+      } else if (req.requestType === 'teammate') {
+        // Teammate request satisfied if target is on this team
+        if (team.assignedPlayerIds.includes(req.resolvedTargetId)) {
+          score += req.isTwoWay ? fullConfig.twoWayTeammateWeight : fullConfig.oneWayTeammateWeight;
+        }
+      }
+    }
+
+    // School clustering bonus
+    if (player.school) {
+      for (const assignedId of team.assignedPlayerIds) {
+        const teammate = playerMap.get(assignedId);
+        if (teammate?.school?.toLowerCase() === player.school.toLowerCase()) {
+          if (teammate.grade && player.grade && teammate.grade === player.grade) {
+            score += fullConfig.schoolSameGradeWeight;
+          } else {
+            score += fullConfig.schoolDiffGradeWeight;
+          }
+        }
+      }
+    }
+
+    return score;
+  };
+
+  // Helper: check if player could be happy on another team (for deferral)
+  const canBeHappyElsewhere = (
+    playerId: string,
+    currentTeamId: string
+  ): { canDefer: boolean; bestAlternateTeamId?: string; bestScore?: number } => {
+    if (!fullConfig.enableDeferral) {
+      return { canDefer: false };
+    }
+
+    let bestScore = 0;
+    let bestTeamId: string | undefined;
+
+    for (const team of workingTeams) {
+      if (team.id === currentTeamId) continue;
+      if (!canAcceptPlayer(team)) continue;
+
+      const score = calculateTiebreakScore(playerId, team.id, team);
+      if (score > bestScore) {
+        bestScore = score;
+        bestTeamId = team.id;
+      }
+    }
+
+    return {
+      canDefer: bestScore >= fullConfig.deferralThreshold,
+      bestAlternateTeamId: bestTeamId,
+      bestScore,
+    };
+  };
+
+  // Helper: calculate draft order for a round (recalculated mode)
+  const calculateRoundOrder = (): string[] => {
+    // Sort teams by total score ascending (lowest score picks first)
+    // Use original draftPosition as tiebreaker
+    const sorted = [...workingTeams].sort((a, b) => {
+      const scoreDiff = a.currentScore - b.currentScore;
+      if (Math.abs(scoreDiff) < 0.01) {
+        // Same score - use original draft position as tiebreaker
+        return a.draftPosition - b.draftPosition;
+      }
+      return scoreDiff;
+    });
+    return sorted.map(t => t.id);
+  };
+
+  // Helper: get players available in a given skill tier (round)
+  const getPlayersInSkillTier = (round: number): TeamBuilderPlayer[] => {
+    return players.filter(p => {
+      if (!unassignedPlayers.has(p.id)) return false;
+      // Use lockedToRound if set, otherwise projectedRound
+      const effectiveRound = p.lockedToRound ?? p.projectedRound;
+      return effectiveRound === round;
+    });
+  };
+
+  // Helper: get all available players (regardless of tier) - for late rounds
+  const getAllAvailablePlayers = (): TeamBuilderPlayer[] => {
+    return players.filter(p => unassignedPlayers.has(p.id));
+  };
+
+  // =========================================================================
+  // PHASE 0: Place coach kids first
+  // =========================================================================
+
+  let globalPick = 1;
+
+  // Sort coach kids by projected round to place them in order
+  const coachKids = players.filter(p => p.isCoachKid && p.coachTeamId);
+  coachKids.sort((a, b) => {
+    const aRound = a.lockedToRound ?? a.projectedRound;
+    const bRound = b.lockedToRound ?? b.projectedRound;
+    return aRound - bRound;
+  });
+
+  // Place each coach kid
+  for (const coachKid of coachKids) {
+    if (!unassignedPlayers.has(coachKid.id)) continue;
+
+    const team = teamMap.get(coachKid.coachTeamId!);
+    if (!team || !canAcceptPlayer(team)) {
+      warnings.push(`Could not place coach kid ${coachKid.name} on team ${coachKid.coachTeamId}`);
+      continue;
+    }
+
+    const round = coachKid.lockedToRound ?? coachKid.projectedRound;
+    assignPlayer(coachKid.id, team.id, round, globalPick++, 'coach-kid');
+
+    // Lock any siblings to this team
+    lockSiblingsToTeam(coachKid.id, team.id);
+  }
+
+  // =========================================================================
+  // PHASE 1: Place siblings of coach kids (locked siblings)
+  // =========================================================================
+
+  for (const [siblingId, teamId] of siblingLocks) {
+    if (!unassignedPlayers.has(siblingId)) continue;
+
+    const sibling = playerMap.get(siblingId);
+    const team = teamMap.get(teamId);
+    if (!sibling || !team || !canAcceptPlayer(team)) {
+      warnings.push(`Could not place sibling ${siblingId} on locked team ${teamId}`);
+      continue;
+    }
+
+    const round = sibling.lockedToRound ?? sibling.projectedRound;
+    assignPlayer(siblingId, teamId, round, globalPick++, 'sibling-lock');
+  }
+
+  // =========================================================================
+  // PHASE 2: Run draft rounds
+  // =========================================================================
+
+  for (let round = 1; round <= totalRounds && unassignedPlayers.size > 0; round++) {
+    // Get draft order for this round
+    const roundOrder = calculateRoundOrder();
+
+    // Get players available in this skill tier
+    let tierPlayers = getPlayersInSkillTier(round);
+
+    // Track which players were deferred this round
+    const deferredThisRound = new Set<string>();
+
+    // Each team picks in order
+    for (const teamId of roundOrder) {
+      if (unassignedPlayers.size === 0) break;
+
+      const team = teamMap.get(teamId);
+      if (!team || !canAcceptPlayer(team)) continue;
+
+      // Check if team needs to fill minimum roster size
+      const remainingRounds = totalRounds - round + 1;
+      const remainingPicks = remainingRounds; // One pick per remaining round
+      const neededForMinimum = Math.max(0, fullConfig.minRosterSize - team.assignedPlayerIds.length);
+      const mustPickNow = neededForMinimum >= remainingPicks;
+
+      // Check for mandatory sibling pick
+      const mandatorySibling = [...siblingLocks.entries()].find(
+        ([playerId, lockedTeamId]) =>
+          lockedTeamId === teamId &&
+          unassignedPlayers.has(playerId) &&
+          (playerMap.get(playerId)?.lockedToRound ?? playerMap.get(playerId)?.projectedRound) === round
+      );
+
+      if (mandatorySibling) {
+        const [siblingId] = mandatorySibling;
+        assignPlayer(siblingId, teamId, round, globalPick++, 'sibling-lock');
+        lockSiblingsToTeam(siblingId, teamId);
+        continue;
+      }
+
+      // Get eligible players for this pick
+      // Include tier players + any previously deferred players + players below minimum if needed
+      let eligiblePlayers = [
+        ...tierPlayers.filter(p =>
+          unassignedPlayers.has(p.id) &&
+          !deferredThisRound.has(p.id) &&
+          (!siblingLocks.has(p.id) || siblingLocks.get(p.id) === teamId)
+        ),
+      ];
+
+      // If no tier players available, look at all available players
+      if (eligiblePlayers.length === 0) {
+        eligiblePlayers = getAllAvailablePlayers().filter(p =>
+          !siblingLocks.has(p.id) || siblingLocks.get(p.id) === teamId
+        );
+      }
+
+      if (eligiblePlayers.length === 0) {
+        // No eligible players, skip this pick
+        continue;
+      }
+
+      // Score each eligible player by tiebreak score on this team
+      const scoredPlayers = eligiblePlayers.map(p => ({
+        player: p,
+        tiebreakScore: calculateTiebreakScore(p.id, teamId, team),
+      }));
+
+      // Sort by tiebreak score (descending), then by totalScore (descending) as final tiebreaker
+      scoredPlayers.sort((a, b) => {
+        const scoreDiff = b.tiebreakScore - a.tiebreakScore;
+        if (Math.abs(scoreDiff) < 0.01) {
+          return b.player.totalScore - a.player.totalScore;
+        }
+        return scoreDiff;
+      });
+
+      // Try to pick the best player
+      let picked = false;
+      for (const { player, tiebreakScore } of scoredPlayers) {
+        // Check for deferral (unless we must pick now for minimum)
+        if (!mustPickNow && tiebreakScore === 0 && fullConfig.enableDeferral) {
+          const { canDefer, bestScore } = canBeHappyElsewhere(player.id, teamId);
+          if (canDefer && bestScore !== undefined && bestScore >= fullConfig.deferralThreshold) {
+            // Defer this player - they can be happier elsewhere
+            deferredThisRound.add(player.id);
+            continue;
+          }
+        }
+
+        // Determine reason
+        let reason: AssignmentReason = 'balance';
+        if (tiebreakScore >= fullConfig.twoWayTeammateWeight) {
+          reason = 'two-way-friend';
+        } else if (tiebreakScore >= fullConfig.oneWayTeammateWeight) {
+          reason = 'one-way-friend';
+        } else if (tiebreakScore >= fullConfig.coachRequestWeight) {
+          reason = 'coach-request';
+        } else if (tiebreakScore >= fullConfig.schoolSameGradeWeight) {
+          reason = 'school-cluster';
+        }
+
+        const wasDeferred = deferredThisRound.has(player.id);
+        if (assignPlayer(player.id, teamId, round, globalPick++, reason, wasDeferred, tiebreakScore)) {
+          lockSiblingsToTeam(player.id, teamId);
+          picked = true;
+          break;
+        }
+      }
+
+      // If still no pick (all eligible were deferred), pick the best by score
+      if (!picked && eligiblePlayers.length > 0) {
+        const bestByScore = eligiblePlayers.sort((a, b) => b.totalScore - a.totalScore)[0];
+        const tiebreakScore = calculateTiebreakScore(bestByScore.id, teamId, team);
+        assignPlayer(bestByScore.id, teamId, round, globalPick++, 'balance', true, tiebreakScore);
+        lockSiblingsToTeam(bestByScore.id, teamId);
+      }
+    }
+  }
+
+  // =========================================================================
+  // PHASE 3: Handle any remaining players
+  // =========================================================================
+
+  while (unassignedPlayers.size > 0) {
+    const remaining = getAllAvailablePlayers();
+    if (remaining.length === 0) break;
+
+    // Sort by score descending
+    remaining.sort((a, b) => b.totalScore - a.totalScore);
+
+    for (const player of remaining) {
+      if (!unassignedPlayers.has(player.id)) continue;
+
+      // Check for sibling lock
+      const lockedTeamId = siblingLocks.get(player.id);
+      if (lockedTeamId) {
+        const team = teamMap.get(lockedTeamId);
+        if (team && canAcceptPlayer(team)) {
+          assignPlayer(player.id, lockedTeamId, totalRounds + 1, globalPick++, 'sibling-lock');
+          continue;
+        }
+      }
+
+      // Find team with lowest score that can accept
+      const eligibleTeams = workingTeams
+        .filter(canAcceptPlayer)
+        .sort((a, b) => a.currentScore - b.currentScore);
+
+      if (eligibleTeams.length > 0) {
+        // Find best team by tiebreak score
+        let bestTeam = eligibleTeams[0];
+        let bestTiebreak = calculateTiebreakScore(player.id, eligibleTeams[0].id, eligibleTeams[0]);
+
+        for (const team of eligibleTeams) {
+          const tiebreak = calculateTiebreakScore(player.id, team.id, team);
+          if (tiebreak > bestTiebreak) {
+            bestTiebreak = tiebreak;
+            bestTeam = team;
+          }
+        }
+
+        assignPlayer(player.id, bestTeam.id, totalRounds + 1, globalPick++, 'balance');
+        lockSiblingsToTeam(player.id, bestTeam.id);
+      } else {
+        warnings.push(`Could not place player ${player.name} - all teams full`);
+        unassignedPlayers.delete(player.id);
+      }
+    }
+  }
+
+  // =========================================================================
+  // PHASE 4: Calculate suggested trades for balance
+  // =========================================================================
+
+  const confirmedRequests = resolvedRequests.filter(
+    r => r.status === 'auto-confirmed' || r.status === 'user-confirmed'
+  );
+
+  const suggestedTrades = findBalancingTrades(
+    workingTeams,
+    players,
+    confirmedRequests,
+    assignments,
+    {
+      ...DEFAULT_REQUESTS_FIRST_CONFIG,
+      maxAutoTrades: fullConfig.maxAutoTrades,
+    }
+  );
+
+  // =========================================================================
+  // Calculate results
+  // =========================================================================
+
+  // Team summaries
+  const teamAverages = workingTeams.map(team => ({
+    team,
+    averageScore: team.assignedPlayerIds.length > 0
+      ? team.currentScore / team.assignedPlayerIds.length
+      : 0,
+  }));
+  const meanAverageScore = teamAverages.length > 0
+    ? teamAverages.reduce((sum, t) => sum + t.averageScore, 0) / teamAverages.length
+    : 0;
+
+  const teamSummaries: TeamSummary[] = workingTeams.map(team => {
+    const rosterCount = team.assignedPlayerIds.length;
+    const averageScore = rosterCount > 0 ? team.currentScore / rosterCount : 0;
+    return {
+      teamId: team.id,
+      teamName: team.teamName || team.headCoach,
+      coachName: team.headCoach,
+      rosterCount,
+      totalScore: team.currentScore,
+      averageScore,
+      meanDelta: averageScore - meanAverageScore,
+      meanDeltaPercent: meanAverageScore > 0 ? ((averageScore - meanAverageScore) / meanAverageScore) * 100 : 0,
+    };
+  });
+
+  // Player happiness - treats coach request same as teammate request for scoring
+  const playerHappiness: PlayerHappiness[] = players.map(player => {
+    const assignment = assignments.find(a => a.playerId === player.id);
+    if (!assignment) {
+      return {
+        playerId: player.id,
+        score: 'no-requests' as HappinessScore,
+        coachRequestHonored: null,
+        teammateRequestsHonored: 0,
+        teammateRequestsTotal: 0,
+        twoWayRequestsHonored: 0,
+        twoWayRequestsTotal: 0,
+      };
+    }
+
+    const teamId = assignment.teamId;
+    const team = teamMap.get(teamId)!;
+    const requests = playerRequests.get(player.id) || [];
+
+    // Coach request
+    const coachRequests = requests.filter(r =>
+      r.requestType === 'coach' &&
+      (r.status === 'auto-confirmed' || r.status === 'user-confirmed') &&
+      r.resolvedTargetId
+    );
+    const hasCoachRequest = coachRequests.length > 0;
+    const coachRequestHonored = hasCoachRequest
+      ? coachRequests.some(r => r.resolvedTargetId === teamId)
+      : null;
+
+    // Teammate requests
+    const teammateRequests = requests.filter(r =>
+      r.requestType === 'teammate' &&
+      (r.status === 'auto-confirmed' || r.status === 'user-confirmed') &&
+      r.resolvedTargetId
+    );
+
+    const twoWayTotal = teammateRequests.filter(r => r.isTwoWay).length;
+    const oneWayTotal = teammateRequests.filter(r => !r.isTwoWay).length;
+    const teammateRequestsTotal = twoWayTotal + oneWayTotal;
+
+    const twoWayHonored = teammateRequests.filter(r =>
+      r.isTwoWay && team.assignedPlayerIds.includes(r.resolvedTargetId!)
+    ).length;
+    const oneWayHonored = teammateRequests.filter(r =>
+      !r.isTwoWay && team.assignedPlayerIds.includes(r.resolvedTargetId!)
+    ).length;
+    const teammateRequestsHonored = twoWayHonored + oneWayHonored;
+
+    // Calculate happiness score
+    // Coach request counts the same as a teammate request for happiness
+    let score: HappinessScore;
+    const totalRequests = teammateRequestsTotal + (hasCoachRequest ? 1 : 0);
+    const totalHonored = teammateRequestsHonored + (coachRequestHonored ? 1 : 0);
+
+    // Check for school clustering bonus (partial happiness)
+    let hasSchoolBonus = false;
+    if (player.school) {
+      for (const assignedId of team.assignedPlayerIds) {
+        if (assignedId === player.id) continue;
+        const teammate = playerMap.get(assignedId);
+        if (teammate?.school?.toLowerCase() === player.school.toLowerCase() &&
+            teammate.grade && player.grade && teammate.grade === player.grade) {
+          hasSchoolBonus = true;
+          break;
+        }
+      }
+    }
+
+    if (totalRequests === 0) {
+      score = hasSchoolBonus ? 'some' : 'no-requests';
+    } else if (totalHonored === totalRequests) {
+      score = 'all';
+    } else if (totalHonored > 0 || hasSchoolBonus) {
+      score = 'some';
+    } else {
+      score = 'none';
+    }
+
+    return {
+      playerId: player.id,
+      score,
+      coachRequestHonored,
+      teammateRequestsHonored,
+      teammateRequestsTotal,
+      twoWayRequestsHonored: twoWayHonored,
+      twoWayRequestsTotal: twoWayTotal,
+    };
+  });
+
+  // Stats
+  const lockedCount = assignments.filter(a =>
+    ['coach-kid', 'assistant-coach-kid', 'sibling-lock', 'manual-lock'].includes(a.reason)
+  ).length;
+
+  const topTalentAssigned = assignments.filter(a => a.reason === 'top-talent').length;
+
+  const requestBasedCount = assignments.filter(a =>
+    ['two-way-friend', 'one-way-friend', 'coach-request', 'school-cluster'].includes(a.reason)
+  ).length;
+
+  const balanceBasedCount = assignments.filter(a => a.reason === 'balance').length;
+
+  const twoWayTotal = players.reduce((sum, p) => sum + (p.twoWayTeammateIds?.length || 0), 0);
+  const twoWayHonored = playerHappiness.reduce((sum, h) => sum + h.twoWayRequestsHonored, 0);
+
+  const oneWayTotal = players.reduce((sum, p) => sum + (p.oneWayTeammateIds?.length || 0), 0);
+  const oneWayHonored = playerHappiness.reduce((sum, h) =>
+    sum + (h.teammateRequestsHonored - h.twoWayRequestsHonored), 0
+  );
+
+  const coachRequestTotal = players.filter(p => p.resolvedCoachTeamId).length;
+  const coachRequestHonored = playerHappiness.filter(h => h.coachRequestHonored === true).length;
+
+  // Average happiness
+  const happinessScores = playerHappiness.filter(h => h.score !== 'no-requests');
+  const avgHappiness = happinessScores.length > 0
+    ? happinessScores.reduce((sum, h) => {
+        if (h.score === 'all') return sum + 1;
+        if (h.score === 'some') return sum + 0.5;
+        return sum;
+      }, 0) / happinessScores.length
+    : 1;
+
+  return {
+    assignments,
+    teamSummaries,
+    playerHappiness,
+    warnings,
+    stats: {
+      totalPlayers: players.length,
+      lockedPlayers: lockedCount,
+      topTalentPlayers: topTalentAssigned,
+      requestBasedPlayers: requestBasedCount,
+      balanceBasedPlayers: balanceBasedCount,
+      twoWayRequestsHonored: twoWayHonored,
+      twoWayRequestsTotal: twoWayTotal,
+      oneWayRequestsHonored: oneWayHonored,
+      oneWayRequestsTotal: oneWayTotal,
+      coachRequestsHonored: coachRequestHonored,
+      coachRequestsTotal: coachRequestTotal,
+      averageHappiness: avgHappiness,
+    },
+    draftLog,
+    suggestedTrades,
+  };
+}

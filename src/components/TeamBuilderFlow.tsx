@@ -25,11 +25,13 @@ import { TradeModal } from './TradeModal';
 import {
   runTeamBuilderAlgorithm,
   runRequestsFirstAlgorithm,
+  runSkillTieredDraft,
   TeamBuilderConfig,
   TeamBuilderResult,
   RequestsFirstResult,
   TeamBuilderPlayer,
   DEFAULT_TEAM_BUILDER_CONFIG,
+  DEFAULT_SKILL_TIERED_CONFIG,
   applyAssignments,
   TeamSummary,
   PlayerHappiness,
@@ -60,7 +62,7 @@ import * as XLSX from 'xlsx';
 
 type TeamBuilderStep = 'setup' | 'import' | 'resolution' | 'confirm-requests' | 'configure' | 'generate' | 'results';
 
-type AlgorithmMode = 'balance-first' | 'requests-first';
+type AlgorithmMode = 'balance-first' | 'requests-first' | 'skill-tiered';
 
 interface TeamBuilderFlowProps {
   division: Division;
@@ -138,7 +140,7 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
 
   // Request confirmation state
   const [resolvedRequests, setResolvedRequests] = useState<ResolvedRequest[]>([]);
-  const [algorithmMode, setAlgorithmMode] = useState<AlgorithmMode>('requests-first');
+  const [algorithmMode, setAlgorithmMode] = useState<AlgorithmMode>('skill-tiered');
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [requestsFirstConfig, _setRequestsFirstConfig] = useState<RequestsFirstConfig>(DEFAULT_REQUESTS_FIRST_CONFIG);
 
@@ -802,7 +804,48 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
       };
     });
 
-    if (algorithmMode === 'requests-first') {
+    if (algorithmMode === 'skill-tiered') {
+      // Run skill-tiered draft algorithm (simulates real draft)
+      const result = runSkillTieredDraft(
+        teamBuilderPlayers,
+        teams,
+        resolvedRequests,
+        {
+          ...DEFAULT_SKILL_TIERED_CONFIG,
+          maxRosterSize: config.maxRosterSize,
+          minRosterSize: config.minRosterSize,
+          forceEvenTeams: config.forceEvenTeams,
+          twoWayTeammateWeight: requestsFirstConfig.twoWayTeammateWeight,
+          oneWayTeammateWeight: requestsFirstConfig.oneWayTeammateWeight,
+          coachRequestWeight: requestsFirstConfig.coachRequestWeight,
+        }
+      );
+      // Cast to RequestsFirstResult since SkillTieredDraftResult extends it
+      setRequestsFirstResult(result as unknown as RequestsFirstResult);
+      setAlgorithmResult(result);
+
+      // Reset trade state
+      setAppliedTradeIds(new Set());
+      setDismissedTradeIds(new Set());
+
+      // Apply assignments to get final state
+      const { players: updatedPlayers, teams: updatedTeams } = applyAssignments(
+        teamBuilderPlayers,
+        teams,
+        result.assignments
+      );
+
+      setFinalPlayers(updatedPlayers);
+      setFinalTeams(updatedTeams);
+
+      // Persist the results
+      if (onUpdatePlayers) {
+        onUpdatePlayers(updatedPlayers);
+      }
+      if (onUpdateTeams) {
+        onUpdateTeams(updatedTeams);
+      }
+    } else if (algorithmMode === 'requests-first') {
       // Run requests-first algorithm
       const result = runRequestsFirstAlgorithm(
         teamBuilderPlayers,
@@ -1506,9 +1549,38 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
                 Algorithm Mode
               </h3>
               <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                Choose how teams should be built. Requests-first prioritizes honoring friend requests over balance.
+                Choose how teams should be built. The skill-tiered algorithm simulates a real draft process.
               </p>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
+                {/* Skill-Tiered Draft (Recommended) */}
+                <div
+                  className={`p-4 rounded-lg border-2 cursor-pointer transition-colors ${
+                    algorithmMode === 'skill-tiered'
+                      ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-500'
+                      : 'bg-gray-50 dark:bg-gray-700/50 border-transparent hover:border-gray-300 dark:hover:border-gray-600'
+                  }`}
+                  onClick={() => setAlgorithmMode('skill-tiered')}
+                >
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${
+                      algorithmMode === 'skill-tiered'
+                        ? 'bg-purple-600'
+                        : 'border-2 border-gray-300 dark:border-gray-600'
+                    }`}>
+                      {algorithmMode === 'skill-tiered' && (
+                        <div className="w-2 h-2 rounded-full bg-white" />
+                      )}
+                    </div>
+                    <h4 className="font-semibold text-gray-900 dark:text-white">
+                      Skill-Tiered Draft (Recommended)
+                    </h4>
+                  </div>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 ml-8">
+                    Simulates a real draft. Picks players by skill tier (projected round), using
+                    requests as tiebreakers. Recalculates draft order each round for balance.
+                  </p>
+                </div>
+                {/* Requests First */}
                 <div
                   className={`p-4 rounded-lg border-2 cursor-pointer transition-colors ${
                     algorithmMode === 'requests-first'
@@ -1528,14 +1600,15 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
                       )}
                     </div>
                     <h4 className="font-semibold text-gray-900 dark:text-white">
-                      Requests First (Recommended)
+                      Requests First
                     </h4>
                   </div>
                   <p className="text-sm text-gray-600 dark:text-gray-400 ml-8">
-                    Prioritizes honoring friend requests. Two-way friends are placed together first,
-                    then other requests are honored. Balance is improved via suggested trades afterward.
+                    Prioritizes friend requests. Two-way friends placed together first,
+                    then trades suggested for balance.
                   </p>
                 </div>
+                {/* Balance First */}
                 <div
                   className={`p-4 rounded-lg border-2 cursor-pointer transition-colors ${
                     algorithmMode === 'balance-first'
@@ -1555,12 +1628,12 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
                       )}
                     </div>
                     <h4 className="font-semibold text-gray-900 dark:text-white">
-                      Balance First (Original)
+                      Balance First
                     </h4>
                   </div>
                   <p className="text-sm text-gray-600 dark:text-gray-400 ml-8">
-                    Prioritizes team balance. Spreads top talent first, then honors requests only
-                    if they don't impact balance too much. May result in lower request satisfaction.
+                    Spreads top talent first, then honors requests only
+                    if they don't impact balance.
                   </p>
                 </div>
               </div>
