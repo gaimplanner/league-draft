@@ -179,7 +179,11 @@ function transformPlayerFromApi(data: Record<string, unknown>): Player {
     draftedByTeamId: (data.drafted_by_team_id as string | null) ?? undefined,
     draftedInRound: safeParseOptionalNumber(data.drafted_in_round),
     draftedAtPick: safeParseOptionalNumber(data.drafted_at_pick),
+    // Team Builder fields
+    coachRequest: (data.coach_request as string | null) ?? undefined,
+    teammateRequests: (data.teammate_requests as string[] | null) ?? [],
     school: (data.school as string | null) ?? undefined,
+    grade: safeParseOptionalNumber(data.grade),
   };
 }
 
@@ -226,7 +230,11 @@ function transformPlayerToApi(player: Partial<Player>): Record<string, unknown> 
   if (player.draftedByTeamId !== undefined) result.drafted_by_team_id = player.draftedByTeamId;
   if (player.draftedInRound !== undefined) result.drafted_in_round = player.draftedInRound;
   if (player.draftedAtPick !== undefined) result.drafted_at_pick = player.draftedAtPick;
+  // Team Builder fields
+  if (player.coachRequest !== undefined) result.coach_request = player.coachRequest;
+  if (player.teammateRequests !== undefined) result.teammate_requests = player.teammateRequests;
   if (player.school !== undefined) result.school = player.school;
+  if (player.grade !== undefined) result.grade = player.grade;
 
   return result;
 }
