@@ -1,4 +1,5 @@
 from django.db import transaction
+from django.db.models import Max
 from django.utils import timezone
 from uuid import UUID
 
@@ -94,7 +95,9 @@ class DraftService:
             raise ValueError("Player is already drafted")
 
         team = Team.objects.get(id=team_id)
-        overall_pick = draft_state.picks.count() + 1
+        # Use Max aggregation for atomic pick number calculation (prevents race conditions)
+        max_pick = draft_state.picks.aggregate(Max('pick'))['pick__max'] or 0
+        overall_pick = max_pick + 1
 
         # Create the pick
         DraftPick.objects.create(
@@ -156,7 +159,9 @@ class DraftService:
         if available_players >= remaining_spots:
             raise ValueError("Cannot skip - all remaining players must be drafted")
 
-        overall_pick = draft_state.picks.count() + 1
+        # Use Max aggregation for atomic pick number calculation (prevents race conditions)
+        max_pick = draft_state.picks.aggregate(Max('pick'))['pick__max'] or 0
+        overall_pick = max_pick + 1
 
         # Create a skipped pick record (no player assigned)
         DraftPick.objects.create(
@@ -508,13 +513,15 @@ class DraftService:
 
         For 3+ siblings (e.g., Braden → Austin → Caden), this follows the chain
         in both directions to lock ALL related siblings, not just direct links.
-        """
-        from django.db.models import Q
 
+        Uses bulk_update for atomicity - either all siblings are locked or none.
+        """
         division = player.division
         processed_ids = {player.id}
         to_process = [player]
+        siblings_to_lock = []
 
+        # First pass: collect all siblings in the chain
         while to_process:
             current = to_process.pop(0)
 
@@ -524,21 +531,25 @@ class DraftService:
                     id=current.sibling_id, division=division, is_drafted=False
                 ).first()
                 if sibling:
-                    sibling.locked_to_team = team
-                    sibling.save()
                     processed_ids.add(sibling.id)
                     to_process.append(sibling)
+                    siblings_to_lock.append(sibling)
 
             # Reverse direction: anyone whose sibling_id points to current
-            reverse_siblings = Player.objects.filter(
+            reverse_siblings = list(Player.objects.filter(
                 sibling_id=current.id, division=division, is_drafted=False
-            ).exclude(id__in=processed_ids)
+            ).exclude(id__in=processed_ids))
 
             for sibling in reverse_siblings:
-                sibling.locked_to_team = team
-                sibling.save()
                 processed_ids.add(sibling.id)
                 to_process.append(sibling)
+                siblings_to_lock.append(sibling)
+
+        # Atomic bulk update - all siblings locked together
+        if siblings_to_lock:
+            for sibling in siblings_to_lock:
+                sibling.locked_to_team = team
+            Player.objects.bulk_update(siblings_to_lock, ['locked_to_team'])
 
     @classmethod
     def _unlock_sibling_chain(cls, player: Player) -> None:
@@ -547,11 +558,15 @@ class DraftService:
         Similar to _lock_sibling_chain but removes locks instead of adding them.
         Only unlocks siblings that are NOT drafted (since drafted siblings
         should stay with their team).
+
+        Uses bulk_update for atomicity - either all siblings are unlocked or none.
         """
         division = player.division
         processed_ids = {player.id}
         to_process = [player]
+        siblings_to_unlock = []
 
+        # First pass: collect all siblings in the chain
         while to_process:
             current = to_process.pop(0)
 
@@ -561,18 +576,22 @@ class DraftService:
                     id=current.sibling_id, division=division, is_drafted=False
                 ).first()
                 if sibling:
-                    sibling.locked_to_team = None
-                    sibling.save()
                     processed_ids.add(sibling.id)
                     to_process.append(sibling)
+                    siblings_to_unlock.append(sibling)
 
             # Reverse direction: anyone whose sibling_id points to current
-            reverse_siblings = Player.objects.filter(
+            reverse_siblings = list(Player.objects.filter(
                 sibling_id=current.id, division=division, is_drafted=False
-            ).exclude(id__in=processed_ids)
+            ).exclude(id__in=processed_ids))
 
             for sibling in reverse_siblings:
-                sibling.locked_to_team = None
-                sibling.save()
                 processed_ids.add(sibling.id)
                 to_process.append(sibling)
+                siblings_to_unlock.append(sibling)
+
+        # Atomic bulk update - all siblings unlocked together
+        if siblings_to_unlock:
+            for sibling in siblings_to_unlock:
+                sibling.locked_to_team = None
+            Player.objects.bulk_update(siblings_to_unlock, ['locked_to_team'])
