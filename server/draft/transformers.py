@@ -167,14 +167,26 @@ def transform_draft_state(draft_state) -> dict:
     }
 
 
-def transform_division_summary(division) -> dict:
-    """Transform a Division to summary dict (for list view)."""
+def transform_division_summary(division, player_count: Optional[int] = None) -> dict:
+    """Transform a Division to summary dict (for list view).
+
+    Args:
+        division: Division model instance
+        player_count: Optional pre-computed player count (avoids N+1 query)
+    """
+    # Use pre-computed count if provided, otherwise fall back to query
+    computed_player_count = (
+        player_count if player_count is not None
+        else getattr(division, 'player_count', None)
+        or division.players.count()
+    )
+
     result = {
         "id": str(division.id),
         "name": division.name,
         "preset": division.preset,
         "team_count": division.team_count,
-        "player_count": division.players.count(),
+        "player_count": computed_player_count,
         "mode": division.mode,
         "phase": division.phase,
         "created_at": division.created_at.isoformat(),

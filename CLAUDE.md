@@ -87,6 +87,7 @@ Has name, roster (drafted players), totalScore, draftPosition, coachKids array, 
 | `server/draft/logging.py` | Structured JSON logging with correlation IDs |
 | `server/draft/services_draft.py` | Draft business logic with race condition prevention |
 | `docs/RUNBOOK.md` | Operations runbook for production deployment |
+| `server/tests/load/locustfile.py` | Locust load testing scenarios |
 
 ### Component Hierarchy
 ```
@@ -438,6 +439,17 @@ The application underwent a stabilization effort to prepare for production use b
 - Documented database backup/restore procedures
 - Documented alerting configuration
 
+### Phase 5: Performance Validation ✅
+- Added database indexes for frequently queried fields:
+  - Player: (division, is_drafted), coach_team, locked_to_team, sibling_id
+  - Team: division
+  - Division: organization
+  - DraftState: division
+- Fixed N+1 queries in division list view (annotated player_count)
+- Fixed N+1 queries in team/division detail (prefetch_related for roster, coach_kids)
+- Fixed N+1 queries in draft response (prefetch picks, trades, teams with rosters)
+- Optimized team score calculations with SQL aggregation (Sum instead of Python iteration)
+- Created Locust load testing framework (`server/tests/load/`)
+
 ### Remaining Phases (Not Yet Started)
-- Phase 5: Performance Validation (load testing, database optimization)
 - Phase 6: Feature Completion (skip pick API, audit logging, Team Builder merge)

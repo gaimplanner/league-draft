@@ -1,5 +1,5 @@
 from django.db import transaction
-from django.db.models import Max
+from django.db.models import Max, Sum
 from django.utils import timezone
 from uuid import UUID
 
@@ -122,8 +122,8 @@ class DraftService:
         player.drafted_at_pick = overall_pick
         player.save()
 
-        # Update team score
-        team.total_score = sum(p.total_score for p in team.roster.all())
+        # Update team score using database aggregation (avoids N+1)
+        team.total_score = team.roster.aggregate(total=Sum("total_score"))["total"] or 0
         age_breakdown = dict(team.age_breakdown)
         age_key = str(player.little_league_age)
         age_breakdown[age_key] = age_breakdown.get(age_key, 0) + 1
@@ -262,8 +262,8 @@ class DraftService:
         # If player had siblings, remove sibling locks for the entire chain
         cls._unlock_sibling_chain(player)
 
-        # Update team score
-        team.total_score = sum(p.total_score for p in team.roster.all())
+        # Update team score using database aggregation (avoids N+1)
+        team.total_score = team.roster.aggregate(total=Sum("total_score"))["total"] or 0
         age_breakdown = dict(team.age_breakdown)
         age_key = str(player.little_league_age)
         if age_key in age_breakdown:
@@ -364,10 +364,10 @@ class DraftService:
         player2.drafted_by_team = team1
         player2.save()
 
-        # Update team scores
-        team1.total_score = sum(p.total_score for p in team1.roster.all())
+        # Update team scores using database aggregation (avoids N+1)
+        team1.total_score = team1.roster.aggregate(total=Sum("total_score"))["total"] or 0
         team1.save()
-        team2.total_score = sum(p.total_score for p in team2.roster.all())
+        team2.total_score = team2.roster.aggregate(total=Sum("total_score"))["total"] or 0
         team2.save()
 
         log_draft_event(

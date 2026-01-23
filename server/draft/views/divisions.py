@@ -3,7 +3,7 @@ Division views (replaces DRF DivisionViewSet).
 """
 
 from django.db import models
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_http_methods
@@ -38,18 +38,22 @@ def divisions_list_create(request):
 
     if request.method == "GET":
         # List divisions - include org divisions and personal divisions
+        # Annotate with player_count to avoid N+1 queries
         if request.user.role == "master_admin":
-            divisions = Division.objects.all()
+            divisions = Division.objects.annotate(player_count=Count("players"))
         else:
             # User sees: org divisions (if in an org) + their personal divisions
             if organization:
                 divisions = Division.objects.filter(
                     Q(organization=organization) | Q(owner=request.user)
-                )
+                ).annotate(player_count=Count("players"))
             else:
                 # No org selected - show only personal divisions
-                divisions = Division.objects.filter(owner=request.user)
+                divisions = Division.objects.filter(owner=request.user).annotate(
+                    player_count=Count("players")
+                )
 
+        # player_count annotation is available as division.player_count
         return json_response([transform_division_summary(d) for d in divisions])
 
     # POST - create division
@@ -137,23 +141,41 @@ def division_detail(request, pk):
     organization = get_organization_from_request(request)
 
     # Get division with access control
+    # Check if we need full data to optimize query
+    include = request.GET.get("include") if request.method == "GET" else None
+    need_full_data = include == "all"
+
     try:
+        # Build base queryset with appropriate prefetching
+        if need_full_data:
+            # Prefetch all related data for include=all to avoid N+1 queries
+            base_queryset = Division.objects.select_related(
+                "draft_state"
+            ).prefetch_related(
+                "teams__roster",
+                "teams__coach_kids",
+                "players",
+                "draft_state__picks",
+                "draft_state__trades",
+            )
+        else:
+            base_queryset = Division.objects.annotate(player_count=Count("players"))
+
         if request.user.role == "master_admin":
-            division = Division.objects.get(id=pk)
+            division = base_queryset.get(id=pk)
         else:
             # User can access: org divisions (if member) or their own personal divisions
             if organization:
-                division = Division.objects.get(
+                division = base_queryset.get(
                     Q(id=pk) & (Q(organization=organization) | Q(owner=request.user))
                 )
             else:
-                division = Division.objects.get(id=pk, owner=request.user)
+                division = base_queryset.get(id=pk, owner=request.user)
     except Division.DoesNotExist:
         return json_response({"error": "Not found"}, status=404)
 
     if request.method == "GET":
-        include = request.GET.get("include")
-        if include == "all":
+        if need_full_data:
             return json_response(transform_division(division, include_all=True))
         return json_response(transform_division_summary(division))
 
