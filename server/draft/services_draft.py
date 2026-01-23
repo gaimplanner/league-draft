@@ -4,6 +4,9 @@ from django.utils import timezone
 from uuid import UUID
 
 from .models import Division, Team, Player, DraftState, DraftPick, Trade
+from .logging import get_logger, log_draft_event
+
+logger = get_logger(__name__)
 
 
 class DraftService:
@@ -61,6 +64,14 @@ class DraftService:
         # Check for mandatory pick
         cls._check_and_set_mandatory_pick(draft_state, current_team, 1)
 
+        log_draft_event(
+            "start",
+            draft_state_id=str(draft_state.id),
+            division_id=str(division_id),
+            draft_format=draft_format,
+            team_count=len(draft_order),
+        )
+
         return draft_state
 
     @classmethod
@@ -69,11 +80,7 @@ class DraftService:
         cls, draft_state_id: UUID, player_id: UUID, team_id: UUID
     ) -> DraftState:
         """Draft a player."""
-        import logging
-        logger = logging.getLogger(__name__)
-
         draft_state = DraftState.objects.select_for_update().get(id=draft_state_id)
-        logger.info(f"[draft_player] Starting pick. current_round={draft_state.current_round}, current_pick_in_round={draft_state.current_pick_in_round}, picks_so_far={draft_state.picks.count()}")
 
         if draft_state.is_draft_complete:
             raise ValueError("Draft is already complete")
@@ -129,6 +136,17 @@ class DraftService:
         # Advance to next pick
         cls._advance_to_next_pick(draft_state)
 
+        log_draft_event(
+            "pick",
+            draft_state_id=str(draft_state_id),
+            player_id=str(player_id),
+            player_name=player.name,
+            team_id=str(team_id),
+            team_name=team.name,
+            round=draft_state.current_round,
+            pick_number=overall_pick,
+        )
+
         draft_state.refresh_from_db()
         return draft_state
 
@@ -176,6 +194,14 @@ class DraftService:
         # Advance to next pick
         cls._advance_to_next_pick(draft_state)
 
+        log_draft_event(
+            "skip",
+            draft_state_id=str(draft_state_id),
+            team_id=str(team_id),
+            round=draft_state.current_round,
+            pick_number=overall_pick,
+        )
+
         draft_state.refresh_from_db()
         return draft_state
 
@@ -211,6 +237,13 @@ class DraftService:
             # Check for mandatory pick at reverted position
             current_team = Team.objects.get(id=last_pick.team_id)
             cls._check_and_set_mandatory_pick(draft_state, current_team, last_pick.round)
+
+            log_draft_event(
+                "undo",
+                draft_state_id=str(draft_state_id),
+                pick_number=last_pick.pick,
+                was_skipped=True,
+            )
 
             draft_state.refresh_from_db()
             return draft_state
@@ -260,6 +293,16 @@ class DraftService:
         # Check for mandatory pick at reverted position
         current_team = Team.objects.get(id=last_pick.team_id)
         cls._check_and_set_mandatory_pick(draft_state, current_team, last_pick.round)
+
+        log_draft_event(
+            "undo",
+            draft_state_id=str(draft_state_id),
+            player_id=str(player.id),
+            player_name=player.name,
+            team_id=str(team.id),
+            pick_number=last_pick.pick,
+            was_skipped=False,
+        )
 
         draft_state.refresh_from_db()
         return draft_state
@@ -327,14 +370,26 @@ class DraftService:
         team2.total_score = sum(p.total_score for p in team2.roster.all())
         team2.save()
 
+        log_draft_event(
+            "trade",
+            draft_state_id=str(draft_state_id),
+            team1_id=str(team1_id),
+            team1_name=team1.name,
+            team2_id=str(team2_id),
+            team2_name=team2.name,
+            player1_id=str(player1_id),
+            player1_name=player1.name,
+            player2_id=str(player2_id),
+            player2_name=player2.name,
+            reason=reason,
+        )
+
         draft_state.refresh_from_db()
         return draft_state
 
     @classmethod
     def _advance_to_next_pick(cls, draft_state: DraftState) -> None:
         """Advance to the next pick."""
-        import logging
-        logger = logging.getLogger(__name__)
 
         division = draft_state.division
         draft_order = draft_state.draft_order
@@ -342,8 +397,6 @@ class DraftService:
         roster_size = division.roster_size
         total_picks = team_count * roster_size
         current_picks = draft_state.picks.count()
-
-        logger.info(f"[_advance_to_next_pick] team_count={team_count}, roster_size={roster_size}, total_picks={total_picks}, current_picks={current_picks}")
 
         if current_picks >= total_picks:
             # Draft complete
@@ -357,6 +410,13 @@ class DraftService:
             division.phase = "complete"
             division.completed_at = timezone.now()
             division.save()
+
+            log_draft_event(
+                "complete",
+                draft_state_id=str(draft_state.id),
+                division_id=str(division.id),
+                total_picks=current_picks,
+            )
             return
 
         # Calculate next position

@@ -17,6 +17,7 @@ from .views import (
     change_password_view,
     password_reset_request_view,
     password_reset_confirm_view,
+    log_client_error_view,
     # Divisions
     divisions_list_create,
     division_detail,
@@ -67,6 +68,9 @@ urlpatterns = [
     path("api/auth/change-password/", change_password_view, name="change-password"),
     path("api/auth/password-reset/", password_reset_request_view, name="password-reset-request"),
     path("api/auth/password-reset/confirm/", password_reset_confirm_view, name="password-reset-confirm"),
+
+    # Client Error Logging
+    path("api/log/client-error/", log_client_error_view, name="log-client-error"),
 
     # Divisions
     path("api/divisions/", divisions_list_create, name="divisions-list-create"),

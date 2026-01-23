@@ -1193,6 +1193,34 @@ export const api = {
       leagueSlug: orgSlug,
     };
   },
+
+  // ---------------------------------------------------------------------------
+  // Error Logging
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Log a client-side error to the backend.
+   * Used by ErrorBoundary to report React errors for production debugging.
+   */
+  async logClientError(error: {
+    message: string;
+    stack: string;
+    componentStack: string;
+    url: string;
+    userAgent: string;
+    timestamp: string;
+  }): Promise<void> {
+    try {
+      // Use fetchWithTimeout directly to avoid CSRF retry on logging endpoint
+      await fetchWithTimeout(`${API_BASE_URL}/log/client-error/`, {
+        ...getDefaultOptions('POST'),
+        method: 'POST',
+        body: JSON.stringify(error),
+      });
+    } catch {
+      // Silently fail - don't let logging errors cascade
+    }
+  },
 };
 
 // Transform league member from API

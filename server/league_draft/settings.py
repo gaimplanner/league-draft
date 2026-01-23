@@ -45,6 +45,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "draft.middleware.RequestIDMiddleware",  # Must be before TenantMiddleware
     "draft.middleware.TenantMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
@@ -141,3 +142,67 @@ PASSWORD_RESET_TIMEOUT = 3600
 
 # Frontend URL for password reset links
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173")
+
+# Logging configuration
+# In production, set LOG_FORMAT=json for log aggregation systems
+LOG_FORMAT = os.environ.get("LOG_FORMAT", "console")  # "console" or "json"
+LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO")
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "json": {
+            "()": "draft.logging.JSONFormatter",
+            "datefmt": "%Y-%m-%dT%H:%M:%S",
+        },
+        "console": {
+            "format": "[{asctime}] {levelname} [{name}] {message} (req:{request_id})",
+            "style": "{",
+            "datefmt": "%Y-%m-%d %H:%M:%S",
+        },
+    },
+    "filters": {
+        "request_context": {
+            "()": "draft.logging.RequestContextFilter",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": LOG_FORMAT,
+            "filters": ["request_context"],
+        },
+    },
+    "loggers": {
+        "draft": {
+            "handlers": ["console"],
+            "level": LOG_LEVEL,
+            "propagate": False,
+        },
+        "draft.auth": {
+            "handlers": ["console"],
+            "level": LOG_LEVEL,
+            "propagate": False,
+        },
+        "draft.operations": {
+            "handlers": ["console"],
+            "level": LOG_LEVEL,
+            "propagate": False,
+        },
+        "django": {
+            "handlers": ["console"],
+            "level": "WARNING",
+            "propagate": False,
+        },
+        "django.request": {
+            "handlers": ["console"],
+            "level": "WARNING",
+            "propagate": False,
+        },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": "WARNING",
+    },
+}
