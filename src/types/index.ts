@@ -313,6 +313,7 @@ export type AppField =
   | 'isCoachKid'
   | 'coachTeam' // Team name for coach kid assignment (headCoach name)
   | 'sibling'
+  | 'school' // School name for clustering
   | 'managerTeam'
   | 'assistantTeam'
   | 'teamColumn' // "Manager, Assistant" format for auto team creation
