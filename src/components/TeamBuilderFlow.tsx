@@ -392,7 +392,7 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
     setTeams(updatedTeams);
 
     // Also update players with the actual team IDs (not "team-0" format)
-    const playersWithRealTeamIds = players.map(player => {
+    let playersWithRealTeamIds = players.map(player => {
       if (player.isCoachKid && player.coachTeamId) {
         const match = player.coachTeamId.match(/^team-(\d+)$/);
         if (match) {
@@ -404,6 +404,52 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
       }
       return player;
     });
+
+    // If registration data was parsed from the same Excel file, process it
+    // AND merge it into players immediately so it persists
+    if (parsedRegistrationData && parsedRegistrationData.length > 0) {
+      console.log(`Processing ${parsedRegistrationData.length} registration records from Excel`);
+
+      // Build a lookup map for registration data by normalized name
+      const regDataByName = new Map<string, RegistrationRecord>();
+      for (const reg of parsedRegistrationData) {
+        const normalizedName = `${reg.firstName.toLowerCase().trim()} ${reg.lastName.toLowerCase().trim()}`;
+        regDataByName.set(normalizedName, reg);
+      }
+
+      // Merge registration data into player objects
+      playersWithRealTeamIds = playersWithRealTeamIds.map(player => {
+        const normalizedName = `${player.firstName.toLowerCase().trim()} ${player.lastName.toLowerCase().trim()}`;
+        const regData = regDataByName.get(normalizedName);
+
+        if (regData) {
+          return {
+            ...player,
+            coachRequest: regData.coachRequest || undefined,
+            teammateRequests: regData.teammateRequests && regData.teammateRequests.length > 0
+              ? regData.teammateRequests
+              : undefined,
+            school: regData.school || undefined,
+            grade: regData.grade ?? undefined,
+          };
+        }
+        return player;
+      });
+
+      const playersWithRequests = playersWithRealTeamIds.filter(
+        p => p.coachRequest || (p.teammateRequests && p.teammateRequests.length > 0)
+      );
+      console.log(`Merged registration data: ${playersWithRequests.length} players now have request data`);
+
+      // Also set up the registration state for the Resolution UI
+      const evalPlayerList = playersWithRealTeamIds.map(p => ({
+        bib: p.bib,
+        firstName: p.firstName,
+        lastName: p.lastName,
+      }));
+      convertRegistrationRecords(parsedRegistrationData, evalPlayerList);
+    }
+
     setEvalPlayers(playersWithRealTeamIds);
 
     // Persist the updated teams and players (mark as local update to prevent sync loop)
@@ -412,18 +458,8 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
       onUpdateTeams(updatedTeams);
     }
     if (onUpdatePlayers) {
+      console.log('Persisting players with registration data merged');
       onUpdatePlayers(playersWithRealTeamIds);
-    }
-
-    // If registration data was parsed from the same Excel file, process it
-    if (parsedRegistrationData && parsedRegistrationData.length > 0) {
-      const evalPlayerList = playersWithRealTeamIds.map(p => ({
-        bib: p.bib,
-        firstName: p.firstName,
-        lastName: p.lastName,
-      }));
-      convertRegistrationRecords(parsedRegistrationData, evalPlayerList);
-      console.log(`Auto-loaded ${parsedRegistrationData.length} registration records from Excel`);
     }
 
     // Move to resolution step
@@ -580,6 +616,21 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
   }, [registrationPlayers, evalPlayers.length, teams.length]);
 
   const handleProceedToConfirmRequests = useCallback(() => {
+    console.log('=== handleProceedToConfirmRequests ===');
+    console.log('registrationData:', registrationData ? `present with ${registrationData.rows?.length} rows` : 'null');
+    console.log('registrationPlayers:', registrationPlayers.length);
+    console.log('evalPlayers:', evalPlayers.length);
+
+    // Debug: Check first few registration players
+    if (registrationPlayers.length > 0) {
+      console.log('Sample registration players:');
+      registrationPlayers.slice(0, 3).forEach(rp => {
+        console.log(`  ${rp.firstName} ${rp.lastName}: evalBib=${rp.evalBib}, coachReq=${rp.coachRequest}, teammates=${rp.teammateRequests?.join(',')}`);
+      });
+    } else {
+      console.warn('No registration players! Data may not have been parsed.');
+    }
+
     // Detect siblings by address before proceeding
     if (registrationData) {
       const siblingGroups = detectSiblingsByAddress(registrationData.rows);
@@ -611,10 +662,15 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
       return evalPlayer;
     });
 
+    // Debug: Check how many players got merged data
+    const playersWithRequests = mergedPlayers.filter(p => p.coachRequest || (p.teammateRequests && p.teammateRequests.length > 0));
+    console.log('Players with request data after merge:', playersWithRequests.length);
+
     // Update local state with merged players
     setEvalPlayers(mergedPlayers);
 
     // Persist merged players to division so data survives navigation/refresh
+    console.log('Calling onUpdatePlayers:', onUpdatePlayers ? 'defined' : 'NOT DEFINED');
     if (onUpdatePlayers) {
       onUpdatePlayers(mergedPlayers);
     }
