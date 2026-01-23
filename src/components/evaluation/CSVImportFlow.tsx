@@ -13,6 +13,8 @@ export interface DualCSVImportResult {
   excludedRowIndices: Set<number>;
   /** DNE players to add after column mapping */
   dnePlayers: RegistrationCSVRecord[];
+  /** All registration records for merging school data after mapping */
+  allRegistrationRecords: RegistrationCSVRecord[];
 }
 
 interface CSVImportFlowProps {
@@ -51,6 +53,7 @@ export function CSVImportFlow({ onComplete, onCancel }: CSVImportFlowProps) {
       evalCSVData,
       excludedRowIndices: result.excludedRowIndices,
       dnePlayers: result.dnePlayers,
+      allRegistrationRecords: regData?.records || [],
     });
   };
 

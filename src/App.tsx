@@ -90,10 +90,11 @@ function App() {
   const [mode, setMode] = useState<AppMode>('selector');
   const [csvData, setCSVData] = useState<ParsedCSVData | null>(null);
   const [importMode, setImportMode] = useState<'csv' | 'excel' | 'dualcsv' | null>(null);
-  // Dual CSV verification result - stores excluded rows and DNE players
+  // Dual CSV verification result - stores excluded rows, DNE players, and all registration records
   const [dualCSVVerification, setDualCSVVerification] = useState<{
     excludedRowIndices: Set<number>;
     dnePlayers: RegistrationCSVRecord[];
+    allRegistrationRecords: RegistrationCSVRecord[]; // For merging school data after mapping
   } | null>(null);
 
   const {
@@ -356,6 +357,40 @@ function App() {
         p.rank = i + 1;
         p.projectedRound = Math.ceil((i + 1) / activeDivision.teamCount);
       });
+    }
+
+    // Merge school data from registration records (if available from dual CSV flow)
+    if (dualCSVVerification && dualCSVVerification.allRegistrationRecords.length > 0) {
+      // Build a lookup map by normalized name
+      const normalizeNameForLookup = (first: string, last: string) =>
+        `${first.trim().toLowerCase()}|${last.trim().toLowerCase()}`;
+
+      const regLookup = new Map<string, string>();
+      dualCSVVerification.allRegistrationRecords.forEach(rec => {
+        if (rec.school) {
+          const key = normalizeNameForLookup(rec.firstName, rec.lastName);
+          regLookup.set(key, rec.school);
+        }
+      });
+
+      console.log('[School Merge] Registration records with school:', dualCSVVerification.allRegistrationRecords.filter(r => r.school).length);
+      console.log('[School Merge] Sample records:', dualCSVVerification.allRegistrationRecords.slice(0, 3));
+      console.log('[School Merge] Lookup map size:', regLookup.size);
+
+      // Merge school into players - registration is the source of truth, always overwrite
+      let mergedCount = 0;
+      updatedPlayers = updatedPlayers.map(player => {
+        const key = normalizeNameForLookup(player.firstName, player.lastName);
+        const school = regLookup.get(key);
+        if (school) {
+          mergedCount++;
+          return { ...player, school };
+        }
+        return player;
+      });
+      console.log('[School Merge] Merged school for', mergedCount, 'players');
+    } else {
+      console.log('[School Merge] No registration records available. dualCSVVerification:', dualCSVVerification);
     }
 
     // Clear dual CSV verification state after processing
@@ -997,12 +1032,18 @@ function App() {
                     <p className="text-sm text-gray-500 dark:text-gray-400 mb-4 text-center">
                       Or start fresh with new player data:
                     </p>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-3 gap-4">
                       <button
                         onClick={() => setImportMode('csv')}
                         className="px-4 py-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg hover:border-blue-500 dark:hover:border-blue-500 transition-colors text-gray-700 dark:text-gray-300 font-medium"
                       >
                         Import CSV
+                      </button>
+                      <button
+                        onClick={() => setImportMode('dualcsv')}
+                        className="px-4 py-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg hover:border-purple-500 dark:hover:border-purple-500 transition-colors text-gray-700 dark:text-gray-300 font-medium"
+                      >
+                        Dual CSV
                       </button>
                       <button
                         onClick={() => setImportMode('excel')}
@@ -1056,6 +1097,7 @@ function App() {
                   setDualCSVVerification({
                     excludedRowIndices: result.excludedRowIndices,
                     dnePlayers: result.dnePlayers,
+                    allRegistrationRecords: result.allRegistrationRecords,
                   });
                   setImportMode(null);
                   setPhase('mapping');
