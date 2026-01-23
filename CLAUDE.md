@@ -82,6 +82,11 @@ Has name, roster (drafted players), totalScore, draftPosition, coachKids array, 
 | `src/components/evaluation/CSVImportFlow.tsx` | Dual CSV import orchestration (upload → verify → mapping) |
 | `src/components/evaluation/DualCSVUpload.tsx` | Two-step CSV upload for eval + registration |
 | `src/components/evaluation/CSVVerificationStep.tsx` | Match/exclude/DNE player verification UI |
+| `src/utils/importPipeline/` | Unified player field definitions, transforms, validation |
+| `src/components/ErrorBoundary.tsx` | React error boundary with backend error reporting |
+| `server/draft/logging.py` | Structured JSON logging with correlation IDs |
+| `server/draft/services_draft.py` | Draft business logic with race condition prevention |
+| `docs/RUNBOOK.md` | Operations runbook for production deployment |
 
 ### Component Hierarchy
 ```
@@ -175,10 +180,13 @@ Draft state uses functional updates: `setDraftState(prev => ({ ...prev, ... }))`
 2. Simulation uses same `getMandatoryPick`, `lockSiblingToTeam`, `getBestAvailable`
 
 ### Adding player fields
-1. Add to `Player` interface in `types/index.ts`
-2. Update CSV parsing in `csvParser.ts`
-3. Update Excel processing in `evaluationProcessor.ts`
-4. Display in PlayerReview and DraftBoard
+1. Add to `PLAYER_FIELD_DEFINITIONS` in `src/utils/importPipeline/fieldDefinitions.ts` (single source of truth)
+2. Add to `Player` interface in `types/index.ts`
+3. Update CSV parsing in `csvParser.ts`
+4. Update Excel processing in `evaluationProcessor.ts`
+5. Display in PlayerReview and DraftBoard
+
+Note: The importPipeline module auto-generates transforms from field definitions, so adding a field there handles API transformations automatically.
 
 ## Backend Development
 
@@ -236,6 +244,28 @@ docker compose exec api python manage.py migrate
 - POST `/api/leagues/join/{token}/` - Join via link
 
 ## Testing Approach
+
+### Unit Tests (Vitest)
+Frontend unit tests for critical business logic:
+```bash
+npm run test           # Run once
+npm run test:watch     # Watch mode
+npm run test:coverage  # With coverage report
+```
+
+Test files:
+- `src/utils/__tests__/draftLogic.test.ts` - getMandatoryPick, lockSiblingToTeam, getBestAvailable
+- `src/utils/__tests__/draftOrder.test.ts` - calculateDraftOrder for all 3 formats
+- `src/utils/__tests__/importPipeline.test.ts` - Field definitions, transforms, validation
+
+### Backend Unit Tests (Django)
+```bash
+docker compose exec api python manage.py test draft.tests
+```
+
+Test files:
+- `server/draft/tests/test_draft_service.py` - DraftService operations (start, pick, undo, skip, trade)
+- `server/draft/tests/test_sibling_locking.py` - Sibling chain locking/unlocking
 
 ### E2E Tests (Playwright)
 Located in `e2e/draft-flow.spec.ts`. Run with:
@@ -373,3 +403,41 @@ Prioritizes request satisfaction over balance:
 - `staging` - Testing
 - `main` - Production
 - `feature/team-builder` - Team Builder feature development
+
+## Stabilization Progress (January 2025)
+
+The application underwent a stabilization effort to prepare for production use by other leagues. Completed phases:
+
+### Phase 0: Critical Fixes ✅
+- Fixed backend race condition in pick counter using Max aggregation
+- Added frontend operation lock timeout (30s failsafe)
+- Converted sibling chain updates to atomic bulk_update
+
+### Phase 1: Observability ✅
+- Added structured JSON logging with correlation IDs (`server/draft/logging.py`)
+- Added RequestIDMiddleware for request tracing
+- Enhanced health check endpoint with database connectivity test
+- Added React ErrorBoundary with backend error reporting
+- Added client error logging endpoint (`/api/log-error/`)
+
+### Phase 2: Testing ✅
+- Added Vitest for frontend unit tests (67 tests)
+- Added Django unit tests for backend (40 tests)
+- Total: 107 unit tests covering critical business logic
+
+### Phase 3: Data Pipeline ✅
+- Created unified player field definitions (`src/utils/importPipeline/`)
+- Single source of truth for all 41 player fields
+- Auto-generated transforms from definitions
+- Pre-flight validation before API calls
+- Fixed missing Team Builder fields (grade, coachRequest, teammateRequests)
+
+### Phase 4: Operations ✅
+- Created comprehensive operations runbook (`docs/RUNBOOK.md`)
+- Documented incident response procedures
+- Documented database backup/restore procedures
+- Documented alerting configuration
+
+### Remaining Phases (Not Yet Started)
+- Phase 5: Performance Validation (load testing, database optimization)
+- Phase 6: Feature Completion (skip pick API, audit logging, Team Builder merge)
