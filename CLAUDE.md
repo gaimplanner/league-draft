@@ -34,12 +34,13 @@ Has name, roster (drafted players), totalScore, draftPosition, coachKids array, 
 ### App Phases
 `upload` → `mapping` → `review` → `config` → `draft` → `complete`
 
-### Backend (Django REST Framework)
+### Backend (Django Core)
+- **Function-based views**: Plain Django views with `@require_http_methods` decorators (not DRF)
 - **Multi-tenant architecture**: League is the tenant model
 - **LeagueMembership**: Users can belong to multiple leagues with roles (admin/member)
 - **TenantMiddleware**: Injects `request.league` based on user's membership or X-League-ID header
 - **Session-based auth**: Django sessions with CSRF protection
-- **Rate limiting**: AuthRateThrottle (5/min) and PasswordResetRateThrottle (3/hr)
+- **Rate limiting**: Custom throttling classes (AuthRateThrottle, PasswordResetRateThrottle)
 - **Session timeout**: 24-hour expiration (SESSION_COOKIE_AGE)
 
 ### State Management
@@ -70,8 +71,8 @@ Has name, roster (drafted players), totalScore, draftPosition, coachKids array, 
 | `src/components/draft/DraftBoardRosterView.tsx` | Round-by-round roster grid (teams as columns, shows drafted/pre-filled/current pick) |
 | `src/contexts/ViewContext.tsx` | Admin/Public view mode context for draft board |
 | `server/draft/models.py` | Django models: League, User, LeagueMembership, LeagueInvitation, Division, Team, Player, DraftState |
-| `server/draft/views.py` | DRF ViewSets, auth endpoints, member management, invitations |
-| `server/draft/serializers.py` | DRF serializers with snake_case/camelCase handling |
+| `server/draft/views/` | Function-based Django views organized by domain (auth, divisions, players, teams, draft, leagues) |
+| `server/draft/transformers.py` | Data transformers for snake_case/camelCase conversion between API and frontend |
 | `server/draft/services.py` | Draft business logic (start, pick, undo, trade) |
 | `server/draft/middleware.py` | TenantMiddleware for multi-tenancy |
 | `server/draft/throttling.py` | Rate limiting classes (AuthRateThrottle, PasswordResetRateThrottle) |
@@ -202,7 +203,7 @@ docker compose exec api python manage.py migrate
 - League is the tenant model
 - LeagueMembership links users to leagues with roles (admin/member)
 - TenantMiddleware sets `request.league` from user's membership
-- DivisionViewSet filters by `request.league`
+- Division views filter by `request.league`
 
 **Auth Flow:**
 - GET `/api/auth/csrf/` - Initialize CSRF token cookie (call on app load)
@@ -260,7 +261,7 @@ Tests cover:
 
 ### API Mode vs localStorage Mode
 - Controlled by `VITE_USE_API` env var
-- API mode: All data persisted to PostgreSQL via Django REST API
+- API mode: All data persisted to PostgreSQL via Django API
 - localStorage mode: Data stored in browser (legacy, for offline use)
 - `useDraft.ts` and `useDivisions.ts` handle both modes
 
