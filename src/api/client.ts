@@ -264,6 +264,11 @@ function transformTeamFromApi(data: Record<string, unknown>): Team {
     teamName: (data.name as string) || '',
     headCoach: (data.head_coach as string) || '',
     assistantCoach: (data.assistant_coach as string) || '',
+    // New coach reference fields
+    headCoachId: (data.head_coach_id as string | null) ?? null,
+    assistantCoachId: (data.assistant_coach_id as string | null) ?? null,
+    headCoachDetails: data.head_coach_details ? transformCoachFromApi(data.head_coach_details as Record<string, unknown>) : null,
+    assistantCoachDetails: data.assistant_coach_details ? transformCoachFromApi(data.assistant_coach_details as Record<string, unknown>) : null,
     roster,
     // Use safe parsing for numeric fields (Issue #3)
     totalScore: safeParseNumber(data.total_score),
@@ -739,7 +744,13 @@ export const api = {
     maxPerAge?: number;
     scoringWeights?: ScoringWeights;
     scoringMode?: ScoringMode;
-    coaches?: Array<{ headCoach: string; assistantCoach: string }>;
+    coaches?: Array<{
+      headCoach: string;
+      assistantCoach: string;
+      teamName?: string;
+      headCoachId?: string | null;
+      assistantCoachId?: string | null;
+    }>;
   }): Promise<Division> {
     const response = await fetchWithCSRFRetry(`${API_BASE_URL}/divisions/`, {
       ...getDefaultOptions('POST'),
@@ -754,7 +765,13 @@ export const api = {
         max_per_age: params.maxPerAge ?? 0,
         scoring_weights: params.scoringWeights,
         scoring_mode: params.scoringMode ?? 'pre-weighted',
-        coaches: params.coaches,
+        coaches: params.coaches?.map(c => ({
+          head_coach: c.headCoach,
+          assistant_coach: c.assistantCoach,
+          team_name: c.teamName,
+          head_coach_id: c.headCoachId,
+          assistant_coach_id: c.assistantCoachId,
+        })),
       }),
     });
     const data = await handleResponse<Record<string, unknown>>(response);

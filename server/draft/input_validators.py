@@ -462,11 +462,35 @@ def validate_team_update_data(data: Dict[str, Any]) -> Tuple[Optional[Dict], Opt
     if "name" in data:
         cleaned["name"] = str(data["name"]).strip() if data["name"] else ""
 
+    # Legacy string fields (still supported)
     if "head_coach" in data:
         cleaned["head_coach"] = str(data["head_coach"]).strip() if data["head_coach"] else ""
 
     if "assistant_coach" in data:
         cleaned["assistant_coach"] = str(data["assistant_coach"]).strip() if data["assistant_coach"] else ""
+
+    # New coach ID references
+    if "head_coach_id" in data:
+        head_coach_id = data["head_coach_id"]
+        if head_coach_id is None or head_coach_id == "":
+            cleaned["head_coach_ref_id"] = None
+        else:
+            try:
+                uuid_module.UUID(str(head_coach_id))
+                cleaned["head_coach_ref_id"] = head_coach_id
+            except ValueError:
+                errors["head_coach_id"] = ["Invalid coach ID"]
+
+    if "assistant_coach_id" in data:
+        assistant_coach_id = data["assistant_coach_id"]
+        if assistant_coach_id is None or assistant_coach_id == "":
+            cleaned["assistant_coach_ref_id"] = None
+        else:
+            try:
+                uuid_module.UUID(str(assistant_coach_id))
+                cleaned["assistant_coach_ref_id"] = assistant_coach_id
+            except ValueError:
+                errors["assistant_coach_id"] = ["Invalid coach ID"]
 
     if "draft_position" in data:
         try:

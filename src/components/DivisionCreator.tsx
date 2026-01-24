@@ -1,11 +1,14 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { ArrowLeft, Check, AlertCircle, AlertTriangle, Users, Wand2, ChevronDown, ChevronUp } from 'lucide-react';
-import { DivisionPreset, DIVISION_PRESETS, DivisionAgeRange, DivisionMode } from '../types';
+import { DivisionPreset, DIVISION_PRESETS, DivisionAgeRange, DivisionMode, Coach } from '../types';
+import { CoachSelector } from './CoachSelector';
 
 export interface CoachConfig {
-  headCoach: string;      // Manager's last name
-  assistantCoach: string; // Assistant's last name
+  headCoach: string;      // Manager's last name (legacy, auto-filled from Coach registry)
+  assistantCoach: string; // Assistant's last name (legacy, auto-filled from Coach registry)
   teamName: string;       // Optional team name (e.g., "Guardians") - defaults to headCoach if empty
+  headCoachId?: string | null;       // FK to Coach registry
+  assistantCoachId?: string | null;  // FK to Coach registry
 }
 
 interface DivisionCreatorProps {
@@ -42,8 +45,24 @@ export const DivisionCreator = ({ onCancel, onCreate, existingNames = [] }: Divi
   const [maxPerAge, setMaxPerAge] = useState(8);
   const [showCoaches, setShowCoaches] = useState(false);
   const [coaches, setCoaches] = useState<CoachConfig[]>(() =>
-    Array.from({ length: 10 }, () => ({ headCoach: '', assistantCoach: '', teamName: '' }))
+    Array.from({ length: 10 }, () => ({
+      headCoach: '',
+      assistantCoach: '',
+      teamName: '',
+      headCoachId: null,
+      assistantCoachId: null,
+    }))
   );
+
+  // Collect all assigned coach IDs to prevent duplicates
+  const assignedCoachIds = useMemo(() => {
+    const ids: string[] = [];
+    coaches.slice(0, teamCount).forEach(config => {
+      if (config.headCoachId) ids.push(config.headCoachId);
+      if (config.assistantCoachId) ids.push(config.assistantCoachId);
+    });
+    return ids;
+  }, [coaches, teamCount]);
 
   // Check if name already exists (case-insensitive)
   const nameAlreadyExists = existingNames.some(
@@ -85,6 +104,31 @@ export const DivisionCreator = ({ onCancel, onCreate, existingNames = [] }: Divi
     setCoaches(prev => {
       const updated = [...prev];
       updated[index] = { ...updated[index], [field]: value };
+      return updated;
+    });
+  };
+
+  const handleCoachSelect = (
+    index: number,
+    role: 'head' | 'assistant',
+    coachId: string | null,
+    coach: Coach | null
+  ) => {
+    setCoaches(prev => {
+      const updated = [...prev];
+      if (role === 'head') {
+        updated[index] = {
+          ...updated[index],
+          headCoachId: coachId,
+          headCoach: coach?.lastName || '',
+        };
+      } else {
+        updated[index] = {
+          ...updated[index],
+          assistantCoachId: coachId,
+          assistantCoach: coach?.lastName || '',
+        };
+      }
       return updated;
     });
   };
@@ -354,7 +398,7 @@ export const DivisionCreator = ({ onCancel, onCreate, existingNames = [] }: Divi
               {showCoaches && (
                 <div className="p-4 space-y-3 border-t border-gray-200 dark:border-gray-700">
                   <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-                    Pre-fill team info now or add it later during player import. Team name defaults to manager's last name if not specified.
+                    Select coaches from your organization's coach registry. Team name defaults to manager's last name if not specified.
                   </p>
 
                   {/* Column Headers */}
@@ -365,25 +409,27 @@ export const DivisionCreator = ({ onCancel, onCreate, existingNames = [] }: Divi
                     <span className="flex-1 text-xs font-semibold text-gray-600 dark:text-gray-400">Team Name <span className="font-normal text-gray-400">(optional)</span></span>
                   </div>
 
-                  <div className="grid gap-2">
+                  <div className="grid gap-3">
                     {Array.from({ length: teamCount }).map((_, index) => (
                       <div key={index} className="flex items-center gap-3">
                         <span className="text-sm font-medium text-gray-500 dark:text-gray-400 w-16">
                           Team {index + 1}
                         </span>
-                        <input
-                          type="text"
-                          value={coaches[index]?.headCoach || ''}
-                          onChange={(e) => updateCoach(index, 'headCoach', e.target.value)}
-                          placeholder="Last name (e.g., Smith)"
-                          className="flex-1 px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                        <CoachSelector
+                          value={coaches[index]?.headCoachId ?? null}
+                          onChange={(coachId, coach) => handleCoachSelect(index, 'head', coachId, coach)}
+                          role="manager"
+                          placeholder="Select manager..."
+                          excludeCoachIds={assignedCoachIds.filter(id => id !== coaches[index]?.headCoachId)}
+                          className="flex-1"
                         />
-                        <input
-                          type="text"
-                          value={coaches[index]?.assistantCoach || ''}
-                          onChange={(e) => updateCoach(index, 'assistantCoach', e.target.value)}
-                          placeholder="Last name"
-                          className="flex-1 px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                        <CoachSelector
+                          value={coaches[index]?.assistantCoachId ?? null}
+                          onChange={(coachId, coach) => handleCoachSelect(index, 'assistant', coachId, coach)}
+                          role="assistant_coach"
+                          placeholder="Select assistant..."
+                          excludeCoachIds={assignedCoachIds.filter(id => id !== coaches[index]?.assistantCoachId)}
+                          className="flex-1"
                         />
                         <input
                           type="text"

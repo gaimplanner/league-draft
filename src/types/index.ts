@@ -253,9 +253,15 @@ export interface Team {
   // Empty until assigned, typically after draft completion
   teamName: string;
 
-  // Coaching Staff
+  // Coaching Staff - legacy string fields
   headCoach: string;      // Manager's last name (e.g., "Bonacorsi")
   assistantCoach: string; // Assistant's last name
+
+  // Coaching Staff - new FK references to Coach registry
+  headCoachId?: string | null;       // FK to Coach
+  assistantCoachId?: string | null;  // FK to Coach
+  headCoachDetails?: Coach | null;   // Populated coach object
+  assistantCoachDetails?: Coach | null;
 
   // Draft & Roster
   draftPosition: number;  // 1-8, determines draft order

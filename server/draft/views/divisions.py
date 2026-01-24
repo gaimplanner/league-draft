@@ -122,11 +122,18 @@ def divisions_list_create(request):
         head_coach = coach_info.get("head_coach", "") or coach_info.get("headCoach", "")
         assistant_coach = coach_info.get("assistant_coach", "") or coach_info.get("assistantCoach", "")
         team_name = coach_info.get("team_name", "") or coach_info.get("teamName", "")
+
+        # New coach ID fields (FK references to Coach registry)
+        head_coach_id = coach_info.get("head_coach_id") or coach_info.get("headCoachId")
+        assistant_coach_id = coach_info.get("assistant_coach_id") or coach_info.get("assistantCoachId")
+
         Team.objects.create(
             division=division,
             name=team_name or head_coach,  # Team name defaults to head coach name if not provided
             head_coach=head_coach,
             assistant_coach=assistant_coach,
+            head_coach_ref_id=head_coach_id if head_coach_id else None,
+            assistant_coach_ref_id=assistant_coach_id if assistant_coach_id else None,
             draft_position=i + 1,
         )
 

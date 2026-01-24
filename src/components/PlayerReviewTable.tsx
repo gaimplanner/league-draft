@@ -1,8 +1,9 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { Search, X, ChevronDown, ChevronUp, Users, Wand2 } from 'lucide-react';
-import { Player, Team, ScoringMode, ScoringWeights } from '../types';
+import { Player, Team, ScoringMode, ScoringWeights, Coach } from '../types';
 import { getTeamDisplayName } from '../utils/teamUtils';
 import { ScoringWeightsConfig } from './ScoringWeightsConfig';
+import { CoachSelector } from './CoachSelector';
 
 interface PlayerReviewTableProps {
   players: Player[];
@@ -20,6 +21,8 @@ interface PlayerReviewTableProps {
   onSiblingUnlink: (playerId: string) => void;
   onTeamNameUpdate: (teamId: string, name: string) => void;
   onAssistantCoachUpdate: (teamId: string, assistantCoach: string) => void;
+  onHeadCoachIdUpdate?: (teamId: string, coachId: string | null, coach: Coach | null) => void;
+  onAssistantCoachIdUpdate?: (teamId: string, coachId: string | null, coach: Coach | null) => void;
   onRunAutoDetection: () => void;
 }
 
@@ -45,6 +48,8 @@ export function PlayerReviewTable({
   onSiblingUnlink,
   onTeamNameUpdate,
   onAssistantCoachUpdate,
+  onHeadCoachIdUpdate,
+  onAssistantCoachIdUpdate,
   onRunAutoDetection,
 }: PlayerReviewTableProps) {
   const [search, setSearch] = useState('');
@@ -52,6 +57,16 @@ export function PlayerReviewTable({
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [teamsExpanded, setTeamsExpanded] = useState(false);
   const [weightsExpanded, setWeightsExpanded] = useState(false);
+
+  // Track assigned coach IDs to prevent duplicates across teams
+  const assignedCoachIds = useMemo(() => {
+    const ids: string[] = [];
+    teams.forEach(team => {
+      if (team.headCoachId) ids.push(team.headCoachId);
+      if (team.assistantCoachId) ids.push(team.assistantCoachId);
+    });
+    return ids;
+  }, [teams]);
   const [editingCell, setEditingCell] = useState<{ playerId: string; field: EditableField } | null>(null);
   const [editValue, setEditValue] = useState('');
   const [linkingSiblingFor, setLinkingSiblingFor] = useState<string | null>(null);
@@ -274,7 +289,9 @@ export function PlayerReviewTable({
           <div className="px-4 pb-4 border-t border-gray-200 dark:border-gray-700">
             {/* Instructions */}
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-3 mb-3">
-              Enter head coach last name as the team name. Assistant coaches are optional.
+              {onHeadCoachIdUpdate
+                ? 'Select coaches from your organization registry. Assistant coaches are optional.'
+                : 'Enter head coach last name as the team name. Assistant coaches are optional.'}
             </p>
 
             {/* Team Cards Grid */}
@@ -298,20 +315,35 @@ export function PlayerReviewTable({
                         ? 'bg-yellow-100 dark:bg-yellow-900/30'
                         : 'bg-gray-100 dark:bg-gray-700/50'
                     }`}>
-                      <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                      <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
                         hasCoachKids
                           ? 'bg-yellow-500 text-white'
                           : 'bg-gray-400 dark:bg-gray-600 text-white'
                       }`}>
                         {index + 1}
                       </span>
-                      <input
-                        type="text"
-                        value={team.headCoach}
-                        onChange={(e) => onTeamNameUpdate(team.id, e.target.value)}
-                        placeholder="Last name only"
-                        className="flex-1 px-2 py-1 text-sm font-medium border-0 bg-transparent text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500 rounded"
-                      />
+                      {onHeadCoachIdUpdate ? (
+                        <CoachSelector
+                          value={team.headCoachId ?? null}
+                          onChange={(coachId, coach) => {
+                            onHeadCoachIdUpdate(team.id, coachId, coach);
+                            // Also update the legacy text field for backward compatibility
+                            onTeamNameUpdate(team.id, coach?.lastName || '');
+                          }}
+                          role="manager"
+                          placeholder="Select manager..."
+                          excludeCoachIds={assignedCoachIds.filter(id => id !== team.headCoachId)}
+                          className="flex-1"
+                        />
+                      ) : (
+                        <input
+                          type="text"
+                          value={team.headCoach}
+                          onChange={(e) => onTeamNameUpdate(team.id, e.target.value)}
+                          placeholder="Last name only"
+                          className="flex-1 px-2 py-1 text-sm font-medium border-0 bg-transparent text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500 rounded"
+                        />
+                      )}
                     </div>
 
                     {/* Team Body */}
@@ -319,13 +351,28 @@ export function PlayerReviewTable({
                       {/* Assistant Coach */}
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">Asst.</span>
-                        <input
-                          type="text"
-                          value={team.assistantCoach || ''}
-                          onChange={(e) => onAssistantCoachUpdate(team.id, e.target.value)}
-                          placeholder="Last name..."
-                          className="flex-1 px-2 py-1 text-xs border border-gray-200 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 placeholder-gray-400"
-                        />
+                        {onAssistantCoachIdUpdate ? (
+                          <CoachSelector
+                            value={team.assistantCoachId ?? null}
+                            onChange={(coachId, coach) => {
+                              onAssistantCoachIdUpdate(team.id, coachId, coach);
+                              // Also update the legacy text field for backward compatibility
+                              onAssistantCoachUpdate(team.id, coach?.lastName || '');
+                            }}
+                            role="assistant_coach"
+                            placeholder="Select assistant..."
+                            excludeCoachIds={assignedCoachIds.filter(id => id !== team.assistantCoachId)}
+                            className="flex-1"
+                          />
+                        ) : (
+                          <input
+                            type="text"
+                            value={team.assistantCoach || ''}
+                            onChange={(e) => onAssistantCoachUpdate(team.id, e.target.value)}
+                            placeholder="Last name..."
+                            className="flex-1 px-2 py-1 text-xs border border-gray-200 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 placeholder-gray-400"
+                          />
+                        )}
                       </div>
 
                       {/* Coach's Kids */}

@@ -272,7 +272,13 @@ function App() {
     ageRange: DivisionAgeRange;
     enforceAgeLimit: boolean;
     maxPerAge: number;
-    coaches: Array<{ headCoach: string; assistantCoach: string }>;
+    coaches: Array<{
+      headCoach: string;
+      assistantCoach: string;
+      teamName?: string;
+      headCoachId?: string | null;
+      assistantCoachId?: string | null;
+    }>;
   }) => {
     const division = await createDivision(config);
     if (division) {

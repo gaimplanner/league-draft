@@ -428,9 +428,25 @@ class Team(models.Model):
     draft_position = models.IntegerField()
     total_score = models.FloatField(default=0)
 
-    # Coach assignments - persist with division
+    # Coach assignments - legacy string fields (for backward compatibility)
     head_coach = models.CharField(max_length=100, blank=True)  # Manager's name
     assistant_coach = models.CharField(max_length=100, blank=True)  # Single assistant
+
+    # Coach assignments - new FK references to Coach registry
+    head_coach_ref = models.ForeignKey(
+        "Coach",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="teams_as_head_coach",
+    )
+    assistant_coach_ref = models.ForeignKey(
+        "Coach",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="teams_as_assistant",
+    )
 
     # Age breakdown stored as JSON: {"10": 3, "11": 4, "12": 2}
     age_breakdown = models.JSONField(default=dict)

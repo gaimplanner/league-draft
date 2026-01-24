@@ -101,10 +101,18 @@ def transform_team(team, include_roster: bool = True) -> dict:
         "name": team.name,
         "head_coach": team.head_coach,
         "assistant_coach": team.assistant_coach,
+        "head_coach_id": str(team.head_coach_ref_id) if team.head_coach_ref_id else None,
+        "assistant_coach_id": str(team.assistant_coach_ref_id) if team.assistant_coach_ref_id else None,
         "draft_position": team.draft_position,
         "total_score": team.total_score,
         "age_breakdown": team.age_breakdown,
     }
+
+    # Include coach details if refs are set
+    if team.head_coach_ref:
+        result["head_coach_details"] = transform_coach(team.head_coach_ref)
+    if team.assistant_coach_ref:
+        result["assistant_coach_details"] = transform_coach(team.assistant_coach_ref)
 
     if include_roster:
         result["roster"] = [transform_player(p) for p in team.roster.all()]

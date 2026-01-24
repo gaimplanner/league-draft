@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { ChevronRight, ChevronLeft, Users, Link, Wand2, CheckCircle2 } from 'lucide-react';
-import { Player, Team, ScoringMode } from '../types';
+import { Player, Team, ScoringMode, Coach } from '../types';
 import { autoDetectCoachKids, autoDetectSiblings, CoachKidMatch, SiblingMatch } from '../utils/coachKidDetection';
 import { useScoringWeights } from '../hooks/useScoringWeights';
 import { recalculateAllScores } from '../utils/scoreCalculation';
@@ -87,6 +87,30 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
 
     const updatedTeams = teams.map(t =>
       t.id === teamId ? { ...t, assistantCoach } : t
+    );
+    onTeamsUpdate(updatedTeams);
+  };
+
+  const handleHeadCoachIdUpdate = (teamId: string, coachId: string | null, coach: Coach | null) => {
+    const updatedTeams = teams.map(t =>
+      t.id === teamId ? {
+        ...t,
+        headCoachId: coachId,
+        headCoachDetails: coach,
+        headCoach: coach?.lastName || t.headCoach,
+      } : t
+    );
+    onTeamsUpdate(updatedTeams);
+  };
+
+  const handleAssistantCoachIdUpdate = (teamId: string, coachId: string | null, coach: Coach | null) => {
+    const updatedTeams = teams.map(t =>
+      t.id === teamId ? {
+        ...t,
+        assistantCoachId: coachId,
+        assistantCoachDetails: coach,
+        assistantCoach: coach?.lastName || t.assistantCoach,
+      } : t
     );
     onTeamsUpdate(updatedTeams);
   };
@@ -441,6 +465,8 @@ export const PlayerReview = ({ players, teams, scoringMode, onScoringModeChange,
           onSiblingUnlink={handleSiblingUnlink}
           onTeamNameUpdate={handleHeadCoachUpdate}
           onAssistantCoachUpdate={handleAssistantCoachUpdate}
+          onHeadCoachIdUpdate={handleHeadCoachIdUpdate}
+          onAssistantCoachIdUpdate={handleAssistantCoachIdUpdate}
           onRunAutoDetection={handleAutoDetect}
         />
       </div>
