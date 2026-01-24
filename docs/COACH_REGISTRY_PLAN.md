@@ -15,17 +15,28 @@
 
 ---
 
+## Decisions Made
+
+| Question | Decision |
+|----------|----------|
+| Should coaches have a "role" field? | **Yes** - Add `role` field with values: `manager`, `assistant_coach` (extensible for future roles) |
+| Multiple assistant coaches per team? | **No** - Keep single assistant coach per team for now |
+| Bulk import from spreadsheet? | **Copy/paste** - Support pasting a list of coaches (one per line) instead of file upload |
+
+---
+
 ## User Stories
 
 ### Primary
 1. As a league admin, I want to manage a central list of coaches so I don't have to re-enter them for each division.
 2. As a league admin, I want to select coaches from a dropdown when creating teams, not type names manually.
 3. As a division admin, I want to see all available coaches when configuring teams for my division.
+4. As a league admin, I want to paste a list of coaches to quickly populate the registry.
 
 ### Secondary
-4. As a league admin, I want to optionally link a coach to a user account so they can log in.
-5. As a league admin, I want to track coach contact information (email, phone) in one place.
-6. As a division admin, I want coach kid auto-detection to use the registry for more reliable matching.
+5. As a league admin, I want to optionally link a coach to a user account so they can log in.
+6. As a league admin, I want to track coach contact information (email, phone) in one place.
+7. As a division admin, I want coach kid auto-detection to use the registry for more reliable matching.
 
 ---
 
@@ -36,6 +47,15 @@
 ```python
 class Coach(models.Model):
     """Centralized coach registry at the organization level."""
+
+    ROLE_CHOICES = [
+        ("manager", "Manager"),
+        ("assistant_coach", "Assistant Coach"),
+        # Future roles can be added here:
+        # ("field_coach", "Field Coach"),
+        # ("batting_coach", "Batting Coach"),
+        # ("pitching_coach", "Pitching Coach"),
+    ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     organization = models.ForeignKey(
@@ -59,6 +79,13 @@ class Coach(models.Model):
     email = models.EmailField(null=True, blank=True)
     phone = models.CharField(max_length=20, null=True, blank=True)
 
+    # Role - extensible for future coach types
+    role = models.CharField(
+        max_length=20,
+        choices=ROLE_CHOICES,
+        default="manager"
+    )
+
     # Status
     is_active = models.BooleanField(default=True)  # Soft delete / inactive seasons
 
@@ -71,6 +98,7 @@ class Coach(models.Model):
         unique_together = [["organization", "first_name", "last_name"]]
         indexes = [
             models.Index(fields=["organization", "is_active"]),
+            models.Index(fields=["organization", "role"]),
             models.Index(fields=["last_name"]),
         ]
 
@@ -79,7 +107,7 @@ class Coach(models.Model):
         return f"{self.first_name} {self.last_name}"
 
     def __str__(self):
-        return self.full_name
+        return f"{self.full_name} ({self.get_role_display()})"
 ```
 
 ### Modified: Team Model
@@ -92,24 +120,28 @@ class Team(models.Model):
     head_coach = models.CharField(max_length=100, blank=True, default="")
     assistant_coach = models.CharField(max_length=100, blank=True, default="")
 
-    # New FK relationships
+    # New FK relationships (single assistant, not M2M)
     head_coach_ref = models.ForeignKey(
         Coach,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="head_coach_teams"
+        related_name="managed_teams"
     )
-    assistant_coaches = models.ManyToManyField(
+    assistant_coach_ref = models.ForeignKey(
         Coach,
+        on_delete=models.SET_NULL,
+        null=True,
         blank=True,
-        related_name="assistant_teams"
+        related_name="assisted_teams"
     )
 ```
 
 ### Frontend: Coach Interface
 
 ```typescript
+type CoachRole = 'manager' | 'assistant_coach';
+
 interface Coach {
   id: string;
   organizationId: string;
@@ -119,6 +151,8 @@ interface Coach {
   fullName: string;  // Computed: "First Last"
   email?: string;
   phone?: string;
+  role: CoachRole;
+  roleDisplay: string;  // "Manager" or "Assistant Coach"
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -135,8 +169,8 @@ interface Team {
   // New
   headCoachId?: string;
   headCoachRef?: Coach;
-  assistantCoachIds?: string[];
-  assistantCoachRefs?: Coach[];
+  assistantCoachId?: string;
+  assistantCoachRef?: Coach;
 }
 ```
 
@@ -150,6 +184,7 @@ interface Team {
 |--------|----------|-------------|------|
 | GET | `/api/organizations/{id}/coaches/` | List all coaches for organization | Admin/Coach |
 | POST | `/api/organizations/{id}/coaches/` | Create new coach | Admin only |
+| POST | `/api/organizations/{id}/coaches/bulk/` | Create multiple coaches (paste import) | Admin only |
 | GET | `/api/coaches/{id}/` | Get coach details | Admin/Coach |
 | PATCH | `/api/coaches/{id}/` | Update coach | Admin only |
 | DELETE | `/api/coaches/{id}/` | Deactivate coach (soft delete) | Admin only |
@@ -169,6 +204,8 @@ interface Team {
       "full_name": "John Smith",
       "email": "jsmith@email.com",
       "phone": "555-1234",
+      "role": "manager",
+      "role_display": "Manager",
       "is_active": true,
       "user_id": null,
       "created_at": "2025-01-01T00:00:00Z"
@@ -182,7 +219,22 @@ interface Team {
   "first_name": "John",
   "last_name": "Smith",
   "email": "jsmith@email.com",
-  "phone": "555-1234"
+  "phone": "555-1234",
+  "role": "manager"
+}
+
+// POST /api/organizations/{id}/coaches/bulk/
+// Request (paste import):
+{
+  "coaches_text": "John Smith, Manager\nJane Doe, Assistant Coach\nBob Johnson",
+  "default_role": "manager"
+}
+// Response:
+{
+  "created": 3,
+  "skipped": 0,
+  "errors": [],
+  "coaches": [...]
 }
 ```
 
@@ -197,10 +249,11 @@ interface Team {
 **Features:**
 - Table of all coaches in the organization
 - Add new coach button → modal form
+- **Bulk add button → paste text area** (copy/paste from spreadsheet)
 - Edit coach inline or via modal
 - Deactivate/reactivate coaches
 - Link to user account (if user exists)
-- Search/filter by name
+- Search/filter by name or role
 - Show active assignment count (how many teams currently using this coach)
 
 **Wireframe:**
@@ -211,26 +264,71 @@ interface Team {
 │  [Profile] [Members] [Coaches] [Invites]                        │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                  │
-│  Coaches                                    [+ Add Coach]        │
+│  Coaches                         [+ Add Coach] [📋 Bulk Add]    │
+│                                                                  │
+│  Filter: [All Roles ▼]  🔍 Search...                            │
 │                                                                  │
 │  ┌─────────────────────────────────────────────────────────────┐│
-│  │ Name           │ Email          │ Phone    │ Teams │ Actions││
+│  │ Name           │ Role      │ Email      │ Teams │ Actions   ││
 │  ├─────────────────────────────────────────────────────────────┤│
-│  │ John Smith     │ jsmith@...     │ 555-1234 │ 2     │ ✏️ 🔗  ││
-│  │ Jane Doe       │ jdoe@...       │ 555-5678 │ 1     │ ✏️ 🔗  ││
-│  │ Bob Johnson    │ —              │ —        │ 0     │ ✏️ 🗑️  ││
+│  │ John Smith     │ Manager   │ jsmith@... │ 2     │ ✏️ 🔗     ││
+│  │ Jane Doe       │ Manager   │ jdoe@...   │ 1     │ ✏️ 🔗     ││
+│  │ Bob Johnson    │ Assistant │ —          │ 0     │ ✏️ 🗑️     ││
 │  └─────────────────────────────────────────────────────────────┘│
 │                                                                  │
-│  Showing 3 active coaches                                        │
+│  Showing 3 active coaches (2 Managers, 1 Assistant)              │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### 2. Coach Selector Component (New)
+### 2. Bulk Add Modal (New - Copy/Paste Import)
+
+**Features:**
+- Large text area for pasting coach list
+- Supports multiple formats:
+  - One name per line: `John Smith`
+  - With role: `John Smith, Manager`
+  - Tab-separated (from Excel): `John	Smith	Manager`
+- Preview parsed results before saving
+- Default role selector for names without role specified
+- Shows duplicates/errors before import
+
+**Wireframe:**
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Bulk Add Coaches                                          [X]  │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  Paste your coach list below (one per line):                    │
+│                                                                  │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │ John Smith, Manager                                         ││
+│  │ Jane Doe                                                    ││
+│  │ Bob Johnson, Assistant Coach                                ││
+│  │ Mary Williams                                               ││
+│  │                                                             ││
+│  └─────────────────────────────────────────────────────────────┘│
+│                                                                  │
+│  Default role for names without role: [Manager ▼]               │
+│                                                                  │
+│  ─────────────────────────────────────────────────────────────  │
+│  Preview (4 coaches to add):                                    │
+│                                                                  │
+│  ✓ John Smith - Manager                                         │
+│  ✓ Jane Doe - Manager (default)                                 │
+│  ✓ Bob Johnson - Assistant Coach                                │
+│  ✓ Mary Williams - Manager (default)                            │
+│                                                                  │
+│                               [Cancel]  [Add 4 Coaches]         │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 3. Coach Selector Component (New)
 
 **Used in:** DivisionCreator, PlayerReview team configuration
 
 **Features:**
 - Searchable dropdown of coaches from registry
+- **Filtered by role** (Manager selector shows managers, Assistant shows assistants)
 - Shows coach name and current assignments
 - "Add new coach" option at bottom (opens modal)
 - Clear selection option
@@ -239,23 +337,25 @@ interface Team {
 **Wireframe:**
 ```
 ┌────────────────────────────────────────┐
-│ Head Coach                             │
+│ Manager                                │
 │ ┌────────────────────────────────────┐ │
-│ │ 🔍 Search coaches...            ▼  │ │
+│ │ 🔍 Search managers...           ▼  │ │
 │ ├────────────────────────────────────┤ │
 │ │ John Smith (2 teams)               │ │
 │ │ Jane Doe (1 team)                  │ │
 │ │ Bob Johnson (available)            │ │
 │ ├────────────────────────────────────┤ │
-│ │ + Add new coach...                 │ │
+│ │ + Add new manager...               │ │
 │ └────────────────────────────────────┘ │
 └────────────────────────────────────────┘
 ```
 
-### 3. Modified Team Configuration
+### 4. Modified Team Configuration
 
 **DivisionCreator changes:**
 - Replace text inputs with CoachSelector
+- Manager selector filtered to `role=manager`
+- Assistant selector filtered to `role=assistant_coach`
 - Load coaches from organization on mount
 - Allow creating new coach inline
 
@@ -271,9 +371,9 @@ interface Team {
 
 **Goal:** Create Coach model and API without breaking existing functionality
 
-1. Create Coach model with migration
-2. Create Coach API endpoints (CRUD)
-3. Add `head_coach_ref` and `assistant_coaches` FKs to Team model
+1. Create Coach model with migration (including `role` field)
+2. Create Coach API endpoints (CRUD + bulk create)
+3. Add `head_coach_ref` and `assistant_coach_ref` FKs to Team model
 4. Update Team transformer to include coach refs
 5. Keep legacy `head_coach`/`assistant_coach` fields working
 6. Add unit tests for Coach API
@@ -289,18 +389,20 @@ interface Team {
 
 ### Phase 2: Coach Management UI (PR #2)
 
-**Goal:** Admin UI to manage coach registry
+**Goal:** Admin UI to manage coach registry with bulk add
 
 1. Create CoachesTab component for ProfilePage
 2. Add coaches API client methods
 3. Create coach list table with CRUD operations
 4. Add coach form modal (create/edit)
-5. Add search/filter functionality
-6. Show team assignment counts
+5. **Add bulk add modal with paste parsing**
+6. Add search/filter by name and role
+7. Show team assignment counts
 
 **Files to create:**
 - `src/components/profile/CoachesTab.tsx`
 - `src/components/profile/CoachFormModal.tsx`
+- `src/components/profile/BulkAddCoachesModal.tsx`
 - `src/api/coaches.ts`
 
 **Files to modify:**
@@ -311,7 +413,7 @@ interface Team {
 
 **Goal:** Use registry in team configuration
 
-1. Create CoachSelector component
+1. Create CoachSelector component (with role filtering)
 2. Integrate into DivisionCreator
 3. Integrate into PlayerReview team headers
 4. Add "create coach inline" flow
@@ -344,8 +446,8 @@ interface Team {
 
 1. Create data migration script to:
    - Extract unique coaches from existing Team.head_coach/assistant_coach
-   - Create Coach records for each
-   - Link Team.head_coach_ref to Coach records
+   - Create Coach records for each (infer role from field used)
+   - Link Team.head_coach_ref/assistant_coach_ref to Coach records
 2. Update frontend to prefer coach refs over legacy fields
 3. Add deprecation warnings for legacy fields
 4. Update documentation
@@ -356,6 +458,73 @@ interface Team {
 **Files to modify:**
 - `CLAUDE.md` - Document Coach model
 - `README.md` - Update feature list
+
+---
+
+## Paste Import Parsing Logic
+
+The bulk add feature parses pasted text with these rules:
+
+```typescript
+function parseCoachesText(text: string, defaultRole: CoachRole): ParsedCoach[] {
+  const lines = text.split('\n').filter(line => line.trim());
+
+  return lines.map(line => {
+    // Try comma-separated: "John Smith, Manager"
+    // Try tab-separated: "John\tSmith\tManager"
+    // Try just name: "John Smith"
+
+    const parts = line.includes('\t')
+      ? line.split('\t').map(p => p.trim())
+      : line.split(',').map(p => p.trim());
+
+    let firstName: string;
+    let lastName: string;
+    let role: CoachRole = defaultRole;
+
+    if (parts.length >= 3) {
+      // First, Last, Role
+      firstName = parts[0];
+      lastName = parts[1];
+      role = parseRole(parts[2]) || defaultRole;
+    } else if (parts.length === 2) {
+      // Could be "First Last" or "Full Name, Role"
+      if (isRole(parts[1])) {
+        // "John Smith, Manager"
+        const names = parts[0].split(' ');
+        firstName = names[0];
+        lastName = names.slice(1).join(' ') || names[0];
+        role = parseRole(parts[1]) || defaultRole;
+      } else {
+        // "John, Smith" (first, last)
+        firstName = parts[0];
+        lastName = parts[1];
+      }
+    } else {
+      // Single value: "John Smith"
+      const names = parts[0].split(' ');
+      firstName = names[0];
+      lastName = names.slice(1).join(' ') || names[0];
+    }
+
+    return { firstName, lastName, role };
+  });
+}
+
+function parseRole(text: string): CoachRole | null {
+  const lower = text.toLowerCase();
+  if (lower.includes('manager') || lower === 'mgr') return 'manager';
+  if (lower.includes('assistant') || lower === 'ac') return 'assistant_coach';
+  return null;
+}
+```
+
+**Supported formats:**
+- `John Smith` → First: John, Last: Smith, Role: (default)
+- `John Smith, Manager` → First: John, Last: Smith, Role: Manager
+- `John, Smith, Manager` → First: John, Last: Smith, Role: Manager
+- `John	Smith	Manager` (tabs) → First: John, Last: Smith, Role: Manager
+- `Smith` → First: Smith, Last: Smith, Role: (default)
 
 ---
 
@@ -390,10 +559,26 @@ for team in Team.objects.exclude(head_coach=""):
         organization=team.division.organization,
         first_name=first_name,
         last_name=last_name,
-        defaults={"is_active": True}
+        defaults={"role": "manager", "is_active": True}
     )
 
     team.head_coach_ref = coach
+    team.save()
+
+# Same for assistant coaches with role="assistant_coach"
+for team in Team.objects.exclude(assistant_coach=""):
+    names = team.assistant_coach.strip().split()
+    first_name = names[0] if names else ""
+    last_name = names[-1] if len(names) > 1 else names[0]
+
+    coach, created = Coach.objects.get_or_create(
+        organization=team.division.organization,
+        first_name=first_name,
+        last_name=last_name,
+        defaults={"role": "assistant_coach", "is_active": True}
+    )
+
+    team.assistant_coach_ref = coach
     team.save()
 ```
 
@@ -404,7 +589,7 @@ for team in Team.objects.exclude(head_coach=""):
 ### 1. Coach Name Collisions
 - What if "John Smith" exists twice in organization?
 - **Solution:** Unique constraint on (organization, first_name, last_name)
-- UI shows email/phone to disambiguate
+- UI shows email/phone/role to disambiguate
 
 ### 2. Coach Deletion
 - What if coach is deleted but still assigned to teams?
@@ -428,6 +613,10 @@ for team in Team.objects.exclude(head_coach=""):
 - Coach requests in Team Builder should also use registry
 - Request confirmation can suggest matching registered coaches
 
+### 7. Role Changes
+- What if someone is Manager in one division, Assistant in another?
+- **Solution:** Role is on Coach record (their primary role), but team assignment determines their function for that team
+
 ---
 
 ## Security Considerations
@@ -445,27 +634,7 @@ for team in Team.objects.exclude(head_coach=""):
 2. **Improved accuracy:** Coach kid detection uses reliable IDs
 3. **Admin satisfaction:** No more stale spreadsheets for coach tracking
 4. **Time saved:** Division setup faster with coach selection vs typing
-
----
-
-## Open Questions
-
-1. **Should coaches have a "role" field?** (head_coach, assistant, field_coach, etc.)
-   - Current plan: No, role is determined by assignment on Team
-   - Alternative: Add role to Coach model for filtering
-
-2. **Should we support multiple assistant coaches per team?**
-   - Current Team model has single `assistant_coach` field
-   - Proposed: `assistant_coaches` M2M allows multiple
-   - UI change: Multi-select for assistants
-
-3. **Should coach be linkable to multiple user accounts?**
-   - Unlikely scenario (one person = one coach record)
-   - Current: One-to-one (nullable) FK to User
-
-4. **Import from spreadsheet?**
-   - Future feature: Bulk import coaches from CSV
-   - Not in scope for initial implementation
+5. **Bulk import adoption:** Admins use paste feature to quickly populate registry
 
 ---
 
@@ -478,6 +647,7 @@ for team in Team.objects.exclude(head_coach=""):
 | `server/draft/migrations/0008_coach_registry.py` | Coach model migration |
 | `src/components/profile/CoachesTab.tsx` | Coach management UI |
 | `src/components/profile/CoachFormModal.tsx` | Add/edit coach form |
+| `src/components/profile/BulkAddCoachesModal.tsx` | Paste import modal |
 | `src/components/CoachSelector.tsx` | Reusable coach dropdown |
 | `src/api/coaches.ts` | Coach API client |
 | `server/draft/management/commands/migrate_coaches.py` | Data migration |
@@ -497,25 +667,15 @@ for team in Team.objects.exclude(head_coach=""):
 
 ---
 
-## Timeline Estimate
-
-| Phase | Scope | Estimate |
-|-------|-------|----------|
-| Phase 1 | Backend Foundation | 1-2 days |
-| Phase 2 | Coach Management UI | 1-2 days |
-| Phase 3 | Coach Selector Integration | 1-2 days |
-| Phase 4 | Coach Kid Detection | 0.5-1 day |
-| Phase 5 | Migration & Cleanup | 1 day |
-| **Total** | | **5-8 days** |
-
----
-
 ## Review Checklist
 
 Before implementation, confirm:
 
-- [ ] Data model approved (Coach fields, Team FK changes)
+- [x] Role field added (`manager`, `assistant_coach`)
+- [x] Single assistant coach per team (not M2M)
+- [x] Bulk add via copy/paste (not file upload)
+- [ ] Data model approved
 - [ ] API endpoints approved
 - [ ] UI placement approved (Coaches tab in Profile)
-- [ ] Migration strategy approved (dual-write, gradual deprecation)
-- [ ] Open questions resolved (roles, multiple assistants, etc.)
+- [ ] Paste parsing logic approved
+- [ ] Migration strategy approved
