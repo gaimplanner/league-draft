@@ -4,12 +4,18 @@ This file provides context for AI assistants working on this codebase.
 
 ## Project Overview
 
-**Little League Draft Application** - A React/TypeScript web app for managing Little League baseball drafts. Handles player imports, scoring, draft execution with rule enforcement, and result exports.
+**Little League Draft Application** - A production-ready React/TypeScript web app for managing Little League baseball drafts. Supports two modes: live drafts where teams take turns picking players, and auto-generated teams for younger divisions. Handles player imports, scoring, draft execution with rule enforcement, and result exports.
+
+**Current Status:** Production-ready with completed stabilization phases (0-6). All critical features implemented and tested.
 
 ## Key Concepts
 
 ### Division
 Top-level container. Presets: Majors (10-12), AAA (8-10), AA (7-10), Custom. Each division has its own teams, players, and draft state.
+
+**Division Modes:**
+- `live-draft`: Traditional draft where teams take turns picking players
+- `league-generated`: Auto-assignment algorithm creates balanced teams (Team Builder)
 
 ### Player
 Imported from CSV, Excel, or dual CSV flow. Has skill scores, total score, rank, and flags (isCoachKid, siblingId, isAllStar, isDNE). Draft status tracked via isDrafted, draftedByTeamId, draftedInRound, draftedAtPick.
@@ -31,20 +37,24 @@ Has name, roster (drafted players), totalScore, draftPosition, coachKids array, 
 
 ## Architecture
 
-### App Phases
+### App Phases (Live Draft Mode)
 `upload` → `mapping` → `review` → `config` → `draft` → `complete`
 
+### App Phases (Team Builder Mode)
+`setup` → `import` → `resolution` → `confirm-requests` → `configure` → `generate` → `results`
+
 ### Backend (Django REST Framework)
-- **Multi-tenant architecture**: League is the tenant model
-- **LeagueMembership**: Users can belong to multiple leagues with roles (admin/member)
-- **TenantMiddleware**: Injects `request.league` based on user's membership or X-League-ID header
+- **Multi-tenant architecture**: Organization is the tenant model
+- **OrganizationMembership**: Users can belong to multiple organizations with roles (admin/coach/viewer)
+- **TenantMiddleware**: Injects `request.organization` based on user's membership
 - **Session-based auth**: Django sessions with CSRF protection
 - **Rate limiting**: AuthRateThrottle (5/min) and PasswordResetRateThrottle (3/hr)
 - **Session timeout**: 24-hour expiration (SESSION_COOKIE_AGE)
+- **Structured logging**: JSON logging with correlation IDs for request tracing
 
 ### State Management
 - `useDivisions` hook: Division CRUD via API. `updateActiveDivision` persists teams via `saveTeamsToApi` and players via `savePlayersToApi`
-- `useDraft` hook: Draft state, pick logic, undo, mandatory pick checks via API
+- `useDraft` hook: Draft state, pick logic, undo, skip, mandatory pick checks via API
 - `useEvaluationImport` hook: Excel workbook processing
 - `AuthContext`: User authentication state
 
@@ -55,7 +65,7 @@ Has name, roster (drafted players), totalScore, draftPosition, coachKids array, 
 | `src/App.tsx` | Main orchestration, phase routing, state coordination |
 | `src/api/client.ts` | API client with snake_case/camelCase transformations |
 | `src/contexts/AuthContext.tsx` | Authentication state, login/logout/register |
-| `src/hooks/useDraft.ts` | Draft state machine, pick validation, startDraft, draftPlayer, undoLastPick |
+| `src/hooks/useDraft.ts` | Draft state machine, pick validation, startDraft, draftPlayer, undoLastPick, skipPick |
 | `src/hooks/useDivisions.ts` | Division CRUD via API |
 | `src/utils/draftLogic.ts` | getMandatoryPick, lockSiblingToTeam, getBestAvailable |
 | `src/utils/simulation.ts` | runSimulation, getSimulationStats |
@@ -69,23 +79,20 @@ Has name, roster (drafted players), totalScore, draftPosition, coachKids array, 
 | `src/components/draft/DraftBoardPlayerGrid.tsx` | Available players table view (sortable, searchable, with flags and draft buttons) |
 | `src/components/draft/DraftBoardRosterView.tsx` | Round-by-round roster grid (teams as columns, shows drafted/pre-filled/current pick) |
 | `src/contexts/ViewContext.tsx` | Admin/Public view mode context for draft board |
-| `server/draft/models.py` | Django models: League, User, LeagueMembership, LeagueInvitation, Division, Team, Player, DraftState |
-| `server/draft/views.py` | DRF ViewSets, auth endpoints, member management, invitations |
-| `server/draft/serializers.py` | DRF serializers with snake_case/camelCase handling |
-| `server/draft/services.py` | Draft business logic (start, pick, undo, trade) |
+| `src/components/TeamBuilderFlow.tsx` | Main orchestration for Team Builder steps |
+| `src/components/teamBuilder/TeamBuilderResults.tsx` | Results display with happiness indicators and search |
+| `src/components/teamBuilder/PlayerDetailDrawer.tsx` | Player request analysis and inline team moves |
+| `src/utils/teamBuilderAlgorithm.ts` | Assignment algorithms (balance-first, requests-first, skill-tiered) |
+| `src/utils/teamBuilderParser.ts` | Request parsing, name matching, normalization, cluster building |
+| `server/draft/models.py` | Django models: Organization, User, OrganizationMembership, Division, Team, Player, DraftState |
+| `server/draft/views/` | View functions for auth, divisions, teams, players, draft operations |
+| `server/draft/transformers.py` | Model to dict transformations (replaces serializers) |
+| `server/draft/services_draft.py` | Draft business logic with race condition prevention |
 | `server/draft/middleware.py` | TenantMiddleware for multi-tenancy |
-| `server/draft/throttling.py` | Rate limiting classes (AuthRateThrottle, PasswordResetRateThrottle) |
-| `server/draft/validators.py` | Custom password validators (StrongPasswordValidator) |
-| `src/utils/passwordValidation.ts` | Client-side password validation matching Django validators |
-| `src/components/profile/*.tsx` | Profile page, member management, invitations |
-| `src/components/JoinPage.tsx` | League invitation acceptance flow |
-| `src/components/evaluation/CSVImportFlow.tsx` | Dual CSV import orchestration (upload → verify → mapping) |
-| `src/components/evaluation/DualCSVUpload.tsx` | Two-step CSV upload for eval + registration |
-| `src/components/evaluation/CSVVerificationStep.tsx` | Match/exclude/DNE player verification UI |
+| `server/draft/logging.py` | Structured JSON logging with correlation IDs |
+| `server/draft/throttling.py` | Rate limiting classes |
 | `src/utils/importPipeline/` | Unified player field definitions, transforms, validation |
 | `src/components/ErrorBoundary.tsx` | React error boundary with backend error reporting |
-| `server/draft/logging.py` | Structured JSON logging with correlation IDs |
-| `server/draft/services_draft.py` | Draft business logic with race condition prevention |
 | `docs/RUNBOOK.md` | Operations runbook for production deployment |
 | `server/tests/load/locustfile.py` | Locust load testing scenarios |
 
@@ -94,40 +101,50 @@ Has name, roster (drafted players), totalScore, draftPosition, coachKids array, 
 App
 ├── LoginPage / RegisterPage (if not authenticated)
 ├── ForgotPasswordPage / ResetPasswordPage (password reset flow)
-├── JoinPage (league invitation acceptance)
+├── JoinPage (organization invitation acceptance)
 ├── ProfilePage (settings mode)
-│   ├── MembersTab (league member management)
+│   ├── MembersTab (organization member management)
 │   ├── InviteModal / JoinLinkSection (invitations)
 │   ├── ProfileTab (edit profile)
 │   └── ChangePasswordModal
-├── DivisionSelector / DivisionCreator
-├── FileUpload → ColumnMapper (CSV flow)
-├── EvaluationImport (Excel flow)
-│   └── PlayerSummaryTable, DetectionModal
-├── CSVImportFlow (Dual CSV flow with registration verification)
-│   ├── DualCSVUpload (upload eval + registration CSVs)
-│   └── CSVVerificationStep (match players, exclude/DNE)
-├── PlayerReview (CSV flow)
-│   └── PlayerReviewTable (spreadsheet-style table)
-├── DraftConfig
-│   └── SimulationModal
-├── DraftBoard (main draft interface)
-│   ├── Header: pick counter, current/next team, age breakdown, mandatory pick alert
-│   ├── Round Order Display: horizontal team cards with pick states
-│   ├── Drawer Toggle: switch between players/rosters views
-│   ├── DraftBoardPlayerGrid (available players - sortable table with search, flags, draft buttons)
-│   ├── DraftBoardRosterView (team rosters - round×team grid with drafted/pre-filled/current states)
-│   ├── Round Interstitial Modal (between-round order display)
-│   └── Draft Complete Modal (finalization prompt)
-└── DraftComplete
-    ├── Team Balance metrics (Top 8 / Full Roster toggle)
-    ├── Export options (Public Rosters CSV, Official Record CSV)
-    └── TradeModal
+├── DivisionSelector / DivisionCreator (with mode selection)
+├── [Live Draft Mode]
+│   ├── FileUpload → ColumnMapper (CSV flow)
+│   ├── EvaluationImport (Excel flow)
+│   │   └── PlayerSummaryTable, DetectionModal
+│   ├── CSVImportFlow (Dual CSV flow with registration verification)
+│   │   ├── DualCSVUpload (upload eval + registration CSVs)
+│   │   └── CSVVerificationStep (match players, exclude/DNE)
+│   ├── PlayerReview
+│   │   └── PlayerReviewTable (spreadsheet-style table)
+│   ├── DraftConfig
+│   │   └── SimulationModal
+│   ├── DraftBoard (main draft interface)
+│   │   ├── Header: pick counter, current/next team, age breakdown, mandatory pick alert
+│   │   ├── Round Order Display: horizontal team cards with pick states
+│   │   ├── Drawer Toggle: switch between players/rosters views
+│   │   ├── DraftBoardPlayerGrid (available players - sortable table with search, flags, draft buttons)
+│   │   ├── DraftBoardRosterView (team rosters - round×team grid with drafted/pre-filled/current states)
+│   │   ├── Round Interstitial Modal (between-round order display)
+│   │   └── Draft Complete Modal (finalization prompt)
+│   └── DraftComplete
+│       ├── Team Balance metrics (Top 8 / Full Roster toggle)
+│       ├── Export options (Public Rosters CSV, Official Record CSV)
+│       └── TradeModal
+└── [Team Builder Mode]
+    └── TeamBuilderFlow
+        ├── EvaluationImport (Excel with Registration Data tab)
+        ├── NameMatchResolver (resolve unmatched player names)
+        ├── RequestConfirmation (review/confirm request matches)
+        ├── TeamBuilderResults (view assignments with happiness)
+        │   ├── PlayerDetailDrawer (request analysis, inline moves)
+        │   └── TradeSuggestions (apply balance trades)
+        └── Export (rosters + happiness report)
 ```
 
 ## Data Flow
 
-### Import → Draft
+### Import → Draft (Live Draft Mode)
 1. CSV/Excel/Dual CSV uploaded and parsed
 2. For dual CSV: Registration verification (match players, exclude unregistered, add DNE)
 3. Column mapping (for CSV flows) - maps all columns to Player fields
@@ -137,16 +154,149 @@ App
 7. Draft started with resolvedPlayers (lockedToRound set for conflicts)
 8. Each pick updates player.isDrafted, team.roster, checks for mandatory picks
 
-### Dual CSV Import Flow
-1. Upload evaluation CSV (BIB, First, Last, scores) + registration CSV (First, Last)
-2. CSVVerificationStep matches players by name (exact + fuzzy Levenshtein matching)
-3. User can exclude evaluated players not in registration (default: excluded)
-4. User can add registered players without evaluations as DNE (score 0)
-5. After verification, goes to normal column mapping flow
-6. handleMappingComplete filters excluded rows and adds DNE players
+### Team Builder Flow (League Generated Mode)
+1. Registration Data + Eval tabs parsed from Excel
+2. Players linked by First Name + Last Name matching
+3. Requests parsed and resolved to actual players/coaches
+4. Request Confirmation: User reviews/edits auto-resolved requests
+5. Algorithm assigns players to teams (requests-first, balance-first, or skill-tiered)
+6. Trade Suggestions: User can apply suggested trades for balance
+7. Results show happiness indicators and allow manual swaps via TradeModal
 
 ### Simulation
 Uses same logic as real draft but on cloned data. Returns SimulationResult with teams and players.
+
+## Team Builder Feature
+
+The Team Builder is for younger divisions (AA, etc.) where teams are auto-assigned rather than drafted.
+
+### Algorithm Modes
+
+**Requests-First (Recommended)**
+Prioritizes request satisfaction over balance:
+1. **Locked Placements**: Coach kids, assistant coach kids, siblings
+2. **Cluster Placement**: Two-way request clusters placed together on same team
+3. **Request-Based Placement**: Remaining players placed to maximize request satisfaction
+4. **Balance via Trading**: Suggested trades to improve balance without breaking satisfied requests
+
+**Skill-Tiered Draft**
+Uses simulated draft rounds for balanced distribution:
+1. **Locked Placements**: Coach kids, assistant coach kids, siblings
+2. **Draft Simulation**: Players drafted in skill-tier rounds, honoring requests when possible
+3. **Request Optimization**: Within each tier, prioritize two-way > one-way > coach requests
+
+**Balance-First (Original)**
+1. **Locked Placements**: Coach kids, assistant coach kids, siblings
+2. **Top Talent Distribution**: Spread top N players by score for balance
+3. **Request-Based Placement**: Honor two-way friends > one-way friends > coach requests > school clustering
+4. **Balance-Based**: Remaining players assigned to lowest-scoring teams
+
+### Request Resolution & Confirmation
+- **Coach requests**: Match to coach names (exact or fuzzy)
+- **Teammate requests**: Parse comma/space-delimited names, resolve to players
+- **Two-way detection**: Both players requested each other (higher priority)
+- **Confidence scoring**: Auto-confirm (≥90%), needs-review (50-90%), unresolvable (<50%)
+- **Request status**: `auto-confirmed` | `needs-review` | `user-confirmed` | `unresolvable`
+
+### Player Happiness Scores
+- 🟢 All requests honored
+- 🟡 Some requests honored
+- 🔴 No requests honored
+- ⚪ No requests made
+
+## Backend Development
+
+### Running the Backend
+```bash
+docker compose up -d          # Start API + PostgreSQL
+docker compose logs -f api    # View API logs
+docker compose exec api python manage.py shell  # Django shell
+docker compose down           # Stop services
+```
+
+### Database Migrations
+```bash
+docker compose exec api python manage.py makemigrations
+docker compose exec api python manage.py migrate
+```
+
+### Key Backend Concepts
+
+**Multi-tenancy:**
+- Organization is the tenant model
+- OrganizationMembership links users to organizations with roles (admin/coach/viewer)
+- TenantMiddleware sets `request.organization` from user's membership
+- All views filter by `request.organization`
+
+**Auth Flow:**
+- GET `/api/auth/csrf/` - Initialize CSRF token cookie (call on app load)
+- POST `/api/auth/register/` - Creates user + optional organization + membership
+- POST `/api/auth/login/` - Session login
+- POST `/api/auth/logout/` - End session
+- GET `/api/auth/me/` - Current user with organizations array
+- PATCH `/api/auth/me/` - Update profile (name only; email is read-only)
+- POST `/api/auth/change-password/` - Change password
+- POST `/api/auth/password-reset/` - Request password reset email (rate limited: 3/hr)
+- POST `/api/auth/password-reset/confirm/` - Confirm password reset
+
+**Security Features:**
+- Rate limiting on auth endpoints (5/min for login/register, 3/hr for password reset)
+- Session timeout after 24 hours (SESSION_COOKIE_AGE = 86400)
+- CSRF protection with cookie-based tokens
+- Password validation: min 8 chars, not entirely numeric, not common passwords
+- Email changes disabled (read-only field) to prevent account takeover
+
+**Draft Operations:**
+- POST `/api/draft/start/` - Start draft (admin only)
+- POST `/api/draft/pick/` - Make a pick
+- POST `/api/draft/skip/` - Skip current pick (admin only, final round)
+- POST `/api/draft/undo/` - Undo last pick (admin only)
+- POST `/api/draft/trade/` - Execute trade (admin only)
+- POST `/api/divisions/{id}/reset/` - Reset draft (admin only)
+
+## Testing
+
+### Unit Tests (Vitest)
+Frontend unit tests for critical business logic:
+```bash
+npm run test           # Run once
+npm run test:watch     # Watch mode
+npm run test:coverage  # With coverage report
+```
+
+Test files:
+- `src/utils/__tests__/draftLogic.test.ts` - getMandatoryPick, lockSiblingToTeam, getBestAvailable
+- `src/utils/__tests__/draftOrder.test.ts` - calculateDraftOrder for all 3 formats
+- `src/utils/__tests__/importPipeline.test.ts` - Field definitions, transforms, validation
+
+### Backend Unit Tests (Django)
+```bash
+docker compose exec api python manage.py test draft.tests
+```
+
+Test files:
+- `server/draft/tests/test_draft_service.py` - DraftService operations (start, pick, undo, skip, trade)
+- `server/draft/tests/test_sibling_locking.py` - Sibling chain locking/unlocking
+
+### Load Testing (Locust)
+```bash
+pip install -r server/tests/load/requirements.txt
+locust -f server/tests/load/locustfile.py --host=http://localhost:3001
+```
+
+### E2E Tests (Playwright)
+Located in `e2e/draft-flow.spec.ts`. Run with:
+```bash
+npx playwright test
+```
+
+### Manual Verification
+1. `npm run build` - Must pass without errors
+2. `docker compose up -d` - Start backend
+3. `npm run dev` - Test in browser
+4. Test all phases: import → review → config → draft → complete
+5. Verify coach's kid and sibling rules work
+6. Test simulation and exports
 
 ## Coding Patterns
 
@@ -176,10 +326,6 @@ Draft state uses functional updates: `setDraftState(prev => ({ ...prev, ... }))`
 2. Handle in `useDraft.ts` draftPlayer callback
 3. Display warning in `DraftBoard.tsx`
 
-### Modifying simulation
-1. Update `runSimulation()` in `simulation.ts`
-2. Simulation uses same `getMandatoryPick`, `lockSiblingToTeam`, `getBestAvailable`
-
 ### Adding player fields
 1. Add to `PLAYER_FIELD_DEFINITIONS` in `src/utils/importPipeline/fieldDefinitions.ts` (single source of truth)
 2. Add to `Player` interface in `types/index.ts`
@@ -189,225 +335,14 @@ Draft state uses functional updates: `setDraftState(prev => ({ ...prev, ... }))`
 
 Note: The importPipeline module auto-generates transforms from field definitions, so adding a field there handles API transformations automatically.
 
-## Backend Development
-
-### Running the Backend
-```bash
-docker compose up -d          # Start API + PostgreSQL
-docker compose logs -f api    # View API logs
-docker compose exec api python manage.py shell  # Django shell
-docker compose down           # Stop services
-```
-
-### Database Migrations
-```bash
-docker compose exec api python manage.py makemigrations
-docker compose exec api python manage.py migrate
-```
-
-### Key Backend Concepts
-
-**Multi-tenancy:**
-- League is the tenant model
-- LeagueMembership links users to leagues with roles (admin/member)
-- TenantMiddleware sets `request.league` from user's membership
-- DivisionViewSet filters by `request.league`
-
-**Auth Flow:**
-- GET `/api/auth/csrf/` - Initialize CSRF token cookie (call on app load)
-- POST `/api/auth/register/` - Creates user + optional league + membership
-- POST `/api/auth/login/` - Session login
-- POST `/api/auth/logout/` - End session
-- GET `/api/auth/me/` - Current user with leagues array
-- PATCH `/api/auth/me/` - Update profile (name only; email is read-only)
-- POST `/api/auth/change-password/` - Change password
-- POST `/api/auth/password-reset/` - Request password reset email (rate limited: 3/hr)
-- POST `/api/auth/password-reset/confirm/` - Confirm password reset
-
-**Security Features:**
-- Rate limiting on auth endpoints (5/min for login/register, 3/hr for password reset)
-- Session timeout after 24 hours (SESSION_COOKIE_AGE = 86400)
-- CSRF protection with cookie-based tokens
-- Password validation: min 8 chars, not entirely numeric, not common passwords
-- Email changes disabled (read-only field) to prevent account takeover
-
-**League Member Management:**
-- GET `/api/leagues/{id}/members/` - List league members
-- DELETE `/api/leagues/{id}/members/{user_id}/` - Remove member
-- PATCH `/api/leagues/{id}/members/{user_id}/role/` - Change member role
-
-**Invitations:**
-- GET/POST `/api/leagues/{id}/invitations/` - List/create email invitations
-- DELETE `/api/leagues/{id}/invitations/{id}/` - Cancel invitation
-- POST `/api/invitations/accept/` - Accept email invitation
-- GET/POST/DELETE `/api/leagues/{id}/join-link/` - Manage join link
-- GET `/api/leagues/join/{token}/` - Get league info from join token (public)
-- POST `/api/leagues/join/{token}/` - Join via link
-
-## Testing Approach
-
-### Unit Tests (Vitest)
-Frontend unit tests for critical business logic:
-```bash
-npm run test           # Run once
-npm run test:watch     # Watch mode
-npm run test:coverage  # With coverage report
-```
-
-Test files:
-- `src/utils/__tests__/draftLogic.test.ts` - getMandatoryPick, lockSiblingToTeam, getBestAvailable
-- `src/utils/__tests__/draftOrder.test.ts` - calculateDraftOrder for all 3 formats
-- `src/utils/__tests__/importPipeline.test.ts` - Field definitions, transforms, validation
-
-### Backend Unit Tests (Django)
-```bash
-docker compose exec api python manage.py test draft.tests
-```
-
-Test files:
-- `server/draft/tests/test_draft_service.py` - DraftService operations (start, pick, undo, skip, trade)
-- `server/draft/tests/test_sibling_locking.py` - Sibling chain locking/unlocking
-
-### E2E Tests (Playwright)
-Located in `e2e/draft-flow.spec.ts`. Run with:
-```bash
-npx playwright test
-```
-
-Tests cover:
-- Complete draft workflow from CSV import through completion
-- DNE player handling
-- Sibling rule enforcement
-
-### Manual Verification
-1. `npm run build` - Must pass without errors
-2. `docker compose up -d` - Start backend
-3. `npm run dev` - Test in browser
-4. Test all phases: import → review → config → draft → complete
-5. Verify coach's kid and sibling rules work
-6. Test simulation and exports
-
-## Important Implementation Notes
-
-### API Mode vs localStorage Mode
-- Controlled by `VITE_USE_API` env var
-- API mode: All data persisted to PostgreSQL via Django REST API
-- localStorage mode: Data stored in browser (legacy, for offline use)
-- `useDraft.ts` and `useDivisions.ts` handle both modes
-
-### Draft State ID
-- `DraftState.id` must be captured from API responses
-- Stored in `draftStateId.current` ref in `useDraft.ts`
-- Required for all draft operations (pick, undo, trade)
-- Without it, draft falls back to localStorage mode
-
-### Player Data Persistence
-- Players must be saved to API when exiting Review phase
-- `savePlayersToApi()` called in `handleReviewComplete`
-- Includes coach kid assignments (`coachTeamId`) and sibling links (`siblingId`)
-- Sibling IDs remapped during bulk create (old frontend IDs → new DB UUIDs)
-
-### Browser History
-- Back button handled via popstate listener
-- Re-pushes state to prevent navigation (keeps user in app)
-- Prevents data loss from accidental back navigation
-
-## Team Builder Feature (In Development)
-
-The Team Builder is an alternative to live drafts for younger divisions (AA, etc.) where teams are auto-assigned rather than drafted.
-
-### Team Builder Flow
-`setup` → `import` → `resolution` → `confirm-requests` → `configure` → `generate` → `results`
-
-### Key Files
-
-| File | Purpose |
-|------|---------|
-| `src/components/TeamBuilderFlow.tsx` | Main orchestration for Team Builder steps |
-| `src/components/teamBuilder/TeamBuilderResults.tsx` | Results display with happiness indicators and search |
-| `src/components/teamBuilder/NameMatchResolver.tsx` | UI for resolving unmatched player names |
-| `src/components/teamBuilder/RequestConfirmation.tsx` | UI for reviewing/confirming request matches with confidence scores |
-| `src/components/teamBuilder/TradeSuggestions.tsx` | UI for applying suggested balance trades |
-| `src/utils/teamBuilderAlgorithm.ts` | Assignment algorithms (balance-first and requests-first) |
-| `src/utils/teamBuilderParser.ts` | Request parsing, name matching, normalization, cluster building |
-
-### Division Mode
-- `mode: 'live-draft' | 'league-generated'` on Division (set at creation, immutable)
-- Live Draft → existing draft flow
-- League Generated Teams → Team Builder flow
-
-### Algorithm Modes
-
-**Requests-First (Recommended)**
-Prioritizes request satisfaction over balance:
-1. **Locked Placements**: Coach kids, assistant coach kids, siblings
-2. **Cluster Placement**: Two-way request clusters placed together on same team
-3. **Request-Based Placement**: Remaining players placed to maximize request satisfaction
-4. **Balance via Trading**: Suggested trades to improve balance without breaking satisfied requests
-
-**Balance-First (Original)**
-1. **Locked Placements**: Coach kids, assistant coach kids, siblings
-2. **Top Talent Distribution**: Spread top N players by score for balance
-3. **Request-Based Placement**: Honor two-way friends > one-way friends > coach requests > school clustering
-4. **Balance-Based**: Remaining players assigned to lowest-scoring teams
-
-### Request Resolution & Confirmation
-- **Coach requests**: Match to coach names (exact or fuzzy)
-- **Teammate requests**: Parse comma/space-delimited names, resolve to players
-- **Two-way detection**: Both players requested each other (higher priority)
-- **Confidence scoring**: Auto-confirm (≥90%), needs-review (50-90%), unresolvable (<50%)
-- **Request status**: `auto-confirmed` | `needs-review` | `user-confirmed` | `unresolvable`
-
-### Request Clusters (Union-Find)
-- Two-way requests form clusters (A↔B + B↔C = cluster {A,B,C})
-- Clusters placed together on same team when possible
-- Oversized clusters auto-split at weakest connection
-
-### Trade Suggestions
-- After requests-first assignment, system suggests trades to improve balance
-- Only "tradeable" players eligible: those with no requests OR all requests satisfied
-- Trades shown with balance improvement score
-- Apply individually or all at once
-
-### Player Happiness Scores
-- 🟢 All requests honored
-- 🟡 Some requests honored
-- 🔴 No requests honored
-- ⚪ No requests made
-
-### Key Types
-- `ResolvedRequest`: Request with confidence score and resolution status
-- `RequestsFirstConfig`: Configuration for requests-first algorithm
-- `RequestCluster`: Group of two-way connected players
-- `TradeCandidate`: Suggested trade with balance improvement
-
-### Key State
-- `registrationPlayers`: Parsed from Registration Data tab (has requests, school, grade)
-- `evalPlayers`: Parsed from eval tabs (has scores, bib numbers)
-- `resolvedRequests`: Requests prepared for confirmation UI
-- `normalizationResult`: Request resolution results with stats and warnings
-- `algorithmResult`: Team assignments with happiness calculations
-- `requestsFirstResult`: Extended result with clusters and suggested trades
-
-### Data Flow
-1. Registration Data + Eval tabs parsed from Excel
-2. Players linked by First Name + Last Name matching
-3. Requests parsed and resolved to actual players/coaches
-4. **Request Confirmation**: User reviews/edits auto-resolved requests
-5. Algorithm assigns players to teams (requests-first or balance-first)
-6. **Trade Suggestions**: User can apply suggested trades for balance
-7. Results show happiness indicators and allow manual swaps via TradeModal
-
 ## Branching
 
-- `development` - Feature work
-- `staging` - Testing
+- `staging` - Testing and pre-production
 - `main` - Production
-- `feature/team-builder` - Team Builder feature development
 
-## Stabilization Progress (January 2025)
+## Stabilization Complete (January 2025)
 
-The application underwent a stabilization effort to prepare for production use by other leagues. Completed phases:
+The application underwent a comprehensive stabilization effort. All phases completed:
 
 ### Phase 0: Critical Fixes ✅
 - Fixed backend race condition in pick counter using Max aggregation
@@ -431,7 +366,6 @@ The application underwent a stabilization effort to prepare for production use b
 - Single source of truth for all 41 player fields
 - Auto-generated transforms from definitions
 - Pre-flight validation before API calls
-- Fixed missing Team Builder fields (grade, coachRequest, teammateRequests)
 
 ### Phase 4: Operations ✅
 - Created comprehensive operations runbook (`docs/RUNBOOK.md`)
@@ -440,25 +374,23 @@ The application underwent a stabilization effort to prepare for production use b
 - Documented alerting configuration
 
 ### Phase 5: Performance Validation ✅
-- Added database indexes for frequently queried fields:
-  - Player: (division, is_drafted), coach_team, locked_to_team, sibling_id
-  - Team: division
-  - Division: organization
-  - DraftState: division
-- Fixed N+1 queries in division list view (annotated player_count)
-- Fixed N+1 queries in team/division detail (prefetch_related for roster, coach_kids)
-- Fixed N+1 queries in draft response (prefetch picks, trades, teams with rosters)
-- Optimized team score calculations with SQL aggregation (Sum instead of Python iteration)
+- Added database indexes for frequently queried fields
+- Fixed N+1 queries in division list, team/division detail, draft response
+- Optimized team score calculations with SQL aggregation
 - Created Locust load testing framework (`server/tests/load/`)
 
-### Phase 6: Feature Completion (Partial) ✅
-- Skip pick API: Already complete (backend service, API endpoint, frontend UI)
-- Team Builder merge: Merged `feature/team-builder` into staging
-  - Added skill-tiered draft algorithm for balanced distribution
-  - Added PlayerDetailDrawer for request analysis and inline team moves
-  - Improved request satisfaction prioritization over school clustering
-  - Added quick re-run testing workflow
-  - Fixed coach kids carryover from EvaluationImport
+### Phase 6: Feature Completion ✅
+- Skip pick API: Complete (backend service, API endpoint, frontend UI)
+- Team Builder: Merged with skill-tiered algorithm, PlayerDetailDrawer, improved request satisfaction
 
-### Remaining Work
-- Audit logging: Need persistent database storage for audit trail (currently logs to stdout only)
+## Outstanding Items
+
+### Deferred (Low Priority)
+- **Audit logging**: Events logged to stdout but not persisted to database. For compliance requirements, would need an AuditLog model and API endpoint.
+- **Multi-tab sync in API mode**: Currently works for localStorage mode only. Would require WebSocket or polling.
+
+### Future Enhancements (Not Started)
+- Parent portal for request submission
+- ML-based fuzzy name matching
+- Request gaming detection
+- Grade-based clustering algorithm improvements

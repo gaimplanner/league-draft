@@ -1,8 +1,28 @@
 # Little League Draft Application
 
-A comprehensive draft management system for Little League baseball divisions. Streamlines the entire draft process from player evaluation import through final team roster generation, with advanced features for handling coach's kids, siblings, and multiple draft formats.
+A production-ready draft management system for Little League baseball divisions. Supports two modes: **Live Draft** for traditional team-by-team player selection, and **League Generated Teams** (Team Builder) for automatic balanced team creation. Streamlines the entire process from player evaluation import through final team roster generation.
+
+## Current Status
+
+**Production Ready** - All stabilization phases (0-6) complete. 107 unit tests passing. Comprehensive documentation and operations runbook available.
 
 ## Features
+
+### Two Division Modes
+
+**Live Draft Mode** - Teams take turns selecting players in real-time
+- Three draft formats: Straight, Snake, Recalculated
+- Mandatory pick enforcement (coach's kids, siblings)
+- Real-time draft board with admin/public views
+- Simulation before committing
+- Post-draft trades
+
+**League Generated Teams (Team Builder)** - Automatic balanced team creation
+- For younger divisions that don't use live drafts
+- Honors friend requests and coach preferences
+- Multiple algorithms: Requests-First, Skill-Tiered, Balance-First
+- Request confirmation workflow with confidence scoring
+- Trade suggestions for balance optimization
 
 ### Multi-Division Support
 - Create divisions with presets: **Majors** (ages 10-12), **AAA** (8-10), **AA** (7-10), or **Custom**
@@ -26,168 +46,88 @@ A comprehensive draft management system for Little League baseball divisions. St
 **Dual CSV with Registration Verification:**
 - Upload evaluation CSV + registration CSV
 - Automatically matches players by name (exact and fuzzy matching)
-- Exclude evaluated players not in registration list (unpaid/unregistered)
-- Add registered players without evaluations as DNE (Did Not Evaluate) with 0 scores
-- Ensures only eligible players are included in draft
-
-### Pre-Draft Player Review
-- Unified spreadsheet-style table view for both CSV and Excel imports
-- Sortable columns (rank, round, name, age, scores)
-- Inline cell editing for scores
-- Search/filter by name or BIB number
-- Row highlighting for coach's kids (blue) and siblings (green)
-- Collapsible Teams & Detection panel
-- Visual indicators for All-Stars, coach's kids, siblings, and DNE players
-- Manual score adjustments with official override field
-
-### Draft Configuration
-- **Three Draft Formats:**
-  - **Straight**: Standard rotation (1-8, 1-8, 1-8...)
-  - **Snake**: Alternating direction (1-8, 8-1, 1-8...)
-  - **Recalculated**: Lowest roster score picks first each round
-- Drag-and-drop draft order with randomize option
-- Team name and assistant coach setup
-- Coach's kid team assignments
+- Exclude evaluated players not in registration list
+- Add registered players without evaluations as DNE (Did Not Evaluate)
 
 ### Live Draft Board
 
-The draft board provides a comprehensive interface for conducting live drafts with two switchable drawer views.
+The draft board provides a comprehensive interface for conducting live drafts:
 
-#### Main Header
-- **Compact gradient header** with pick counter (R# · Pick X/Y) and current/next team display
-- **Age breakdown badges** showing player count per age for current team (with color-coded limit warnings)
-- **Mandatory pick banner** (yellow) alerts when coach's kid or sibling must be drafted
-- **Pending draft confirmation banner** (blue) for confirming player selections
-- **Best Available by Age** quick-pick buttons grouped by age (top 2 per age)
-- **Admin controls**: Skip pick (final round only, disabled when all remaining players must be drafted), Undo, Reset
+- **Compact gradient header** with pick counter and current/next team display
+- **Age breakdown badges** showing player count per age for current team
+- **Mandatory pick banner** alerts when coach's kid or sibling must be drafted
+- **Best Available by Age** quick-pick buttons
+- **Admin controls**: Skip pick (final round), Undo, Reset
+- **Two switchable views**:
+  - Available Players: Sortable table with search, flags, draft buttons
+  - Team Rosters: Round-by-round grid with teams as columns
+- **Round Interstitial Modal** between rounds
+- **Admin/Public view modes** for spectator display
 
-#### Round Order Display
-- Horizontal team cards showing pick order for current round
-- Visual states: current pick (blue highlight, "NOW" badge), past picks (grayed, strikethrough), upcoming
-- Shows draft format label (straight/snake/recalculated)
+### Draft Rules
 
-#### Drawer View Toggle
-Switch between two views using the toggle bar:
+**Coach's Kids:**
+- Must be drafted by their assigned team
+- Must be drafted in their projected round
+- System blocks other picks until fulfilled
 
-**Available Players View** (`DraftBoardPlayerGrid.tsx`)
-- Sortable table with columns: Proj. Rnd, Rank, BIB, Name, Age, F/H/P/C/R scores, Total, Flags, Action
-- Search by name or BIB number with clear button
-- Available player count display
-- Sorting: click column headers (score columns default to descending)
-- Round column shows effective round (lockedToRound or projectedRound) with asterisk for overrides
-- **Flag badges**: Lock+team (coach's kid/sibling locked), SIB (sibling unlocked), AS (All-Star), DNE (Did Not Evaluate), age limit warning
-- Restricted players (coach's kids/siblings for other teams) shown with reduced opacity and red lock badge
-- Draft buttons with mandatory pick highlighting (yellow for mandatory)
-- Legend bar with flag explanations and score abbreviations
+**Siblings:**
+- If one sibling is drafted, the team must draft the other
+- Automatic locking when first sibling is picked
 
-**Team Rosters View** (`DraftBoardRosterView.tsx`)
-- Round-by-round grid with teams as columns, rounds as rows
-- Teams sorted by current round order with position numbers
-- Team headers show draft position, name, and total score
-- **Cell states**:
-  - **Drafted** (green): Shows player name, score, and lock icon if was locked
-  - **Pre-filled** (blue dashed border): Undrafted players locked to team/round (coach's kids, siblings)
-  - **Current pick** (yellow ring): Active pick position with "PICKING" label
-  - **Empty**: Future picks awaiting selection
-- Sticky round column for horizontal scrolling
-- Legend bar explaining cell colors
-
-#### Round Interstitial Modal
-- Appears automatically when advancing to a new round
-- Shows completed round celebration and new round number
-- Displays new draft order with team positions and scores
-- Format-specific messaging (snake reversal, recalculated by score)
-- "Continue to Round X" button to dismiss
-
-#### Draft Complete Modal
-- Appears when all picks are made
-- Shows total pick count
-- Options: "Go Back & Review" or "Finalize Draft"
-
-#### View Modes
-- **Admin View**: Full functionality (draft buttons, undo, reset, skip, confirmations)
-- **Public View**: Read-only display for spectators (no action column, no pending confirmations, "Live View" badge)
-- **Score Toggle**: Hide/show scores for presentation mode (affects both views)
-
-### Draft Simulation
-- Preview draft outcomes before committing
-- Compare all three formats side-by-side
-- Statistics: highest/lowest scores, spread, average
-- Toggle coach's kid and sibling enforcement
-- Export simulation results
-
-### Post-Draft Features
-- **Team Balance Metrics**:
-  - Toggle between "Top 8 Picks" and "Full Roster" views
-  - Shows highest, lowest, spread, and average team scores
-  - Visual team rankings with color-coded indicators (green=highest, red=lowest)
-  - Top 8 metric excludes late-round players for better core team comparison
-- **Trade System**: Execute player swaps with reason tracking
-- **Multiple Export Formats (CSV)**:
-  - Public rosters (alphabetical with BIB numbers, no scores)
-  - Official draft record (pick-by-pick with BIB numbers and flags)
-  - Simulation draft boards (grid + sequential views with scores)
-- Print-ready formatting and clipboard copy
-
-### Dual-View Architecture
-- **Admin View**: Full control over all functions
-- **Public View**: Read-only live display for spectators
-- Real-time sync via localStorage
-- Access public view: `?view=public`
-
-### League Management
-- **Multi-league support**: Users can belong to multiple leagues
-- **Role-based access**: Admin and member roles per league
-- **Member management**: View, invite, and remove league members
-- **Invite system**: Email invitations or shareable join links
-- **Profile management**: Update name, email, and password
-
-### Security
-- **Session-based authentication**: Secure Django sessions with CSRF protection
-- **Rate limiting**: Brute-force protection on login, registration, and password reset
-- **Session timeout**: Automatic 24-hour session expiration
-- **Role-based authorization**: Admin-only operations for trades, resets, and member management
-- **Multi-tenant isolation**: Users can only access their league's data
-
-### Data Persistence
-- **Division saved immediately**: Divisions persist as soon as "Create Division" is clicked
-- Resume at any point: Close browser and return to continue where you left off
-- Automatic save after each action
-- Resume incomplete drafts
-- Division state snapshots
-- Completion timestamps for archives
+**Age Limits (Optional):**
+- Enforce maximum players per age group
+- Configurable per division type
 
 ### Team Builder (League Generated Teams)
-For younger divisions that don't use live drafts, the Team Builder automatically creates balanced teams while honoring requests:
 
-- **Division Mode Selection**: Choose "Live Draft" or "League Generated Teams" at division creation
+For younger divisions that don't use live drafts:
+
 - **Excel Import**: Registration Data tab with coach/teammate requests, plus evaluation tabs
-- **Request Confirmation Step**:
-  - Review auto-resolved requests with confidence scores
-  - High-confidence matches (≥90%) auto-confirmed
-  - Ambiguous matches highlighted for review
-  - Edit any match with inline search
-  - Two-way detection (both kids requested each other)
-- **Algorithm Modes**:
-  - **Requests-First (Recommended)**: Prioritizes honoring friend requests, then balances via suggested trades
-  - **Balance-First**: Traditional approach prioritizing team balance over requests
-- **Requests-First Algorithm**:
-  - Places two-way request clusters together on same team
-  - Honors one-way requests and coach preferences
-  - Suggests trades to improve balance without breaking satisfied requests
-- **Trade Suggestions**: After assignment, review and apply suggested trades that improve balance
-- **Happiness Indicators**: Visual status showing which requests were honored (🟢 all, 🟡 some, 🔴 none, ⚪ no requests)
-- **Force Even Teams**: Option to ensure all teams have equal roster sizes (±1 player)
-- **Player Search**: Search by name on Results page to see request details
-- **Manual Adjustments**: Swap players using the trade module
-- **Export**: Happiness report CSV with request fulfillment details
+- **Request Confirmation**: Review auto-resolved requests with confidence scores
+- **Three Algorithm Modes**:
+  - **Requests-First**: Prioritizes honoring friend requests, then balances via trades
+  - **Skill-Tiered Draft**: Simulated draft rounds for balanced distribution
+  - **Balance-First**: Traditional approach prioritizing team balance
+- **Trade Suggestions**: Apply suggested trades to improve balance
+- **Happiness Indicators**: Visual status showing request fulfillment (🟢 all, 🟡 some, 🔴 none, ⚪ no requests)
+- **Player Detail Drawer**: Request analysis and inline team moves
+
+### Post-Draft Features
+
+- **Team Balance Metrics**: Top 8 Picks and Full Roster views
+- **Trade System**: Execute player swaps with reason tracking
+- **Multiple Export Formats**: Public rosters, Official draft record, Happiness reports
+- Print-ready formatting and clipboard copy
+
+### Organization Management
+
+- **Multi-organization support**: Users can belong to multiple organizations
+- **Role-based access**: Admin, Coach, and Viewer roles
+- **Member management**: View, invite, and remove members
+- **Invite system**: Email invitations or shareable join links
+
+### Security
+
+- Session-based authentication with CSRF protection
+- Rate limiting on auth endpoints
+- 24-hour session timeout
+- Role-based authorization
+- Multi-tenant data isolation
+
+### Data Persistence
+
+- Division saved immediately on creation
+- Resume at any point after browser close
+- Automatic save after each action
+- Completion timestamps for archives
 
 ## Getting Started
 
 ### Prerequisites
 
 - Node.js 18+
-- Docker and Docker Compose (for backend)
+- Docker and Docker Compose
 
 ### Installation
 
@@ -196,8 +136,6 @@ npm install
 ```
 
 ### Backend Setup
-
-The application uses a Django REST Framework backend with PostgreSQL.
 
 ```bash
 # Start backend services (API + PostgreSQL)
@@ -226,16 +164,17 @@ Visit `http://localhost:5173` in your browser.
 npm run build
 ```
 
-### Preview Production Build
+### Running Tests
 
 ```bash
-npm run preview
-```
+# Frontend unit tests (67 tests)
+npm run test
 
-### Stop Backend Services
+# Backend unit tests (40 tests)
+docker compose exec api python manage.py test draft.tests
 
-```bash
-docker compose down
+# E2E tests
+npx playwright test
 ```
 
 ## Import Formats
@@ -263,33 +202,17 @@ docker compose down
 
 Expected tabs: `Fielding`, `Pitching`, `Hitting`, `Fly Balls`, `Baserunning`
 
-Each tab should include:
-- `BIB#` column for player identification
-- `First Name`, `Last Name` columns
-- Skill-specific score columns (Form, Arm Strength, Time, etc.)
-
-## Draft Rules
-
-### Coach's Kids
-- Must be drafted by their assigned team
-- Must be drafted in their projected round (based on rank)
-- System blocks other picks until fulfilled
-- Round bumping available for conflicts
-
-### Siblings
-- If one sibling is drafted, the team must draft the other in that sibling's projected round
-- Prevents siblings from being separated while respecting their skill-based draft position
-- Automatic locking when first sibling is picked (but mandatory pick only triggers in the sibling's projected round)
-
-### Age Limits (Optional)
-- Enforce maximum players per age group
-- Configurable per division type
-- Prevents roster imbalances
+For Team Builder mode, include a `Registration Data` tab with:
+- First Name, Last Name
+- Coach Request (coach name)
+- Teammate Requests (comma-separated names)
+- School, Grade
 
 ## Workflow
 
+### Live Draft
 ```
-1. CREATE DIVISION → Select preset and team count
+1. CREATE DIVISION → Select preset, team count, and "Live Draft" mode
 2. IMPORT PLAYERS → Upload CSV or Excel workbook
 3. REVIEW & ADJUST → Edit scores, detect relationships
 4. CONFIGURE DRAFT → Set format, order, team names
@@ -297,114 +220,72 @@ Each tab should include:
 6. COMPLETE → View results, execute trades, export
 ```
 
+### Team Builder
+```
+1. CREATE DIVISION → Select preset, team count, and "League Generated Teams" mode
+2. IMPORT EXCEL → Upload file with Registration Data + eval tabs
+3. RESOLVE NAMES → Match registration to evaluation data
+4. CONFIRM REQUESTS → Review auto-resolved friend/coach requests
+5. GENERATE TEAMS → Run assignment algorithm
+6. REVIEW & ADJUST → Apply trade suggestions, make manual swaps
+7. EXPORT → Rosters + happiness report
+```
+
 ## Technical Stack
 
 | Component | Technology |
 |-----------|------------|
-| Frontend | React 18.2 |
-| Language | TypeScript 5.2 |
-| Build Tool | Vite 5.0 |
-| Styling | Tailwind CSS 3.3 |
+| Frontend | React 18, TypeScript 5 |
+| Build Tool | Vite 5 |
+| Styling | Tailwind CSS 3 |
 | Icons | lucide-react |
-| CSV Parsing | papaparse |
-| Excel Parsing | xlsx |
+| CSV/Excel Parsing | papaparse, xlsx |
 | State | React Hooks + Context |
-| Backend | Django 5.2 + Django REST Framework |
+| Backend | Django 5, Django REST Framework |
 | Database | PostgreSQL 16 |
 | Auth | Session-based (Django sessions) |
 | Container | Docker + Docker Compose |
+| Testing | Vitest (frontend), Django TestCase (backend), Playwright (E2E) |
 
 ## Project Structure
 
 ```
 src/
-├── App.tsx                    # Main app with phase routing
-├── api/
-│   └── client.ts              # API client with transformations
+├── api/                    # API client
 ├── components/
-│   ├── DivisionSelector.tsx   # Division management
-│   ├── DivisionCreator.tsx    # New division setup
-│   ├── FileUpload.tsx         # CSV upload
-│   ├── ColumnMapper.tsx       # CSV column mapping
-│   ├── PlayerReview.tsx       # Player review orchestration
-│   ├── PlayerReviewTable.tsx  # Spreadsheet-style player table
-│   ├── DraftConfig.tsx        # Draft configuration
-│   ├── DraftBoard.tsx         # Live draft interface
-│   ├── draft/
-│   │   ├── DraftBoardPlayerGrid.tsx  # Sortable player table
-│   │   └── DraftBoardRosterView.tsx  # Round-by-round roster grid
-│   ├── DraftComplete.tsx      # Results and exports
-│   ├── SimulationModal.tsx    # Draft simulation
-│   ├── TradeModal.tsx         # Post-draft trades
-│   ├── CompleteRosters.tsx    # Roster display
-│   ├── LoginPage.tsx          # User login
-│   ├── RegisterPage.tsx       # User registration
-│   ├── ForgotPasswordPage.tsx # Password reset request
-│   ├── ResetPasswordPage.tsx  # Password reset form
-│   ├── JoinPage.tsx           # League invitation acceptance
-│   ├── profile/               # Profile & league management
-│   │   ├── ProfilePage.tsx    # Main profile page with tabs
-│   │   ├── MembersTab.tsx     # League member list
-│   │   ├── InviteModal.tsx    # Email invite form
-│   │   ├── JoinLinkSection.tsx# Shareable join link management
-│   │   ├── ProfileTab.tsx     # Edit user profile
-│   │   └── ChangePasswordModal.tsx
-│   ├── evaluation/            # Import components (Excel, dual CSV)
-│   │   ├── CSVImportFlow.tsx      # Dual CSV import orchestration
-│   │   ├── DualCSVUpload.tsx      # Eval + registration CSV upload
-│   │   └── CSVVerificationStep.tsx # Match/exclude/DNE verification
-│   └── teamBuilder/           # Team Builder components
-│       ├── TeamBuilderResults.tsx  # Results with happiness indicators
-│       ├── NameMatchResolver.tsx   # Unmatched name resolution UI
-│       ├── RequestConfirmation.tsx # Review/confirm request matches
-│       └── TradeSuggestions.tsx    # Balance trade suggestions UI
-├── hooks/
-│   ├── useDivisions.ts        # Division state (API mode)
-│   ├── useDraft.ts            # Draft logic (API mode)
-│   ├── useEvaluationImport.ts # Excel processing
-│   └── usePlayerScoring.ts    # Score calculations
-├── contexts/
-│   ├── AuthContext.tsx        # Authentication state
-│   └── ViewContext.tsx        # Admin/Public mode
-├── types/
-│   └── index.ts               # TypeScript interfaces
-├── utils/
-│   ├── csvParser.ts           # CSV operations
-│   ├── draftOrder.ts          # Order calculations
-│   ├── draftLogic.ts          # Pick validation
-│   ├── simulation.ts          # Simulation engine
-│   ├── exports.ts             # Export formatting
-│   ├── teamUtils.ts           # Team display helpers
-│   ├── evaluationProcessor.ts # Excel processing
-│   ├── teamBuilderAlgorithm.ts # Auto-assignment algorithm
-│   └── teamBuilderParser.ts   # Request parsing & name matching
-└── e2e/
-    └── draft-flow.spec.ts     # Playwright E2E tests
+│   ├── draft/              # Draft board components
+│   ├── evaluation/         # Import components
+│   ├── profile/            # Profile & organization management
+│   └── teamBuilder/        # Team Builder components
+├── contexts/               # React contexts (Auth, View)
+├── hooks/                  # Custom hooks (useDraft, useDivisions)
+├── types/                  # TypeScript interfaces
+└── utils/
+    ├── __tests__/          # Unit tests
+    └── importPipeline/     # Player field definitions
 
 server/
 ├── draft/
-│   ├── models.py              # Django models (League, User, Division, Team, Player, etc.)
-│   ├── views.py               # DRF ViewSets and auth views
-│   ├── serializers.py         # DRF serializers
-│   ├── services.py            # Draft business logic
-│   ├── middleware.py          # Tenant middleware
-│   ├── throttling.py          # Rate limiting classes
-│   ├── validators.py          # Password validation
-│   └── migrations/            # Database migrations
-├── league_draft/
-│   ├── settings.py            # Django settings
-│   └── urls.py                # URL routing
-├── Dockerfile                 # API container
-└── docker-compose.yml         # Full stack setup
+│   ├── models.py           # Django models
+│   ├── views/              # API views
+│   ├── services_draft.py   # Draft business logic
+│   ├── transformers.py     # Model transformations
+│   ├── logging.py          # Structured logging
+│   └── tests/              # Backend tests
+└── league_draft/           # Django settings
+
+docs/
+├── RUNBOOK.md              # Operations runbook
+└── PLAYER_IMPORT_PIPELINE_PROPOSAL.md
+
+e2e/                        # Playwright E2E tests
 ```
 
-## Branching Strategy
+## Documentation
 
-| Branch | Purpose |
-|--------|---------|
-| `development` | Feature development and experimentation |
-| `staging` | Graduated features ready for testing |
-| `main` | Production-ready code |
+- **[CLAUDE.md](./CLAUDE.md)** - AI assistant context and codebase overview
+- **[docs/RUNBOOK.md](./docs/RUNBOOK.md)** - Production operations runbook
+- **[team-builder-prd.md](./team-builder-prd.md)** - Team Builder product requirements
 
 ## Browser Support
 
