@@ -757,6 +757,7 @@ export const TeamBuilderResults = ({
           currentTeam={selectedPlayerTeam}
           result={result}
           allPlayers={players}
+          assignment={selectedPlayerAssignment || undefined}
           onClose={handleCloseDrawer}
           onMovePlayer={onMovePlayer}
           onSwapPlayers={onSwap}

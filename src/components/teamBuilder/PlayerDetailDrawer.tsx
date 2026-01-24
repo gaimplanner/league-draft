@@ -8,12 +8,16 @@ import {
   Check,
   AlertCircle,
   ChevronRight,
+  Lightbulb,
+  Scale,
 } from 'lucide-react';
 import { Player } from '../../types';
 import {
   TeamBuilderResult,
   PlayerHappiness,
   TeamSummary,
+  AssignmentResult,
+  AssignmentReason,
 } from '../../utils/teamBuilderAlgorithm';
 
 interface PlayerDetailDrawerProps {
@@ -22,6 +26,7 @@ interface PlayerDetailDrawerProps {
   currentTeam: TeamSummary;
   result: TeamBuilderResult;
   allPlayers: Player[];
+  assignment?: AssignmentResult;
   onClose: () => void;
   onMovePlayer?: (playerId: string, toTeamId: string) => void;
   onSwapPlayers?: (player1Id: string, player2Id: string) => void;
@@ -40,12 +45,87 @@ interface RequestedPlayer {
  * Slide-out drawer showing detailed request information for a player.
  * Enables quick moves/swaps to satisfy requests.
  */
+/**
+ * Get a human-readable description of the assignment reason.
+ */
+const getReasonDescription = (reason: AssignmentReason): { label: string; description: string; icon: string } => {
+  switch (reason) {
+    case 'coach-kid':
+      return {
+        label: "Coach's Kid",
+        description: 'Automatically assigned to parent coach\'s team',
+        icon: '👨‍👧',
+      };
+    case 'assistant-coach-kid':
+      return {
+        label: 'Assistant Coach\'s Kid',
+        description: 'Automatically assigned to parent assistant coach\'s team',
+        icon: '👨‍👧',
+      };
+    case 'sibling-lock':
+      return {
+        label: 'Sibling Lock',
+        description: 'Placed with sibling who was assigned earlier',
+        icon: '👫',
+      };
+    case 'manual-lock':
+      return {
+        label: 'Manual Lock',
+        description: 'Pre-assigned to this team before algorithm ran',
+        icon: '🔒',
+      };
+    case 'top-talent':
+      return {
+        label: 'Top Talent Distribution',
+        description: 'Distributed to balance skill across teams',
+        icon: '⭐',
+      };
+    case 'two-way-friend':
+      return {
+        label: 'Two-Way Friend Request',
+        description: 'Placed with friend who also requested them',
+        icon: '🤝',
+      };
+    case 'one-way-friend':
+      return {
+        label: 'One-Way Friend Request',
+        description: 'Placed with a friend they requested',
+        icon: '👋',
+      };
+    case 'coach-request':
+      return {
+        label: 'Coach Request Honored',
+        description: 'Placed with requested coach',
+        icon: '✅',
+      };
+    case 'school-cluster':
+      return {
+        label: 'School Clustering',
+        description: 'Placed with players from same school',
+        icon: '🏫',
+      };
+    case 'balance':
+      return {
+        label: 'Team Balance',
+        description: 'Assigned to balance team scores (no satisfiable requests)',
+        icon: '⚖️',
+      };
+    default:
+      return {
+        label: 'Unknown',
+        description: 'Assignment reason not recorded',
+        icon: '❓',
+      };
+  }
+};
+
 export const PlayerDetailDrawer = ({
   player,
   happiness,
   currentTeam,
   result,
   allPlayers,
+  assignment,
   onClose,
   onMovePlayer,
   onSwapPlayers,
@@ -167,6 +247,44 @@ export const PlayerDetailDrawer = ({
     return suggestions.sort((a, b) => b.newHonoredCount - a.newHonoredCount);
   }, [teammateRequests, coachRequestDetails, currentTeam, result.teamSummaries]);
 
+  // Calculate request satisfaction analysis for all teams (for "Why Not Here?" breakdown)
+  const alternativesAnalysis = useMemo(() => {
+    const currentHonored = teammateRequests.filter(r => r.isHonored).length +
+      (coachRequestDetails?.isHonored ? 1 : 0);
+
+    return result.teamSummaries
+      .filter(team => team.teamId !== currentTeam.teamId)
+      .map(team => {
+        let coachMatch = false;
+        let friendsOnTeam: string[] = [];
+
+        // Check coach request
+        if (coachRequestDetails?.requestedTeam?.teamId === team.teamId) {
+          coachMatch = true;
+        }
+
+        // Check teammate requests
+        for (const req of teammateRequests) {
+          if (req.team?.teamId === team.teamId) {
+            friendsOnTeam.push(req.name);
+          }
+        }
+
+        const wouldHonor = friendsOnTeam.length + (coachMatch ? 1 : 0);
+        const comparison = wouldHonor > currentHonored ? 'better' :
+                          wouldHonor === currentHonored ? 'same' : 'worse';
+
+        return {
+          team,
+          coachMatch,
+          friendsOnTeam,
+          wouldHonor,
+          comparison,
+        };
+      })
+      .sort((a, b) => b.wouldHonor - a.wouldHonor);
+  }, [teammateRequests, coachRequestDetails, currentTeam, result.teamSummaries]);
+
   const handleMove = () => {
     if (selectedTeamId && onMovePlayer) {
       onMovePlayer(player.id, selectedTeamId);
@@ -205,6 +323,175 @@ export const PlayerDetailDrawer = ({
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-4 space-y-6">
+        {/* Decision Reasoning - WHY this player was placed here */}
+        {assignment && (
+          <section>
+            <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
+              <Lightbulb className="w-4 h-4" />
+              Algorithm Decision
+            </h4>
+            <div className="p-3 rounded-lg bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800">
+              {(() => {
+                const reasonInfo = getReasonDescription(assignment.reason);
+                return (
+                  <>
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-lg">{reasonInfo.icon}</span>
+                      <span className="font-medium text-indigo-900 dark:text-indigo-100">
+                        {reasonInfo.label}
+                      </span>
+                    </div>
+                    <p className="text-sm text-indigo-700 dark:text-indigo-300 mb-3">
+                      {reasonInfo.description}
+                    </p>
+                    <div className="flex items-center gap-4 text-xs text-indigo-600 dark:text-indigo-400">
+                      <span className="flex items-center gap-1">
+                        <Scale className="w-3 h-3" />
+                        Round {assignment.round}, Pick {assignment.pick}
+                      </span>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+
+            {/* Show alternatives considered for balance picks */}
+            {assignment.reason === 'balance' && (
+              <div className="mt-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600">
+                <div className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Why not placed elsewhere?
+                </div>
+                <ul className="text-xs text-gray-600 dark:text-gray-400 space-y-1.5">
+                  {!player.coachRequest && !player.teammateRequests?.length && (
+                    <li className="flex items-start gap-2">
+                      <span className="text-gray-400">•</span>
+                      <span>No coach or friend requests made</span>
+                    </li>
+                  )}
+                  {player.coachRequest && happiness.coachRequestHonored !== true && (
+                    <li className="flex items-start gap-2">
+                      <span className="text-amber-500">•</span>
+                      <span>Coach request "{player.coachRequest}" could not be honored (team may be full or request unsatisfiable)</span>
+                    </li>
+                  )}
+                  {player.teammateRequests && player.teammateRequests.length > 0 && happiness.teammateRequestsHonored === 0 && (
+                    <li className="flex items-start gap-2">
+                      <span className="text-amber-500">•</span>
+                      <span>Friend requests could not be honored (friends may already be on full teams)</span>
+                    </li>
+                  )}
+                  <li className="flex items-start gap-2">
+                    <span className="text-blue-500">•</span>
+                    <span>
+                      Assigned to {currentTeam.teamName || currentTeam.coachName} to balance team scores
+                      {currentTeam.meanDeltaPercent !== 0 && (
+                        <span className={currentTeam.meanDeltaPercent > 0 ? ' text-green-600' : ' text-red-600'}>
+                          {' '}({currentTeam.meanDeltaPercent > 0 ? '+' : ''}{currentTeam.meanDeltaPercent.toFixed(1)}% from mean)
+                        </span>
+                      )}
+                    </span>
+                  </li>
+                </ul>
+              </div>
+            )}
+
+            {/* Show what requests were honored for request-based placements */}
+            {['two-way-friend', 'one-way-friend', 'coach-request'].includes(assignment.reason) && (
+              <div className="mt-3 p-3 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
+                <div className="text-sm font-medium text-green-700 dark:text-green-300 mb-2">
+                  Request satisfied
+                </div>
+                <ul className="text-xs text-green-600 dark:text-green-400 space-y-1.5">
+                  {assignment.reason === 'coach-request' && (
+                    <li className="flex items-start gap-2">
+                      <Check className="w-3 h-3 mt-0.5" />
+                      <span>Placed with requested coach: {currentTeam.coachName}</span>
+                    </li>
+                  )}
+                  {assignment.reason === 'two-way-friend' && (
+                    <li className="flex items-start gap-2">
+                      <Check className="w-3 h-3 mt-0.5" />
+                      <span>Placed with mutual friend (two-way request)</span>
+                    </li>
+                  )}
+                  {assignment.reason === 'one-way-friend' && (
+                    <li className="flex items-start gap-2">
+                      <Check className="w-3 h-3 mt-0.5" />
+                      <span>Placed with a friend they requested</span>
+                    </li>
+                  )}
+                </ul>
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* Team-by-Team Analysis (for players with requests) */}
+        {(player.coachRequest || (player.teammateRequests && player.teammateRequests.length > 0)) && (
+          <section>
+            <details className="group">
+              <summary className="text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer flex items-center gap-2 hover:text-gray-900 dark:hover:text-white">
+                <ChevronRight className="w-4 h-4 transition-transform group-open:rotate-90" />
+                Team-by-Team Analysis
+                <span className="text-xs text-gray-400 font-normal">
+                  (click to expand)
+                </span>
+              </summary>
+              <div className="mt-3 space-y-2">
+                {/* Current team first */}
+                <div className="p-2 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-300 dark:border-blue-700">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                      {currentTeam.teamName || currentTeam.coachName}
+                      <span className="ml-2 text-xs bg-blue-200 dark:bg-blue-800 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded">
+                        Current
+                      </span>
+                    </span>
+                    <span className="text-xs text-blue-600 dark:text-blue-400">
+                      {happiness.teammateRequestsHonored + (happiness.coachRequestHonored ? 1 : 0)} requests honored
+                    </span>
+                  </div>
+                </div>
+
+                {/* Other teams sorted by how many requests would be honored */}
+                {alternativesAnalysis.map(({ team, coachMatch, friendsOnTeam, wouldHonor }) => (
+                  <div
+                    key={team.teamId}
+                    className={`p-2 rounded-lg border ${
+                      wouldHonor > 0
+                        ? 'bg-gray-50 dark:bg-gray-700/50 border-gray-200 dark:border-gray-600'
+                        : 'bg-gray-50/50 dark:bg-gray-800/30 border-gray-100 dark:border-gray-700/50'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className={`text-sm ${wouldHonor > 0 ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400'}`}>
+                        {team.teamName || team.coachName}
+                      </span>
+                      <span className={`text-xs ${
+                        wouldHonor > (happiness.teammateRequestsHonored + (happiness.coachRequestHonored ? 1 : 0))
+                          ? 'text-purple-600 dark:text-purple-400 font-medium'
+                          : wouldHonor > 0
+                          ? 'text-gray-600 dark:text-gray-400'
+                          : 'text-gray-400 dark:text-gray-500'
+                      }`}>
+                        {wouldHonor} requests
+                      </span>
+                    </div>
+                    {(coachMatch || friendsOnTeam.length > 0) && (
+                      <div className="text-xs text-gray-500 dark:text-gray-400">
+                        {coachMatch && <span className="mr-2">✓ Coach match</span>}
+                        {friendsOnTeam.length > 0 && (
+                          <span>✓ {friendsOnTeam.join(', ')}</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </details>
+          </section>
+        )}
+
         {/* Coach Request */}
         <section>
           <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
