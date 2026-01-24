@@ -135,6 +135,53 @@ export interface AcceptInvitationResult {
 }
 
 // -----------------------------------------------------------------------------
+// Coach Registry Types
+// -----------------------------------------------------------------------------
+
+export type CoachRole = 'manager' | 'assistant_coach';
+
+export interface Coach {
+  id: string;
+  organizationId: string;
+  userId?: string | null;
+  firstName: string;
+  lastName: string;
+  fullName: string;
+  email?: string | null;
+  phone?: string | null;
+  role: CoachRole;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CoachCreateData {
+  firstName: string;
+  lastName: string;
+  email?: string;
+  phone?: string;
+  role?: CoachRole;
+}
+
+export interface CoachUpdateData {
+  firstName?: string;
+  lastName?: string;
+  email?: string | null;
+  phone?: string | null;
+  role?: CoachRole;
+  isActive?: boolean;
+}
+
+export interface BulkCoachCreateData {
+  text: string; // Pasted text with one coach per line
+}
+
+export interface BulkCoachCreateResult {
+  created: number;
+  coaches: Coach[];
+}
+
+// -----------------------------------------------------------------------------
 // Game Types
 // -----------------------------------------------------------------------------
 

@@ -212,6 +212,71 @@ LeagueInvitation = OrganizationInvitation
 
 
 # -----------------------------------------------------------------------------
+# Coach Model
+# -----------------------------------------------------------------------------
+
+
+class Coach(models.Model):
+    """
+    Coach/Manager registry for an organization.
+
+    Coaches are defined at the organization level and can be assigned
+    to teams across any division within that organization.
+    """
+
+    ROLE_CHOICES = [
+        ("manager", "Manager"),
+        ("assistant_coach", "Assistant Coach"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="coaches",
+    )
+
+    # Optional link to a user account (for future self-service features)
+    user = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="coach_profiles",
+    )
+
+    # Coach info
+    first_name = models.CharField(max_length=100)
+    last_name = models.CharField(max_length=100)
+    email = models.EmailField(null=True, blank=True)
+    phone = models.CharField(max_length=20, null=True, blank=True)
+
+    # Role within teams
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default="manager")
+
+    # Soft delete for preserving history
+    is_active = models.BooleanField(default=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "coaches"
+        ordering = ["last_name", "first_name"]
+        indexes = [
+            models.Index(fields=["organization"], name="coach_organization_idx"),
+            models.Index(fields=["organization", "is_active"], name="coach_org_active_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.first_name} {self.last_name}"
+
+    @property
+    def full_name(self):
+        return f"{self.first_name} {self.last_name}"
+
+
+# -----------------------------------------------------------------------------
 # Tenant-aware QuerySet and Manager
 # -----------------------------------------------------------------------------
 

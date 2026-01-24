@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { ArrowLeft, Users, Settings } from 'lucide-react';
+import { ArrowLeft, Users, Settings, UserCog } from 'lucide-react';
 import { User as UserType, LeagueMembership } from '../../types';
 import { MembersTab } from './MembersTab';
 import { ProfileTab } from './ProfileTab';
+import { CoachesTab } from './CoachesTab';
 
-type TabType = 'members' | 'profile';
+type TabType = 'members' | 'coaches' | 'profile';
 
 interface ProfilePageProps {
   user: UserType;
@@ -83,6 +84,17 @@ export function ProfilePage({ user, onBack, onUserUpdate }: ProfilePageProps) {
             Members
           </button>
           <button
+            onClick={() => setActiveTab('coaches')}
+            className={`flex items-center gap-2 px-4 py-2 border-b-2 transition-colors ${
+              activeTab === 'coaches'
+                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+            }`}
+          >
+            <UserCog className="w-4 h-4" />
+            Coaches
+          </button>
+          <button
             onClick={() => setActiveTab('profile')}
             className={`flex items-center gap-2 px-4 py-2 border-b-2 transition-colors ${
               activeTab === 'profile'
@@ -106,6 +118,14 @@ export function ProfilePage({ user, onBack, onUserUpdate }: ProfilePageProps) {
             />
           )}
           {activeTab === 'members' && !selectedLeague && (
+            <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+              You are not a member of any league.
+            </div>
+          )}
+          {activeTab === 'coaches' && selectedLeague && (
+            <CoachesTab isAdmin={isAdmin} />
+          )}
+          {activeTab === 'coaches' && !selectedLeague && (
             <div className="text-center py-12 text-gray-500 dark:text-gray-400">
               You are not a member of any league.
             </div>

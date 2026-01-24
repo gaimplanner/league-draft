@@ -54,6 +54,10 @@ from .views import (
     team_builder_run,
     team_builder_apply,
     team_builder_update_requests,
+    # Coaches
+    coaches_list_create,
+    coach_detail,
+    coaches_bulk_create,
 )
 
 urlpatterns = [
@@ -122,4 +126,9 @@ urlpatterns = [
     path("api/team-builder/<uuid:division_id>/run/", team_builder_run, name="team-builder-run"),
     path("api/team-builder/<uuid:division_id>/apply/", team_builder_apply, name="team-builder-apply"),
     path("api/team-builder/<uuid:division_id>/update-requests/", team_builder_update_requests, name="team-builder-update-requests"),
+
+    # Coaches (organization-level registry)
+    path("api/coaches/", coaches_list_create, name="coaches-list-create"),
+    path("api/coaches/bulk/", coaches_bulk_create, name="coaches-bulk-create"),
+    path("api/coaches/<uuid:pk>/", coach_detail, name="coach-detail"),
 ]

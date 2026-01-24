@@ -959,3 +959,222 @@ def validate_team_builder_run(data: Dict[str, Any]) -> Tuple[Optional[Dict], Opt
         result["config"] = config_result
 
     return result, None
+
+
+# -----------------------------------------------------------------------------
+# Coach Validators
+# -----------------------------------------------------------------------------
+
+
+COACH_ROLE_CHOICES = {"manager", "assistant_coach"}
+
+
+def validate_coach_data(data: Dict[str, Any]) -> Tuple[Optional[Dict], Optional[Dict]]:
+    """
+    Validate coach create/update data.
+
+    Returns:
+        (cleaned_data, None) on success
+        (None, errors) on failure
+    """
+    errors = {}
+    cleaned = {}
+
+    # First name (required for create, optional for update)
+    if "first_name" in data:
+        first_name = data["first_name"]
+        if first_name is None or str(first_name).strip() == "":
+            errors["first_name"] = ["First name is required"]
+        elif len(str(first_name)) > 100:
+            errors["first_name"] = ["First name must be 100 characters or less"]
+        else:
+            cleaned["first_name"] = str(first_name).strip()
+
+    # Last name (required for create, optional for update)
+    if "last_name" in data:
+        last_name = data["last_name"]
+        if last_name is None or str(last_name).strip() == "":
+            errors["last_name"] = ["Last name is required"]
+        elif len(str(last_name)) > 100:
+            errors["last_name"] = ["Last name must be 100 characters or less"]
+        else:
+            cleaned["last_name"] = str(last_name).strip()
+
+    # Email (optional)
+    if "email" in data:
+        email = data["email"]
+        if email:
+            email = str(email).strip().lower()
+            if len(email) > 254:
+                errors["email"] = ["Email must be 254 characters or less"]
+            else:
+                try:
+                    django_validate_email(email)
+                    cleaned["email"] = email
+                except DjangoValidationError:
+                    errors["email"] = ["Enter a valid email address"]
+        else:
+            cleaned["email"] = None
+
+    # Phone (optional)
+    if "phone" in data:
+        phone = data["phone"]
+        if phone:
+            phone = str(phone).strip()
+            if len(phone) > 20:
+                errors["phone"] = ["Phone must be 20 characters or less"]
+            else:
+                cleaned["phone"] = phone
+        else:
+            cleaned["phone"] = None
+
+    # Role (optional, defaults to 'manager')
+    if "role" in data:
+        role = data["role"]
+        if role not in COACH_ROLE_CHOICES:
+            errors["role"] = [f"Role must be one of: {', '.join(COACH_ROLE_CHOICES)}"]
+        else:
+            cleaned["role"] = role
+
+    # is_active (optional)
+    if "is_active" in data:
+        is_active = data["is_active"]
+        if not isinstance(is_active, bool):
+            errors["is_active"] = ["Must be a boolean"]
+        else:
+            cleaned["is_active"] = is_active
+
+    if errors:
+        return None, errors
+
+    return cleaned, None
+
+
+def validate_coach_create_data(data: Dict[str, Any]) -> Tuple[Optional[Dict], Optional[Dict]]:
+    """
+    Validate coach creation data (requires first_name and last_name).
+
+    Returns:
+        (cleaned_data, None) on success
+        (None, errors) on failure
+    """
+    errors = {}
+
+    # Ensure required fields are present
+    if "first_name" not in data or not data.get("first_name"):
+        errors["first_name"] = ["First name is required"]
+    if "last_name" not in data or not data.get("last_name"):
+        errors["last_name"] = ["Last name is required"]
+
+    if errors:
+        return None, errors
+
+    return validate_coach_data(data)
+
+
+def parse_coach_paste_line(line: str) -> Optional[Dict[str, str]]:
+    """
+    Parse a single line from pasted coach data.
+
+    Supports formats:
+    - "FirstName LastName" (assumes Manager)
+    - "FirstName LastName, Role"
+    - "FirstName\tLastName\tRole" (tab-separated)
+
+    Returns dict with first_name, last_name, role or None if unparseable.
+    """
+    line = line.strip()
+    if not line:
+        return None
+
+    # Check for tab-separated format first
+    if "\t" in line:
+        parts = [p.strip() for p in line.split("\t") if p.strip()]
+        if len(parts) >= 2:
+            first_name = parts[0]
+            last_name = parts[1]
+            role = "manager"
+            if len(parts) >= 3:
+                role_str = parts[2].lower().replace(" ", "_")
+                if role_str in COACH_ROLE_CHOICES:
+                    role = role_str
+                elif "assistant" in role_str:
+                    role = "assistant_coach"
+            return {"first_name": first_name, "last_name": last_name, "role": role}
+
+    # Check for comma-separated role
+    if "," in line:
+        name_part, role_part = line.rsplit(",", 1)
+        role_str = role_part.strip().lower().replace(" ", "_")
+        role = "manager"
+        if role_str in COACH_ROLE_CHOICES:
+            role = role_str
+        elif "assistant" in role_str:
+            role = "assistant_coach"
+
+        # Parse the name part
+        name_parts = name_part.strip().split()
+        if len(name_parts) >= 2:
+            first_name = name_parts[0]
+            last_name = " ".join(name_parts[1:])
+            return {"first_name": first_name, "last_name": last_name, "role": role}
+        elif len(name_parts) == 1:
+            return {"first_name": name_parts[0], "last_name": "", "role": role}
+
+    # Simple space-separated "FirstName LastName" format
+    parts = line.split()
+    if len(parts) >= 2:
+        first_name = parts[0]
+        last_name = " ".join(parts[1:])
+        return {"first_name": first_name, "last_name": last_name, "role": "manager"}
+    elif len(parts) == 1:
+        return {"first_name": parts[0], "last_name": "", "role": "manager"}
+
+    return None
+
+
+def validate_bulk_coach_data(data: Dict[str, Any]) -> Tuple[Optional[Dict], Optional[Dict]]:
+    """
+    Validate bulk coach creation data from pasted text.
+
+    Expects: { "text": "John Smith, Manager\nJane Doe, Assistant Coach\n..." }
+
+    Returns:
+        ({"coaches": [...]}, None) on success
+        (None, errors) on failure
+    """
+    errors = {}
+
+    text = data.get("text", "")
+    if not text or not isinstance(text, str):
+        return None, {"text": ["Pasted text is required"]}
+
+    lines = text.strip().split("\n")
+    coaches = []
+    line_errors = []
+
+    for i, line in enumerate(lines, start=1):
+        parsed = parse_coach_paste_line(line)
+        if parsed is None and line.strip():
+            line_errors.append(f"Line {i}: Could not parse '{line.strip()}'")
+            continue
+
+        if parsed:
+            # Validate each parsed coach
+            cleaned, coach_errors = validate_coach_create_data(parsed)
+            if coach_errors:
+                for field, msgs in coach_errors.items():
+                    line_errors.append(f"Line {i}: {field} - {msgs[0]}")
+            else:
+                coaches.append(cleaned)
+
+    if line_errors:
+        errors["lines"] = line_errors
+
+    if not coaches:
+        errors["text"] = ["No valid coaches found in pasted text"]
+
+    if errors:
+        return None, errors
+
+    return {"coaches": coaches}, None

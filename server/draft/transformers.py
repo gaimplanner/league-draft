@@ -302,6 +302,24 @@ def transform_organization(organization) -> dict:
 transform_league = transform_organization
 
 
+def transform_coach(coach) -> dict:
+    """Transform a Coach to dict."""
+    return {
+        "id": str(coach.id),
+        "organization_id": str(coach.organization_id),
+        "user_id": str(coach.user_id) if coach.user_id else None,
+        "first_name": coach.first_name,
+        "last_name": coach.last_name,
+        "full_name": coach.full_name,
+        "email": coach.email,
+        "phone": coach.phone,
+        "role": coach.role,
+        "is_active": coach.is_active,
+        "created_at": coach.created_at.isoformat(),
+        "updated_at": coach.updated_at.isoformat(),
+    }
+
+
 def transform_team_builder_result(result) -> dict:
     """Transform TeamBuilderResult to dict for JSON response."""
     return {

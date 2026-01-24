@@ -56,6 +56,11 @@ from .team_builder import (
     team_builder_apply,
     team_builder_update_requests,
 )
+from .coaches import (
+    coaches_list_create,
+    coach_detail,
+    coaches_bulk_create,
+)
 
 __all__ = [
     # Auth
@@ -105,4 +110,8 @@ __all__ = [
     "team_builder_run",
     "team_builder_apply",
     "team_builder_update_requests",
+    # Coaches
+    "coaches_list_create",
+    "coach_detail",
+    "coaches_bulk_create",
 ]

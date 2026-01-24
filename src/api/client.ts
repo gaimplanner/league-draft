@@ -27,6 +27,12 @@ import type {
   JoinLinkStatus,
   JoinLinkInfo,
   AcceptInvitationResult,
+  Coach,
+  CoachRole,
+  CoachCreateData,
+  CoachUpdateData,
+  BulkCoachCreateData,
+  BulkCoachCreateResult,
 } from '../types';
 
 // Legacy type aliases
@@ -1247,6 +1253,96 @@ export const api = {
       // Silently fail - don't let logging errors cascade
     }
   },
+
+  // ---------------------------------------------------------------------------
+  // Coach Registry
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Get all coaches for the current organization.
+   */
+  async getCoaches(options?: {
+    role?: CoachRole;
+    showInactive?: boolean;
+    search?: string;
+  }): Promise<Coach[]> {
+    const params = new URLSearchParams();
+    if (options?.role) params.append('role', options.role);
+    if (options?.showInactive) params.append('show_inactive', 'true');
+    if (options?.search) params.append('search', options.search);
+
+    const queryString = params.toString();
+    const url = `${API_BASE_URL}/coaches/${queryString ? `?${queryString}` : ''}`;
+
+    const response = await fetch(url, getDefaultOptions());
+    const data = await handleResponse<Record<string, unknown>[]>(response);
+    return data.map(transformCoachFromApi);
+  },
+
+  /**
+   * Get a single coach by ID.
+   */
+  async getCoach(coachId: string): Promise<Coach> {
+    const response = await fetch(
+      `${API_BASE_URL}/coaches/${coachId}/`,
+      getDefaultOptions()
+    );
+    const data = await handleResponse<Record<string, unknown>>(response);
+    return transformCoachFromApi(data);
+  },
+
+  /**
+   * Create a new coach.
+   */
+  async createCoach(coachData: CoachCreateData): Promise<Coach> {
+    const response = await fetchWithCSRFRetry(`${API_BASE_URL}/coaches/`, {
+      ...getDefaultOptions('POST'),
+      method: 'POST',
+      body: JSON.stringify(transformCoachToApi(coachData)),
+    });
+    const result = await handleResponse<Record<string, unknown>>(response);
+    return transformCoachFromApi(result);
+  },
+
+  /**
+   * Update an existing coach.
+   */
+  async updateCoach(coachId: string, coachData: CoachUpdateData): Promise<Coach> {
+    const response = await fetchWithCSRFRetry(`${API_BASE_URL}/coaches/${coachId}/`, {
+      ...getDefaultOptions('PATCH'),
+      method: 'PATCH',
+      body: JSON.stringify(transformCoachToApi(coachData)),
+    });
+    const result = await handleResponse<Record<string, unknown>>(response);
+    return transformCoachFromApi(result);
+  },
+
+  /**
+   * Delete (soft delete) a coach.
+   */
+  async deleteCoach(coachId: string): Promise<void> {
+    const response = await fetchWithCSRFRetry(`${API_BASE_URL}/coaches/${coachId}/`, {
+      ...getDefaultOptions('DELETE'),
+      method: 'DELETE',
+    });
+    await handleResponse<void>(response);
+  },
+
+  /**
+   * Bulk create coaches from pasted text.
+   */
+  async bulkCreateCoaches(bulkData: BulkCoachCreateData): Promise<BulkCoachCreateResult> {
+    const response = await fetchWithCSRFRetry(`${API_BASE_URL}/coaches/bulk/`, {
+      ...getDefaultOptions('POST'),
+      method: 'POST',
+      body: JSON.stringify(bulkData),
+    });
+    const result = await handleResponse<{ created: number; coaches: Record<string, unknown>[] }>(response);
+    return {
+      created: result.created,
+      coaches: result.coaches.map(transformCoachFromApi),
+    };
+  },
 };
 
 // Transform league member from API
@@ -1276,6 +1372,50 @@ function transformLeagueInvitationFromApi(data: Record<string, unknown>): League
     isExpired: data.is_expired as boolean,
     isPending: data.is_pending as boolean,
   };
+}
+
+// Transform coach from API (snake_case to camelCase)
+function transformCoachFromApi(data: Record<string, unknown>): Coach {
+  return {
+    id: data.id as string,
+    organizationId: data.organization_id as string,
+    userId: data.user_id as string | null,
+    firstName: data.first_name as string,
+    lastName: data.last_name as string,
+    fullName: data.full_name as string,
+    email: data.email as string | null,
+    phone: data.phone as string | null,
+    role: data.role as CoachRole,
+    isActive: data.is_active as boolean,
+    createdAt: data.created_at as string,
+    updatedAt: data.updated_at as string,
+  };
+}
+
+// Transform coach to API (camelCase to snake_case)
+function transformCoachToApi(data: CoachCreateData | CoachUpdateData): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+
+  if ('firstName' in data && data.firstName !== undefined) {
+    result.first_name = data.firstName;
+  }
+  if ('lastName' in data && data.lastName !== undefined) {
+    result.last_name = data.lastName;
+  }
+  if ('email' in data) {
+    result.email = data.email;
+  }
+  if ('phone' in data) {
+    result.phone = data.phone;
+  }
+  if ('role' in data && data.role !== undefined) {
+    result.role = data.role;
+  }
+  if ('isActive' in data && (data as CoachUpdateData).isActive !== undefined) {
+    result.is_active = (data as CoachUpdateData).isActive;
+  }
+
+  return result;
 }
 
 export default api;
