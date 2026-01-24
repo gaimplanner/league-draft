@@ -1277,7 +1277,113 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
     setFinalPlayers(updatedPlayers);
     setFinalTeams(updatedTeams);
     setShowSwapModal(false);
-  }, [finalPlayers, finalTeams]);
+
+    // Update algorithm result to reflect the swap
+    if (algorithmResult) {
+      const meanScore = updatedPlayers.length > 0
+        ? updatedPlayers.reduce((sum, p) => sum + p.totalScore, 0) / updatedTeams.length / (updatedPlayers.length / updatedTeams.length)
+        : 0;
+
+      setAlgorithmResult(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          assignments: prev.assignments.map(a => {
+            if (a.playerId === player1Id) {
+              return { ...a, teamId: team2Id };
+            }
+            if (a.playerId === player2Id) {
+              return { ...a, teamId: team1Id };
+            }
+            return a;
+          }),
+          teamSummaries: prev.teamSummaries.map(ts => {
+            const teamPlayers = updatedPlayers.filter(p => p.draftedByTeamId === ts.teamId);
+            const totalScore = teamPlayers.reduce((sum, p) => sum + p.totalScore, 0);
+            const avgScore = teamPlayers.length > 0 ? totalScore / teamPlayers.length : 0;
+            return {
+              ...ts,
+              rosterCount: teamPlayers.length,
+              totalScore,
+              averageScore: avgScore,
+              meanDelta: avgScore - meanScore,
+              meanDeltaPercent: meanScore > 0 ? ((avgScore - meanScore) / meanScore) * 100 : 0,
+            };
+          }),
+        };
+      });
+    }
+  }, [finalPlayers, finalTeams, algorithmResult]);
+
+  // Handle moving a player to a different team (no swap)
+  const handleMovePlayer = useCallback((playerId: string, toTeamId: string) => {
+    const player = finalPlayers.find(p => p.id === playerId);
+    if (!player) return;
+
+    const fromTeamId = player.draftedByTeamId;
+    if (!fromTeamId || fromTeamId === toTeamId) return;
+
+    // Update player assignment
+    const updatedPlayers = finalPlayers.map(p => {
+      if (p.id === playerId) {
+        return { ...p, draftedByTeamId: toTeamId };
+      }
+      return p;
+    });
+
+    // Update team rosters
+    const updatedTeams = finalTeams.map(team => {
+      if (team.id === fromTeamId) {
+        // Remove player from source team
+        const newRoster = team.roster.filter(p => p.id !== playerId);
+        const newTotalScore = newRoster.reduce((sum, p) => sum + p.totalScore, 0);
+        return { ...team, roster: newRoster, totalScore: newTotalScore };
+      }
+      if (team.id === toTeamId) {
+        // Add player to destination team
+        const newRoster = [...team.roster, { ...player, draftedByTeamId: toTeamId }];
+        const newTotalScore = newRoster.reduce((sum, p) => sum + p.totalScore, 0);
+        return { ...team, roster: newRoster, totalScore: newTotalScore };
+      }
+      return team;
+    });
+
+    setFinalPlayers(updatedPlayers);
+    setFinalTeams(updatedTeams);
+
+    // Update algorithm result to reflect the move
+    if (algorithmResult) {
+      const meanScore = updatedPlayers.length > 0
+        ? updatedPlayers.reduce((sum, p) => sum + p.totalScore, 0) / updatedTeams.length / (updatedPlayers.length / updatedTeams.length)
+        : 0;
+
+      setAlgorithmResult(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          assignments: prev.assignments.map(a => {
+            if (a.playerId === playerId) {
+              return { ...a, teamId: toTeamId };
+            }
+            return a;
+          }),
+          teamSummaries: prev.teamSummaries.map(ts => {
+            const teamPlayers = updatedPlayers.filter(p => p.draftedByTeamId === ts.teamId);
+            const totalScore = teamPlayers.reduce((sum, p) => sum + p.totalScore, 0);
+            const avgScore = teamPlayers.length > 0 ? totalScore / teamPlayers.length : 0;
+            return {
+              ...ts,
+              rosterCount: teamPlayers.length,
+              totalScore,
+              averageScore: avgScore,
+              meanDelta: avgScore - meanScore,
+              meanDeltaPercent: meanScore > 0 ? ((avgScore - meanScore) / meanScore) * 100 : 0,
+            };
+          }),
+        };
+      });
+    }
+  }, [finalPlayers, finalTeams, algorithmResult]);
 
   // -----------------------------------------------------------------------------
   // Render
@@ -2825,6 +2931,7 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
               result={algorithmResult}
               players={finalPlayers}
               onRerun={handleRerun}
+              onMovePlayer={handleMovePlayer}
             />
 
             {/* Trade Suggestions (only for requests-first algorithm) */}

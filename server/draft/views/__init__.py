@@ -30,6 +30,7 @@ from .players import (
     players_list_create,
     player_detail,
     players_bulk_create,
+    players_bulk_sync,
     players_delete_by_division,
 )
 from .draft import (
@@ -82,6 +83,7 @@ __all__ = [
     "players_list_create",
     "player_detail",
     "players_bulk_create",
+    "players_bulk_sync",
     "players_delete_by_division",
     # Draft
     "draft_retrieve",
