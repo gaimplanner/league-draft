@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { UserPlus, Trash2, Edit2, Search, AlertCircle, Loader2, ClipboardList, X, Link, CheckSquare, Square } from 'lucide-react';
+import { UserPlus, Trash2, Edit2, Search, AlertCircle, Loader2, ClipboardList, X, Link, CheckSquare, Square, Plus } from 'lucide-react';
 import { api, ApiError } from '../../api/client';
-import { Coach, CoachRole, CoachCreateData, CoachUpdateData, DivisionSummary } from '../../types';
+import { Coach, CoachRole, CoachCreateData, CoachUpdateData, DivisionSummary, DivisionPreset, DIVISION_PRESETS } from '../../types';
 
 interface CoachesTabProps {
   isAdmin: boolean;
@@ -905,13 +905,66 @@ function BulkEditModal({ selectedCoaches, onClose, onSave }: BulkEditModalProps)
   const [divisions, setDivisions] = useState<DivisionSummary[]>([]);
   const [divisionsLoading, setDivisionsLoading] = useState(true);
 
+  // State for creating a new division inline
+  const [showCreateDivision, setShowCreateDivision] = useState(false);
+  const [newDivisionName, setNewDivisionName] = useState('');
+  const [newDivisionPreset, setNewDivisionPreset] = useState<DivisionPreset>('majors');
+  const [newDivisionTeamCount, setNewDivisionTeamCount] = useState(8);
+  const [creatingDivision, setCreatingDivision] = useState(false);
+
   // Load divisions for the dropdown
-  useEffect(() => {
-    api.listDivisions()
-      .then(setDivisions)
-      .catch(err => console.error('Failed to load divisions:', err))
-      .finally(() => setDivisionsLoading(false));
+  const loadDivisions = useCallback(async () => {
+    try {
+      setDivisionsLoading(true);
+      const data = await api.listDivisions();
+      setDivisions(data);
+    } catch (err) {
+      console.error('Failed to load divisions:', err);
+    } finally {
+      setDivisionsLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadDivisions();
+  }, [loadDivisions]);
+
+  const handleCreateDivision = async () => {
+    if (!newDivisionName.trim()) {
+      setError('Division name is required');
+      return;
+    }
+
+    try {
+      setCreatingDivision(true);
+      setError(null);
+
+      const preset = DIVISION_PRESETS[newDivisionPreset as keyof typeof DIVISION_PRESETS];
+
+      const newDivision = await api.createDivision({
+        name: newDivisionName.trim(),
+        preset: newDivisionPreset,
+        ageRange: preset.ageRange,
+        teamCount: newDivisionTeamCount,
+        enforceAgeLimit: preset.enforceAgeLimit,
+        maxPerAge: preset.maxPerAge,
+      });
+
+      // Refresh divisions list and select the new division
+      await loadDivisions();
+      setDivisionId(newDivision.id);
+      setShowCreateDivision(false);
+      setNewDivisionName('');
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(err.details?.error as string || 'Failed to create division');
+      } else {
+        setError('Failed to create division');
+      }
+    } finally {
+      setCreatingDivision(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -952,7 +1005,7 @@ function BulkEditModal({ selectedCoaches, onClose, onSave }: BulkEditModalProps)
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
             Bulk Edit ({selectedCoaches.length} coaches)
@@ -980,29 +1033,115 @@ function BulkEditModal({ selectedCoaches, onClose, onSave }: BulkEditModalProps)
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Division
             </label>
-            <select
-              value={divisionId === null ? 'none' : divisionId}
-              onChange={(e) => {
-                const val = e.target.value;
-                if (val === 'no-change') {
-                  setDivisionId('no-change');
-                } else if (val === 'none') {
-                  setDivisionId(null);
-                } else {
-                  setDivisionId(val);
-                }
-              }}
-              disabled={divisionsLoading}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-            >
-              <option value="no-change">-- No change --</option>
-              <option value="none">No division assigned</option>
-              {divisions.map(div => (
-                <option key={div.id} value={div.id}>
-                  {div.name}
-                </option>
-              ))}
-            </select>
+            <div className="flex gap-2">
+              <select
+                value={divisionId === null ? 'none' : divisionId}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === 'no-change') {
+                    setDivisionId('no-change');
+                  } else if (val === 'none') {
+                    setDivisionId(null);
+                  } else {
+                    setDivisionId(val);
+                  }
+                }}
+                disabled={divisionsLoading}
+                className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+              >
+                <option value="no-change">-- No change --</option>
+                <option value="none">No division assigned</option>
+                {divisions.map(div => (
+                  <option key={div.id} value={div.id}>
+                    {div.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => setShowCreateDivision(!showCreateDivision)}
+                className={`p-2 rounded-lg transition-colors ${
+                  showCreateDivision
+                    ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
+                    : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
+                }`}
+                title="Create new division"
+              >
+                <Plus className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Inline division creation form */}
+            {showCreateDivision && (
+              <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg space-y-3">
+                <div className="text-sm font-medium text-blue-700 dark:text-blue-300">
+                  Create New Division
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
+                    Division Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={newDivisionName}
+                    onChange={(e) => setNewDivisionName(e.target.value)}
+                    placeholder="e.g., Majors 2025"
+                    className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
+                      Preset
+                    </label>
+                    <select
+                      value={newDivisionPreset}
+                      onChange={(e) => setNewDivisionPreset(e.target.value as DivisionPreset)}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="majors">Majors (10-12)</option>
+                      <option value="aaa">AAA (8-10)</option>
+                      <option value="aa">AA (7-10)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
+                      Teams
+                    </label>
+                    <select
+                      value={newDivisionTeamCount}
+                      onChange={(e) => setNewDivisionTeamCount(Number(e.target.value))}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                    >
+                      {[5, 6, 7, 8, 9, 10].map(n => (
+                        <option key={n} value={n}>{n} teams</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowCreateDivision(false);
+                      setNewDivisionName('');
+                    }}
+                    className="px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCreateDivision}
+                    disabled={creatingDivision || !newDivisionName.trim()}
+                    className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center gap-1"
+                  >
+                    {creatingDivision && <Loader2 className="w-3 h-3 animate-spin" />}
+                    Create & Select
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           <div>
