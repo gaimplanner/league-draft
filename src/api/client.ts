@@ -1280,6 +1280,8 @@ export const api = {
    */
   async getCoaches(options?: {
     role?: CoachRole;
+    divisionId?: string | null;         // Filter by division, null = unassigned only
+    includeUnassigned?: boolean;        // If true with divisionId, also include unassigned coaches
     showInactive?: boolean;
     search?: string;
   }): Promise<Coach[]> {
@@ -1287,6 +1289,20 @@ export const api = {
     if (options?.role) params.append('role', options.role);
     if (options?.showInactive) params.append('show_inactive', 'true');
     if (options?.search) params.append('search', options.search);
+
+    // Division filtering
+    if (options?.divisionId !== undefined) {
+      if (options.divisionId === null) {
+        // Only unassigned coaches
+        params.append('division_id', 'null');
+      } else if (options.includeUnassigned) {
+        // Coaches for this division OR unassigned
+        params.append('division_id', `${options.divisionId},null`);
+      } else {
+        // Only coaches for this division
+        params.append('division_id', options.divisionId);
+      }
+    }
 
     const queryString = params.toString();
     const url = `${API_BASE_URL}/coaches/${queryString ? `?${queryString}` : ''}`;
@@ -1403,6 +1419,7 @@ function transformCoachFromApi(data: Record<string, unknown>): Coach {
     email: data.email as string | null,
     phone: data.phone as string | null,
     role: data.role as CoachRole,
+    divisionId: data.division_id as string | null,
     isActive: data.is_active as boolean,
     createdAt: data.created_at as string,
     updatedAt: data.updated_at as string,
@@ -1430,6 +1447,9 @@ function transformCoachToApi(data: CoachCreateData | CoachUpdateData): Record<st
   }
   if ('isActive' in data && (data as CoachUpdateData).isActive !== undefined) {
     result.is_active = (data as CoachUpdateData).isActive;
+  }
+  if ('divisionId' in data) {
+    result.division_id = data.divisionId;
   }
 
   return result;

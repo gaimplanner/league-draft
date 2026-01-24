@@ -254,6 +254,16 @@ class Coach(models.Model):
     # Role within teams
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default="manager")
 
+    # Division assignment (which division this coach is signed up for)
+    # Null means coach is available for any division or not yet assigned
+    division = models.ForeignKey(
+        "Division",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="assigned_coaches",
+    )
+
     # Soft delete for preserving history
     is_active = models.BooleanField(default=True)
 
@@ -266,6 +276,7 @@ class Coach(models.Model):
         indexes = [
             models.Index(fields=["organization"], name="coach_organization_idx"),
             models.Index(fields=["organization", "is_active"], name="coach_org_active_idx"),
+            models.Index(fields=["division"], name="coach_division_idx"),
         ]
 
     def __str__(self):

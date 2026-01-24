@@ -1068,6 +1068,18 @@ def validate_coach_data(data: Dict[str, Any]) -> Tuple[Optional[Dict], Optional[
         else:
             cleaned["is_active"] = is_active
 
+    # division_id (optional) - which division this coach is signed up for
+    if "division_id" in data:
+        division_id = data["division_id"]
+        if division_id is None or division_id == "":
+            cleaned["division_id"] = None
+        else:
+            try:
+                uuid_module.UUID(str(division_id))
+                cleaned["division_id"] = division_id
+            except ValueError:
+                errors["division_id"] = ["Invalid division ID"]
+
     if errors:
         return None, errors
 

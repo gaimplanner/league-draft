@@ -150,6 +150,7 @@ export interface Coach {
   email?: string | null;
   phone?: string | null;
   role: CoachRole;
+  divisionId?: string | null;  // Which division this coach is signed up for
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -161,6 +162,7 @@ export interface CoachCreateData {
   email?: string;
   phone?: string;
   role?: CoachRole;
+  divisionId?: string | null;
 }
 
 export interface CoachUpdateData {
@@ -169,6 +171,7 @@ export interface CoachUpdateData {
   email?: string | null;
   phone?: string | null;
   role?: CoachRole;
+  divisionId?: string | null;
   isActive?: boolean;
 }
 

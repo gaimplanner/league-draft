@@ -43,6 +43,29 @@ def coaches_list_create(request):
         if role:
             queryset = queryset.filter(role=role)
 
+        # Filter by division if specified
+        # - division_id=<uuid>: coaches assigned to this division
+        # - division_id=null: coaches not assigned to any division
+        # - division_id=<uuid>,null: coaches assigned to this division OR unassigned
+        division_filter = request.GET.get("division_id")
+        if division_filter:
+            if division_filter == "null":
+                # Only unassigned coaches
+                queryset = queryset.filter(division_id__isnull=True)
+            elif "," in division_filter:
+                # Multiple values (e.g., "uuid,null" for division OR unassigned)
+                parts = [p.strip() for p in division_filter.split(",")]
+                q_filter = Q()
+                for part in parts:
+                    if part == "null":
+                        q_filter |= Q(division_id__isnull=True)
+                    else:
+                        q_filter |= Q(division_id=part)
+                queryset = queryset.filter(q_filter)
+            else:
+                # Single division ID
+                queryset = queryset.filter(division_id=division_filter)
+
         # Filter by is_active (default: only active)
         show_inactive = request.GET.get("show_inactive", "").lower() == "true"
         if not show_inactive:

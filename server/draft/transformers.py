@@ -322,6 +322,7 @@ def transform_coach(coach) -> dict:
         "email": coach.email,
         "phone": coach.phone,
         "role": coach.role,
+        "division_id": str(coach.division_id) if coach.division_id else None,
         "is_active": coach.is_active,
         "created_at": coach.created_at.isoformat(),
         "updated_at": coach.updated_at.isoformat(),

@@ -10,6 +10,10 @@ interface CoachSelectorProps {
   onChange: (coachId: string | null, coach: Coach | null) => void;
   /** Filter by role (manager or assistant_coach) */
   role?: CoachRole;
+  /** Filter by division ID (only show coaches assigned to this division) */
+  divisionId?: string;
+  /** If true, also include coaches with no division assignment */
+  includeUnassigned?: boolean;
   /** Placeholder text */
   placeholder?: string;
   /** Disable the selector */
@@ -24,6 +28,8 @@ export function CoachSelector({
   value,
   onChange,
   role,
+  divisionId,
+  includeUnassigned = true,
   placeholder = 'Select coach...',
   disabled = false,
   className = '',
@@ -35,22 +41,26 @@ export function CoachSelector({
   const [showAddForm, setShowAddForm] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Load coaches on mount
+  // Load coaches on mount and when filters change
   useEffect(() => {
     loadCoaches();
-  }, [role]);
+  }, [role, divisionId, includeUnassigned]);
 
   const loadCoaches = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await api.getCoaches({ role });
+      const data = await api.getCoaches({
+        role,
+        divisionId: divisionId ?? undefined,
+        includeUnassigned: divisionId ? includeUnassigned : undefined,
+      });
       setCoaches(data);
     } catch (err) {
       console.error('Failed to load coaches:', err);
     } finally {
       setLoading(false);
     }
-  }, [role]);
+  }, [role, divisionId, includeUnassigned]);
 
   // Find selected coach
   const selectedCoach = coaches.find(c => c.id === value);
