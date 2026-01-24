@@ -130,11 +130,18 @@ export const PlayerDetailDrawer = ({
   onMovePlayer,
   onSwapPlayers,
 }: PlayerDetailDrawerProps) => {
-  const [moveMode, setMoveMode] = useState<'none' | 'move' | 'swap'>('none');
+  // 'confirm' mode is used when a suggested move is clicked - skip team selection
+  const [moveMode, setMoveMode] = useState<'none' | 'move' | 'swap' | 'confirm'>('none');
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [selectedSwapPlayerId, setSelectedSwapPlayerId] = useState<string | null>(null);
 
   const playerMap = useMemo(() => new Map(allPlayers.map(p => [p.id, p])), [allPlayers]);
+
+  // Get the selected team details for confirm mode
+  const selectedTeam = useMemo(() => {
+    if (!selectedTeamId) return null;
+    return result.teamSummaries.find(t => t.teamId === selectedTeamId) || null;
+  }, [selectedTeamId, result.teamSummaries]);
 
   // Build teammate request details
   const teammateRequests: RequestedPlayer[] = useMemo(() => {
@@ -535,43 +542,70 @@ export const PlayerDetailDrawer = ({
           </h4>
           {teammateRequests.length > 0 ? (
             <div className="space-y-2">
-              {teammateRequests.map((req, idx) => (
-                <div
-                  key={idx}
-                  className={`p-3 rounded-lg border ${
-                    req.isHonored
-                      ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
-                      : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-gray-900 dark:text-white">
-                        {req.name}
-                      </span>
-                      {req.isTwoWay && (
-                        <span className="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded">
-                          Two-way
+              {teammateRequests.map((req, idx) => {
+                // Get more context about the requested player
+                const requestedPlayer = req.id ? playerMap.get(req.id) : null;
+                const requestedPlayerScore = requestedPlayer?.totalScore || 0;
+
+                // Find how many of the current player's OTHER requests are on the same team as this request
+                const otherFriendsOnSameTeam = teammateRequests.filter(
+                  (otherReq, otherIdx) =>
+                    otherIdx !== idx &&
+                    otherReq.team?.teamId === req.team?.teamId &&
+                    otherReq.id !== req.id
+                );
+
+                return (
+                  <div
+                    key={idx}
+                    className={`p-3 rounded-lg border ${
+                      req.isHonored
+                        ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+                        : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-gray-900 dark:text-white">
+                          {req.name}
                         </span>
+                        {req.isTwoWay && (
+                          <span className="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded">
+                            Two-way
+                          </span>
+                        )}
+                      </div>
+                      {req.isHonored ? (
+                        <Check className="w-4 h-4 text-green-600 dark:text-green-400" />
+                      ) : (
+                        <AlertCircle className="w-4 h-4 text-red-500 dark:text-red-400" />
                       )}
                     </div>
-                    {req.isHonored ? (
-                      <Check className="w-4 h-4 text-green-600 dark:text-green-400" />
-                    ) : (
-                      <AlertCircle className="w-4 h-4 text-red-500 dark:text-red-400" />
-                    )}
+                    <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      <div className="flex items-center gap-1">
+                        <span>Currently on:</span>
+                        <span className={req.isHonored ? 'text-green-600 dark:text-green-400' : 'text-gray-700 dark:text-gray-300'}>
+                          {req.team?.teamName || req.team?.coachName || 'Unknown'}
+                        </span>
+                        {!req.isHonored && req.team && (
+                          <ChevronRight className="w-3 h-3" />
+                        )}
+                      </div>
+                      {/* Show score and other friends context */}
+                      <div className="mt-1 flex items-center gap-3">
+                        {requestedPlayerScore > 0 && (
+                          <span>Score: {requestedPlayerScore.toFixed(1)}</span>
+                        )}
+                        {!req.isHonored && otherFriendsOnSameTeam.length > 0 && (
+                          <span className="text-purple-600 dark:text-purple-400">
+                            +{otherFriendsOnSameTeam.length} other friend{otherFriendsOnSameTeam.length > 1 ? 's' : ''} on that team
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                  <div className="mt-1 text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
-                    <span>Currently on:</span>
-                    <span className={req.isHonored ? 'text-green-600 dark:text-green-400' : 'text-gray-700 dark:text-gray-300'}>
-                      {req.team?.teamName || req.team?.coachName || 'Unknown'}
-                    </span>
-                    {!req.isHonored && req.team && (
-                      <ChevronRight className="w-3 h-3" />
-                    )}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600">
@@ -581,7 +615,7 @@ export const PlayerDetailDrawer = ({
         </section>
 
         {/* Suggested Moves */}
-        {suggestedMoves.length > 0 && (
+        {suggestedMoves.length > 0 && moveMode === 'none' && (
           <section>
             <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
               <ArrowRight className="w-4 h-4" />
@@ -592,7 +626,8 @@ export const PlayerDetailDrawer = ({
                 <button
                   key={suggestion.team.teamId}
                   onClick={() => {
-                    setMoveMode('move');
+                    // Go directly to confirm mode, skipping team selection
+                    setMoveMode('confirm');
                     setSelectedTeamId(suggestion.team.teamId);
                   }}
                   className="w-full p-3 rounded-lg border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-900/20 hover:bg-purple-100 dark:hover:bg-purple-900/30 text-left transition-colors"
@@ -614,7 +649,7 @@ export const PlayerDetailDrawer = ({
           </section>
         )}
 
-        {/* Action Buttons */}
+        {/* Action Buttons - only show when not in any selection mode */}
         {(onMovePlayer || onSwapPlayers) && moveMode === 'none' && (
           <section className="space-y-2">
             <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -643,7 +678,39 @@ export const PlayerDetailDrawer = ({
           </section>
         )}
 
-        {/* Move Mode - Select Team */}
+        {/* Confirm Move Mode - when clicking a suggested move */}
+        {moveMode === 'confirm' && selectedTeam && (
+          <section className="space-y-3">
+            <div className="p-4 rounded-lg bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800">
+              <div className="text-sm font-medium text-purple-900 dark:text-purple-100 mb-2">
+                Move {player.name} to {selectedTeam.teamName || selectedTeam.coachName}?
+              </div>
+              <div className="text-xs text-purple-700 dark:text-purple-300 space-y-1">
+                <div>Current team: {currentTeam.teamName || currentTeam.coachName}</div>
+                <div>New team has {selectedTeam.rosterCount} players (avg: {selectedTeam.averageScore.toFixed(1)})</div>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  setMoveMode('none');
+                  setSelectedTeamId(null);
+                }}
+                className="flex-1 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-700"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleMove}
+                className="flex-1 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium"
+              >
+                Confirm Move
+              </button>
+            </div>
+          </section>
+        )}
+
+        {/* Move Mode - Select Team (confirm button moved to footer) */}
         {moveMode === 'move' && (
           <section className="space-y-2">
             <div className="flex items-center justify-between">
@@ -660,7 +727,7 @@ export const PlayerDetailDrawer = ({
                 Cancel
               </button>
             </div>
-            <div className="space-y-1 max-h-48 overflow-y-auto">
+            <div className="space-y-1">
               {result.teamSummaries
                 .filter(t => t.teamId !== currentTeam.teamId)
                 .map(team => (
@@ -680,14 +747,6 @@ export const PlayerDetailDrawer = ({
                   </button>
                 ))}
             </div>
-            {selectedTeamId && (
-              <button
-                onClick={handleMove}
-                className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium"
-              >
-                Confirm Move
-              </button>
-            )}
           </section>
         )}
 
@@ -740,36 +799,87 @@ export const PlayerDetailDrawer = ({
                   );
                 })}
             </div>
-            {selectedSwapPlayerId && (
-              <button
-                onClick={handleSwap}
-                className="w-full py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium"
-              >
-                Confirm Swap
-              </button>
-            )}
           </section>
         )}
       </div>
 
-      {/* Footer summary */}
-      <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-gray-600 dark:text-gray-400">
-            Happiness Score
-          </span>
-          <span className={`font-medium ${
-            happiness.score === 'all' ? 'text-green-600 dark:text-green-400' :
-            happiness.score === 'some' ? 'text-amber-600 dark:text-amber-400' :
-            happiness.score === 'none' ? 'text-red-600 dark:text-red-400' :
-            'text-gray-500'
-          }`}>
-            {happiness.score === 'all' ? '🟢 All Requests Honored' :
-             happiness.score === 'some' ? '🟡 Some Requests Honored' :
-             happiness.score === 'none' ? '🔴 No Requests Honored' :
-             '⚪ No Requests Made'}
-          </span>
-        </div>
+      {/* Footer - shows confirm buttons when in selection mode, otherwise shows happiness score */}
+      <div className="border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
+        {/* Move mode confirm button */}
+        {moveMode === 'move' && selectedTeamId && selectedTeam && (
+          <div className="px-4 py-3 space-y-2">
+            <div className="text-xs text-gray-600 dark:text-gray-400">
+              Move to: <span className="font-medium text-gray-900 dark:text-white">{selectedTeam.teamName || selectedTeam.coachName}</span>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  setMoveMode('none');
+                  setSelectedTeamId(null);
+                }}
+                className="flex-1 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium hover:bg-gray-100 dark:hover:bg-gray-700"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleMove}
+                className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium"
+              >
+                Confirm Move
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Swap mode confirm button */}
+        {moveMode === 'swap' && selectedSwapPlayerId && (
+          <div className="px-4 py-3 space-y-2">
+            <div className="text-xs text-gray-600 dark:text-gray-400">
+              Swap with: <span className="font-medium text-gray-900 dark:text-white">
+                {playerMap.get(selectedSwapPlayerId)?.name || 'Unknown'}
+              </span>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  setMoveMode('none');
+                  setSelectedSwapPlayerId(null);
+                }}
+                className="flex-1 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium hover:bg-gray-100 dark:hover:bg-gray-700"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSwap}
+                className="flex-1 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium"
+              >
+                Confirm Swap
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Default footer - happiness score (when not in selection mode or nothing selected) */}
+        {(moveMode === 'none' || moveMode === 'confirm' || (moveMode === 'move' && !selectedTeamId) || (moveMode === 'swap' && !selectedSwapPlayerId)) && (
+          <div className="px-4 py-3">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-gray-600 dark:text-gray-400">
+                Happiness Score
+              </span>
+              <span className={`font-medium ${
+                happiness.score === 'all' ? 'text-green-600 dark:text-green-400' :
+                happiness.score === 'some' ? 'text-amber-600 dark:text-amber-400' :
+                happiness.score === 'none' ? 'text-red-600 dark:text-red-400' :
+                'text-gray-500'
+              }`}>
+                {happiness.score === 'all' ? '🟢 All Requests Honored' :
+                 happiness.score === 'some' ? '🟡 Some Requests Honored' :
+                 happiness.score === 'none' ? '🔴 No Requests Honored' :
+                 '⚪ No Requests Made'}
+              </span>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
