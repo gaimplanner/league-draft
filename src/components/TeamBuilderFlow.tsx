@@ -34,6 +34,7 @@ import {
   DEFAULT_TEAM_BUILDER_CONFIG,
   DEFAULT_SKILL_TIERED_CONFIG,
   applyAssignments,
+  recalculateHappiness,
   TeamSummary,
   PlayerHappiness,
   AssignmentResult,
@@ -1292,32 +1293,47 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
         ? updatedPlayers.reduce((sum, p) => sum + p.totalScore, 0) / updatedTeams.length / (updatedPlayers.length / updatedTeams.length)
         : 0;
 
+      // Update assignments
+      const updatedAssignments = algorithmResult.assignments.map(a => {
+        if (a.playerId === player1Id) {
+          return { ...a, teamId: team2Id };
+        }
+        if (a.playerId === player2Id) {
+          return { ...a, teamId: team1Id };
+        }
+        return a;
+      });
+
+      // Update team summaries
+      const updatedTeamSummaries = algorithmResult.teamSummaries.map(ts => {
+        const teamPlayers = updatedPlayers.filter(p => p.draftedByTeamId === ts.teamId);
+        const totalScore = teamPlayers.reduce((sum, p) => sum + p.totalScore, 0);
+        const avgScore = teamPlayers.length > 0 ? totalScore / teamPlayers.length : 0;
+        return {
+          ...ts,
+          rosterCount: teamPlayers.length,
+          totalScore,
+          averageScore: avgScore,
+          meanDelta: avgScore - meanScore,
+          meanDeltaPercent: meanScore > 0 ? ((avgScore - meanScore) / meanScore) * 100 : 0,
+        };
+      });
+
+      // Recalculate happiness scores
+      const { playerHappiness, stats } = recalculateHappiness(
+        updatedPlayers as TeamBuilderPlayer[],
+        updatedAssignments,
+        updatedTeamSummaries
+      );
+
       setAlgorithmResult(prev => {
         if (!prev) return prev;
         return {
           ...prev,
-          assignments: prev.assignments.map(a => {
-            if (a.playerId === player1Id) {
-              return { ...a, teamId: team2Id };
-            }
-            if (a.playerId === player2Id) {
-              return { ...a, teamId: team1Id };
-            }
-            return a;
-          }),
-          teamSummaries: prev.teamSummaries.map(ts => {
-            const teamPlayers = updatedPlayers.filter(p => p.draftedByTeamId === ts.teamId);
-            const totalScore = teamPlayers.reduce((sum, p) => sum + p.totalScore, 0);
-            const avgScore = teamPlayers.length > 0 ? totalScore / teamPlayers.length : 0;
-            return {
-              ...ts,
-              rosterCount: teamPlayers.length,
-              totalScore,
-              averageScore: avgScore,
-              meanDelta: avgScore - meanScore,
-              meanDeltaPercent: meanScore > 0 ? ((avgScore - meanScore) / meanScore) * 100 : 0,
-            };
-          }),
+          assignments: updatedAssignments,
+          teamSummaries: updatedTeamSummaries,
+          playerHappiness,
+          stats,
         };
       });
     }
@@ -1373,29 +1389,44 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
         ? updatedPlayers.reduce((sum, p) => sum + p.totalScore, 0) / updatedTeams.length / (updatedPlayers.length / updatedTeams.length)
         : 0;
 
+      // Update assignments
+      const updatedAssignments = algorithmResult.assignments.map(a => {
+        if (a.playerId === playerId) {
+          return { ...a, teamId: toTeamId };
+        }
+        return a;
+      });
+
+      // Update team summaries
+      const updatedTeamSummaries = algorithmResult.teamSummaries.map(ts => {
+        const teamPlayers = updatedPlayers.filter(p => p.draftedByTeamId === ts.teamId);
+        const totalScore = teamPlayers.reduce((sum, p) => sum + p.totalScore, 0);
+        const avgScore = teamPlayers.length > 0 ? totalScore / teamPlayers.length : 0;
+        return {
+          ...ts,
+          rosterCount: teamPlayers.length,
+          totalScore,
+          averageScore: avgScore,
+          meanDelta: avgScore - meanScore,
+          meanDeltaPercent: meanScore > 0 ? ((avgScore - meanScore) / meanScore) * 100 : 0,
+        };
+      });
+
+      // Recalculate happiness scores
+      const { playerHappiness, stats } = recalculateHappiness(
+        updatedPlayers as TeamBuilderPlayer[],
+        updatedAssignments,
+        updatedTeamSummaries
+      );
+
       setAlgorithmResult(prev => {
         if (!prev) return prev;
         return {
           ...prev,
-          assignments: prev.assignments.map(a => {
-            if (a.playerId === playerId) {
-              return { ...a, teamId: toTeamId };
-            }
-            return a;
-          }),
-          teamSummaries: prev.teamSummaries.map(ts => {
-            const teamPlayers = updatedPlayers.filter(p => p.draftedByTeamId === ts.teamId);
-            const totalScore = teamPlayers.reduce((sum, p) => sum + p.totalScore, 0);
-            const avgScore = teamPlayers.length > 0 ? totalScore / teamPlayers.length : 0;
-            return {
-              ...ts,
-              rosterCount: teamPlayers.length,
-              totalScore,
-              averageScore: avgScore,
-              meanDelta: avgScore - meanScore,
-              meanDeltaPercent: meanScore > 0 ? ((avgScore - meanScore) / meanScore) * 100 : 0,
-            };
-          }),
+          assignments: updatedAssignments,
+          teamSummaries: updatedTeamSummaries,
+          playerHappiness,
+          stats,
         };
       });
     }

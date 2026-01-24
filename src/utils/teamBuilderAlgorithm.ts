@@ -695,6 +695,149 @@ export function applyAssignments(
 }
 
 // -----------------------------------------------------------------------------
+// Happiness Recalculation (for manual moves/swaps)
+// -----------------------------------------------------------------------------
+
+/**
+ * Recalculate player happiness and stats after manual roster changes.
+ *
+ * This should be called after any manual move or swap to ensure
+ * happiness scores reflect the current team assignments.
+ */
+export function recalculateHappiness(
+  players: TeamBuilderPlayer[],
+  assignments: AssignmentResult[],
+  teamSummaries: TeamSummary[]
+): {
+  playerHappiness: PlayerHappiness[];
+  stats: TeamBuilderResult['stats'];
+} {
+  // Build a map of teamId -> playerIds for quick lookup
+  const teamPlayerIds = new Map<string, string[]>();
+  for (const team of teamSummaries) {
+    const playerIds = assignments
+      .filter(a => a.teamId === team.teamId)
+      .map(a => a.playerId);
+    teamPlayerIds.set(team.teamId, playerIds);
+  }
+
+  // Calculate happiness for each player
+  const playerHappiness: PlayerHappiness[] = players.map(player => {
+    const assignment = assignments.find(a => a.playerId === player.id);
+    if (!assignment) {
+      return {
+        playerId: player.id,
+        score: 'no-requests' as HappinessScore,
+        coachRequestHonored: null,
+        teammateRequestsHonored: 0,
+        teammateRequestsTotal: 0,
+        twoWayRequestsHonored: 0,
+        twoWayRequestsTotal: 0,
+      };
+    }
+
+    const teamId = assignment.teamId;
+    const teammatesOnTeam = teamPlayerIds.get(teamId) || [];
+
+    // Coach request
+    const hasCoachRequest = !!player.resolvedCoachTeamId;
+    const coachRequestHonored = hasCoachRequest ? player.resolvedCoachTeamId === teamId : null;
+
+    // Teammate requests
+    const twoWayTotal = player.twoWayTeammateIds?.length || 0;
+    const oneWayTotal = player.oneWayTeammateIds?.length || 0;
+    const teammateRequestsTotal = twoWayTotal + oneWayTotal;
+
+    const twoWayHonored = player.twoWayTeammateIds?.filter(id =>
+      teammatesOnTeam.includes(id)
+    ).length || 0;
+
+    const oneWayHonored = player.oneWayTeammateIds?.filter(id =>
+      teammatesOnTeam.includes(id)
+    ).length || 0;
+
+    const teammateRequestsHonored = twoWayHonored + oneWayHonored;
+
+    // Calculate happiness score
+    let score: HappinessScore;
+    const totalRequests = teammateRequestsTotal + (hasCoachRequest ? 1 : 0);
+    const totalHonored = teammateRequestsHonored + (coachRequestHonored ? 1 : 0);
+
+    if (totalRequests === 0) {
+      score = 'no-requests';
+    } else if (totalHonored === totalRequests) {
+      score = 'all';
+    } else if (totalHonored > 0) {
+      score = 'some';
+    } else {
+      score = 'none';
+    }
+
+    return {
+      playerId: player.id,
+      score,
+      coachRequestHonored,
+      teammateRequestsHonored,
+      teammateRequestsTotal,
+      twoWayRequestsHonored: twoWayHonored,
+      twoWayRequestsTotal: twoWayTotal,
+    };
+  });
+
+  // Calculate stats
+  const lockedCount = assignments.filter(a =>
+    ['coach-kid', 'assistant-coach-kid', 'sibling-lock', 'manual-lock'].includes(a.reason)
+  ).length;
+
+  const topTalentAssigned = assignments.filter(a => a.reason === 'top-talent').length;
+
+  const requestBasedCount = assignments.filter(a =>
+    ['two-way-friend', 'one-way-friend', 'coach-request', 'school-cluster'].includes(a.reason)
+  ).length;
+
+  const balanceBasedCount = assignments.filter(a => a.reason === 'balance').length;
+
+  const twoWayTotal = players.reduce((sum, p) => sum + (p.twoWayTeammateIds?.length || 0), 0);
+  const twoWayHonored = playerHappiness.reduce((sum, h) => sum + h.twoWayRequestsHonored, 0);
+
+  const oneWayTotal = players.reduce((sum, p) => sum + (p.oneWayTeammateIds?.length || 0), 0);
+  const oneWayHonored = playerHappiness.reduce((sum, h) =>
+    sum + (h.teammateRequestsHonored - h.twoWayRequestsHonored), 0
+  );
+
+  const coachRequestTotal = players.filter(p => p.resolvedCoachTeamId).length;
+  const coachRequestHonored = playerHappiness.filter(h => h.coachRequestHonored === true).length;
+
+  // Average happiness (0-1)
+  const happinessScores = playerHappiness.filter(h => h.score !== 'no-requests');
+  const avgHappiness = happinessScores.length > 0
+    ? happinessScores.reduce((sum, h) => {
+        if (h.score === 'all') return sum + 1;
+        if (h.score === 'some') return sum + 0.5;
+        return sum;
+      }, 0) / happinessScores.length
+    : 1;
+
+  return {
+    playerHappiness,
+    stats: {
+      totalPlayers: players.length,
+      lockedPlayers: lockedCount,
+      topTalentPlayers: topTalentAssigned,
+      requestBasedPlayers: requestBasedCount,
+      balanceBasedPlayers: balanceBasedCount,
+      twoWayRequestsHonored: twoWayHonored,
+      twoWayRequestsTotal: twoWayTotal,
+      oneWayRequestsHonored: oneWayHonored,
+      oneWayRequestsTotal: oneWayTotal,
+      coachRequestsHonored: coachRequestHonored,
+      coachRequestsTotal: coachRequestTotal,
+      averageHappiness: avgHappiness,
+    },
+  };
+}
+
+// -----------------------------------------------------------------------------
 // Requests-First Algorithm
 // -----------------------------------------------------------------------------
 
