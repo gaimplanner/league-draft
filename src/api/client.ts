@@ -1420,6 +1420,7 @@ function transformCoachFromApi(data: Record<string, unknown>): Coach {
     phone: data.phone as string | null,
     role: data.role as CoachRole,
     divisionId: data.division_id as string | null,
+    pairedWithId: data.paired_with_id as string | null,
     isActive: data.is_active as boolean,
     createdAt: data.created_at as string,
     updatedAt: data.updated_at as string,
@@ -1450,6 +1451,9 @@ function transformCoachToApi(data: CoachCreateData | CoachUpdateData): Record<st
   }
   if ('divisionId' in data) {
     result.division_id = data.divisionId;
+  }
+  if ('pairedWithId' in data) {
+    result.paired_with_id = data.pairedWithId;
   }
 
   return result;

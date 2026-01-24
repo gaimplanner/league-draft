@@ -1080,6 +1080,18 @@ def validate_coach_data(data: Dict[str, Any]) -> Tuple[Optional[Dict], Optional[
             except ValueError:
                 errors["division_id"] = ["Invalid division ID"]
 
+    # paired_with_id (optional) - link manager with assistant coach
+    if "paired_with_id" in data:
+        paired_with_id = data["paired_with_id"]
+        if paired_with_id is None or paired_with_id == "":
+            cleaned["paired_with_id"] = None
+        else:
+            try:
+                uuid_module.UUID(str(paired_with_id))
+                cleaned["paired_with_id"] = paired_with_id
+            except ValueError:
+                errors["paired_with_id"] = ["Invalid coach ID"]
+
     if errors:
         return None, errors
 

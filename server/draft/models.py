@@ -264,6 +264,16 @@ class Coach(models.Model):
         related_name="assigned_coaches",
     )
 
+    # Paired with another coach (manager <-> assistant pairing)
+    # When set, these two coaches will be placed on the same team during division setup
+    paired_with = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="paired_by",
+    )
+
     # Soft delete for preserving history
     is_active = models.BooleanField(default=True)
 

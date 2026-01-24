@@ -150,7 +150,8 @@ export interface Coach {
   email?: string | null;
   phone?: string | null;
   role: CoachRole;
-  divisionId?: string | null;  // Which division this coach is signed up for
+  divisionId?: string | null;     // Which division this coach is signed up for
+  pairedWithId?: string | null;   // Link manager with assistant coach (placed on same team)
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -163,6 +164,7 @@ export interface CoachCreateData {
   phone?: string;
   role?: CoachRole;
   divisionId?: string | null;
+  pairedWithId?: string | null;
 }
 
 export interface CoachUpdateData {
@@ -172,6 +174,7 @@ export interface CoachUpdateData {
   phone?: string | null;
   role?: CoachRole;
   divisionId?: string | null;
+  pairedWithId?: string | null;
   isActive?: boolean;
 }
 

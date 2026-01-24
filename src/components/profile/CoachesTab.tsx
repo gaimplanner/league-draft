@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-import { UserPlus, Trash2, Edit2, Search, AlertCircle, Loader2, ClipboardList, X } from 'lucide-react';
+import { UserPlus, Trash2, Edit2, Search, AlertCircle, Loader2, ClipboardList, X, Link } from 'lucide-react';
 import { api, ApiError } from '../../api/client';
-import { Coach, CoachRole, CoachCreateData, CoachUpdateData } from '../../types';
+import { Coach, CoachRole, CoachCreateData, CoachUpdateData, DivisionSummary } from '../../types';
 
 interface CoachesTabProps {
   isAdmin: boolean;
@@ -227,6 +227,22 @@ export function CoachesTab({ isAdmin }: CoachesTabProps) {
                       {coach.phone && <span>{coach.phone}</span>}
                       {!coach.email && !coach.phone && <span className="italic">No contact info</span>}
                     </div>
+                    {/* Show division and pairing info */}
+                    {(coach.divisionId || coach.pairedWithId) && (
+                      <div className="flex flex-wrap gap-2 mt-1">
+                        {coach.divisionId && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400">
+                            Division assigned
+                          </span>
+                        )}
+                        {coach.pairedWithId && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400">
+                            <Link className="w-3 h-3" />
+                            Paired
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -268,6 +284,7 @@ export function CoachesTab({ isAdmin }: CoachesTabProps) {
       {/* Add Coach Modal */}
       {showAddModal && (
         <CoachFormModal
+          allCoaches={coaches}
           onClose={() => setShowAddModal(false)}
           onSave={handleCoachCreated}
         />
@@ -277,6 +294,7 @@ export function CoachesTab({ isAdmin }: CoachesTabProps) {
       {editingCoach && (
         <CoachFormModal
           coach={editingCoach}
+          allCoaches={coaches}
           onClose={() => setEditingCoach(null)}
           onSave={handleCoachUpdated}
         />
@@ -299,20 +317,47 @@ export function CoachesTab({ isAdmin }: CoachesTabProps) {
 
 interface CoachFormModalProps {
   coach?: Coach;
+  allCoaches: Coach[];
   onClose: () => void;
   onSave: (coach: Coach) => void;
 }
 
-function CoachFormModal({ coach, onClose, onSave }: CoachFormModalProps) {
+function CoachFormModal({ coach, allCoaches, onClose, onSave }: CoachFormModalProps) {
   const isEdit = !!coach;
   const [firstName, setFirstName] = useState(coach?.firstName || '');
   const [lastName, setLastName] = useState(coach?.lastName || '');
   const [email, setEmail] = useState(coach?.email || '');
   const [phone, setPhone] = useState(coach?.phone || '');
   const [role, setRole] = useState<CoachRole>(coach?.role || 'manager');
+  const [divisionId, setDivisionId] = useState<string | null>(coach?.divisionId || null);
+  const [pairedWithId, setPairedWithId] = useState<string | null>(coach?.pairedWithId || null);
   const [isActive, setIsActive] = useState(coach?.isActive ?? true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [divisions, setDivisions] = useState<DivisionSummary[]>([]);
+  const [divisionsLoading, setDivisionsLoading] = useState(true);
+
+  // Load divisions for the dropdown
+  useEffect(() => {
+    api.listDivisions()
+      .then(setDivisions)
+      .catch(err => console.error('Failed to load divisions:', err))
+      .finally(() => setDivisionsLoading(false));
+  }, []);
+
+  // Get available coaches for pairing (opposite role, not already paired, not self)
+  const availableForPairing = allCoaches.filter(c => {
+    // Can't pair with self
+    if (coach && c.id === coach.id) return false;
+    // Must be opposite role (manager pairs with assistant)
+    if (role === 'manager' && c.role !== 'assistant_coach') return false;
+    if (role === 'assistant_coach' && c.role !== 'manager') return false;
+    // Only active coaches
+    if (!c.isActive) return false;
+    // Not already paired with someone else (unless it's the current pairing)
+    if (c.pairedWithId && c.pairedWithId !== coach?.id) return false;
+    return true;
+  });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -333,9 +378,24 @@ function CoachFormModal({ coach, onClose, onSave }: CoachFormModalProps) {
           email: email.trim() || null,
           phone: phone.trim() || null,
           role,
+          divisionId,
+          pairedWithId,
           isActive,
         };
         const updated = await api.updateCoach(coach.id, data);
+
+        // If pairing changed, also update the other coach's pairing
+        if (pairedWithId !== coach.pairedWithId) {
+          // Clear old pairing if there was one
+          if (coach.pairedWithId) {
+            await api.updateCoach(coach.pairedWithId, { pairedWithId: null });
+          }
+          // Set new pairing
+          if (pairedWithId) {
+            await api.updateCoach(pairedWithId, { pairedWithId: coach.id });
+          }
+        }
+
         onSave(updated);
       } else {
         const data: CoachCreateData = {
@@ -344,8 +404,16 @@ function CoachFormModal({ coach, onClose, onSave }: CoachFormModalProps) {
           email: email.trim() || undefined,
           phone: phone.trim() || undefined,
           role,
+          divisionId,
+          pairedWithId,
         };
         const created = await api.createCoach(data);
+
+        // If pairing set, also update the other coach
+        if (pairedWithId) {
+          await api.updateCoach(pairedWithId, { pairedWithId: created.id });
+        }
+
         onSave(created);
       }
     } catch (err) {
@@ -449,12 +517,59 @@ function CoachFormModal({ coach, onClose, onSave }: CoachFormModalProps) {
             </label>
             <select
               value={role}
-              onChange={(e) => setRole(e.target.value as CoachRole)}
+              onChange={(e) => {
+                setRole(e.target.value as CoachRole);
+                // Clear pairing when role changes since pairing is role-dependent
+                setPairedWithId(null);
+              }}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
             >
               <option value="manager">Manager</option>
               <option value="assistant_coach">Assistant Coach</option>
             </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Division
+            </label>
+            <select
+              value={divisionId || ''}
+              onChange={(e) => setDivisionId(e.target.value || null)}
+              disabled={divisionsLoading}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+            >
+              <option value="">No division assigned</option>
+              {divisions.map(div => (
+                <option key={div.id} value={div.id}>
+                  {div.name}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              Which division this coach will manage/assist
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Paired With {role === 'manager' ? '(Assistant)' : '(Manager)'}
+            </label>
+            <select
+              value={pairedWithId || ''}
+              onChange={(e) => setPairedWithId(e.target.value || null)}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">No pairing</option>
+              {availableForPairing.map(c => (
+                <option key={c.id} value={c.id}>
+                  {c.fullName} ({c.role === 'manager' ? 'Manager' : 'Assistant'})
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              Paired coaches will be placed on the same team
+            </p>
           </div>
 
           {isEdit && (
