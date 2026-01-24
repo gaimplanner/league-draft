@@ -451,5 +451,14 @@ The application underwent a stabilization effort to prepare for production use b
 - Optimized team score calculations with SQL aggregation (Sum instead of Python iteration)
 - Created Locust load testing framework (`server/tests/load/`)
 
-### Remaining Phases (Not Yet Started)
-- Phase 6: Feature Completion (skip pick API, audit logging, Team Builder merge)
+### Phase 6: Feature Completion (Partial) ✅
+- Skip pick API: Already complete (backend service, API endpoint, frontend UI)
+- Team Builder merge: Merged `feature/team-builder` into staging
+  - Added skill-tiered draft algorithm for balanced distribution
+  - Added PlayerDetailDrawer for request analysis and inline team moves
+  - Improved request satisfaction prioritization over school clustering
+  - Added quick re-run testing workflow
+  - Fixed coach kids carryover from EvaluationImport
+
+### Remaining Work
+- Audit logging: Need persistent database storage for audit trail (currently logs to stdout only)
