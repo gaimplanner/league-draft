@@ -27,6 +27,9 @@ export function CoachesTab({ isAdmin }: CoachesTabProps) {
   const [showBulkEditModal, setShowBulkEditModal] = useState(false);
   const [bulkActionLoading, setBulkActionLoading] = useState(false);
 
+  // All coaches (unfiltered) for pairing dropdown
+  const [allCoachesForPairing, setAllCoachesForPairing] = useState<Coach[]>([]);
+
   const loadCoaches = useCallback(async () => {
     try {
       setLoading(true);
@@ -52,9 +55,23 @@ export function CoachesTab({ isAdmin }: CoachesTabProps) {
     }
   }, [roleFilter, showInactive, searchQuery]);
 
+  // Load all coaches (unfiltered) for pairing dropdown
+  const loadAllCoachesForPairing = useCallback(async () => {
+    try {
+      const data = await api.getCoaches({ showInactive: false });
+      setAllCoachesForPairing(data);
+    } catch (err) {
+      console.error('Failed to load coaches for pairing:', err);
+    }
+  }, []);
+
   useEffect(() => {
     loadCoaches();
   }, [loadCoaches]);
+
+  useEffect(() => {
+    loadAllCoachesForPairing();
+  }, [loadAllCoachesForPairing]);
 
   const handleDelete = async (coachId: string) => {
     if (deleteConfirm !== coachId) {
@@ -450,9 +467,12 @@ export function CoachesTab({ isAdmin }: CoachesTabProps) {
       {/* Add Coach Modal */}
       {showAddModal && (
         <CoachFormModal
-          allCoaches={coaches}
+          allCoaches={allCoachesForPairing}
           onClose={() => setShowAddModal(false)}
-          onSave={handleCoachCreated}
+          onSave={(coach) => {
+            handleCoachCreated(coach);
+            loadAllCoachesForPairing(); // Refresh pairing list
+          }}
         />
       )}
 
@@ -460,9 +480,12 @@ export function CoachesTab({ isAdmin }: CoachesTabProps) {
       {editingCoach && (
         <CoachFormModal
           coach={editingCoach}
-          allCoaches={coaches}
+          allCoaches={allCoachesForPairing}
           onClose={() => setEditingCoach(null)}
-          onSave={handleCoachUpdated}
+          onSave={(coach) => {
+            handleCoachUpdated(coach);
+            loadAllCoachesForPairing(); // Refresh pairing list
+          }}
         />
       )}
 
