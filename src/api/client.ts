@@ -848,6 +848,24 @@ export const api = {
     return handleResponse<{ deleted: number }>(response);
   },
 
+  /**
+   * Atomically sync players for a division.
+   * Uses a database transaction so if anything fails, nothing changes.
+   * This is the SAFE alternative to delete-then-create.
+   */
+  async syncPlayers(divisionId: string, players: Partial<Player>[]): Promise<Player[]> {
+    const response = await fetchWithCSRFRetry(`${API_BASE_URL}/players/sync/`, {
+      ...getDefaultOptions('POST'),
+      method: 'POST',
+      body: JSON.stringify({
+        division_id: divisionId,
+        players: players.map(transformPlayerToApi),
+      }),
+    }, true); // Use timeout for bulk operations
+    const data = await handleResponse<Record<string, unknown>[]>(response);
+    return data.map(transformPlayerFromApi);
+  },
+
   // ---------------------------------------------------------------------------
   // Teams
   // ---------------------------------------------------------------------------

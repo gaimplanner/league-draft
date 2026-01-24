@@ -32,6 +32,7 @@ from .views import (
     players_list_create,
     player_detail,
     players_bulk_create,
+    players_bulk_sync,
     players_delete_by_division,
     # Draft
     draft_retrieve,
@@ -87,6 +88,7 @@ urlpatterns = [
     # Players
     path("api/players/", players_list_create, name="players-list-create"),
     path("api/players/bulk/", players_bulk_create, name="players-bulk-create"),
+    path("api/players/sync/", players_bulk_sync, name="players-bulk-sync"),
     path("api/players/delete_by_division/", players_delete_by_division, name="players-delete-by-division"),
     path("api/players/<uuid:pk>/", player_detail, name="player-detail"),
 

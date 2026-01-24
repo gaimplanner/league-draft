@@ -23,49 +23,19 @@ function getErrorMessage(err: unknown): string {
 }
 
 /**
- * Save players to the API (bulk create/replace).
+ * Save players to the API using atomic sync.
  *
- * This operation fetches existing players as backup, deletes them, then creates new ones.
- * If creation fails, attempts to restore the backup to prevent data loss (Issue #2).
+ * This uses a database transaction to atomically replace all players.
+ * If anything fails, the transaction rolls back and NO data is lost.
  *
- * @throws Error if save fails and restore also fails (data loss scenario)
+ * @throws Error if sync fails (but original data is preserved)
  */
 export async function savePlayersToApi(divisionId: string, players: Partial<Player>[]): Promise<Player[]> {
-  // Fetch existing players as backup before delete (Issue #2)
-  let backup: Player[] = [];
   try {
-    const division = await api.getDivision(divisionId);
-    backup = division.players || [];
-  } catch {
-    // If we can't fetch backup, continue anyway - better to try than fail completely
-    console.warn('Could not fetch backup players before save');
-  }
-
-  try {
-    // Delete existing players first
-    await api.deleteAllPlayers(divisionId);
-
-    // Create new players
-    return await api.bulkCreatePlayers(divisionId, players);
+    // Use atomic sync - if anything fails, nothing changes
+    return await api.syncPlayers(divisionId, players);
   } catch (err) {
-    console.error('Failed to save players to API:', err);
-
-    // Attempt to restore backup if we have one (Issue #2)
-    if (backup.length > 0) {
-      console.warn('Attempting to restore backup players...');
-      try {
-        await api.bulkCreatePlayers(divisionId, backup);
-        console.log('Backup restored successfully');
-        // Re-throw with context that backup was restored
-        throw new Error(`Failed to save players (backup restored): ${getErrorMessage(err)}`);
-      } catch (restoreErr) {
-        console.error('Failed to restore backup:', restoreErr);
-        // Critical: both save and restore failed
-        throw new Error(`Critical: Failed to save players AND restore backup. Data may be lost. Original error: ${getErrorMessage(err)}`);
-      }
-    }
-
-    // No backup available, just re-throw original error
+    console.error('Failed to sync players to API:', err);
     throw new Error(`Failed to save players: ${getErrorMessage(err)}`);
   }
 }

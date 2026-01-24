@@ -5,6 +5,7 @@ Player views (replaces DRF PlayerViewSet).
 import math
 import uuid as uuid_module
 
+from django.db import transaction
 from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_http_methods
 
@@ -306,3 +307,145 @@ def players_delete_by_division(request):
 
     count, _ = Player.objects.filter(division_id=division_id).delete()
     return json_response({"deleted": count})
+
+
+@require_http_methods(["POST"])
+@csrf_protect
+@require_auth
+def players_bulk_sync(request):
+    """
+    Atomically sync players for a division.
+
+    This endpoint replaces all players in a division with the provided list,
+    using a database transaction to ensure atomicity. If anything fails,
+    the entire operation is rolled back and the original data is preserved.
+
+    This is the SAFE alternative to delete-then-create pattern.
+    """
+    organization = get_organization_from_request(request)
+
+    data, parse_error = parse_json_body(request)
+    if parse_error:
+        return json_response({"error": parse_error}, status=400)
+
+    cleaned, errors = validate_bulk_players_data(data)
+    if errors:
+        return json_response(errors, status=400)
+
+    division_id = cleaned["division_id"]
+    players_data = cleaned["players"]
+
+    try:
+        if request.user.role == "master_admin":
+            division = Division.objects.get(id=division_id)
+        elif organization:
+            division = Division.objects.get(id=division_id, organization=organization)
+        else:
+            return json_response({"error": "Division not found"}, status=404)
+    except Division.DoesNotExist:
+        return json_response({"error": "Division not found"}, status=404)
+
+    # Protect division during/after draft
+    if division.phase in ("draft", "complete"):
+        return json_response(
+            {"error": "Cannot sync players during or after draft. Use Reset Draft to start over."},
+            status=400
+        )
+
+    try:
+        # Use atomic transaction - if anything fails, everything rolls back
+        with transaction.atomic():
+            # Delete existing players
+            Player.objects.filter(division=division).delete()
+
+            created_players = []
+            old_to_new_id = {}
+            sibling_refs = {}
+
+            for player_data in players_data:
+                # Extract the original ID if present (for sibling mapping)
+                original_id = player_data.pop("id", None)
+
+                coach_team_id = player_data.pop("coach_team_id", None)
+                coach_team = None
+                if coach_team_id:
+                    try:
+                        coach_team = Team.objects.get(id=coach_team_id, division=division)
+                    except (Team.DoesNotExist, ValueError):
+                        pass
+
+                # Store sibling_id for later remapping, then clear it
+                old_sibling_id = player_data.pop("sibling_id", None)
+
+                # Sanitize remaining UUID fields - clear invalid values
+                for uuid_field in ["locked_to_team_id", "drafted_by_team_id"]:
+                    if uuid_field in player_data and player_data[uuid_field]:
+                        try:
+                            uuid_module.UUID(str(player_data[uuid_field]))
+                        except (ValueError, AttributeError):
+                            player_data[uuid_field] = None
+
+                # Convert UUID fields to actual relations
+                locked_to_team = None
+                if player_data.get("locked_to_team_id"):
+                    try:
+                        locked_to_team = Team.objects.get(id=player_data.pop("locked_to_team_id"))
+                    except Team.DoesNotExist:
+                        player_data.pop("locked_to_team_id", None)
+
+                drafted_by_team = None
+                if player_data.get("drafted_by_team_id"):
+                    try:
+                        drafted_by_team = Team.objects.get(id=player_data.pop("drafted_by_team_id"))
+                    except Team.DoesNotExist:
+                        player_data.pop("drafted_by_team_id", None)
+
+                player = Player.objects.create(
+                    division=division,
+                    coach_team=coach_team,
+                    locked_to_team=locked_to_team,
+                    drafted_by_team=drafted_by_team,
+                    **player_data,
+                )
+                created_players.append(player)
+
+                # Track ID mapping
+                if original_id:
+                    old_to_new_id[str(original_id)] = player.id
+
+                # Track sibling reference to fix later
+                if old_sibling_id:
+                    sibling_refs[player.id] = str(old_sibling_id)
+
+            # Second pass: Fix sibling_id references using the mapping
+            for player_id, old_sibling_id in sibling_refs.items():
+                new_sibling_id = old_to_new_id.get(old_sibling_id)
+                if new_sibling_id:
+                    Player.objects.filter(id=player_id).update(sibling_id=new_sibling_id)
+                    # Update the player object in our list too
+                    for p in created_players:
+                        if p.id == player_id:
+                            p.sibling_id = new_sibling_id
+                            break
+
+            # Update roster size
+            total_players = len(created_players)
+            division.roster_size = (
+                math.ceil(total_players / division.team_count)
+                if division.team_count > 0
+                else 0
+            )
+            division.save()
+
+        # Transaction committed successfully
+        return json_response(
+            [transform_player(p) for p in created_players],
+            status=200,
+        )
+
+    except Exception as e:
+        # Transaction rolled back automatically - original data preserved
+        return json_response(
+            {"error": f"Failed to sync players (no data was modified): {str(e)}"},
+            status=500
+        )
