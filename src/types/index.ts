@@ -599,6 +599,70 @@ export interface TradeCandidate {
   toTeamName: string;
 }
 
+// -----------------------------------------------------------------------------
+// Algorithm Teaching Tool Types (Correction Tracking)
+// -----------------------------------------------------------------------------
+
+/**
+ * Reason categories for why a user manually moved a player.
+ * Used to train the algorithm based on user corrections.
+ */
+export type CorrectionReason =
+  | 'coach-request-priority'    // Coach request should have been honored
+  | 'friend-request-priority'   // Friend request should have been honored
+  | 'balance-override'          // Balance was more important than requests
+  | 'sibling-issue'             // Sibling placement needed adjustment
+  | 'other';                    // Custom reason (notes required)
+
+/**
+ * Record of a user's manual correction to the algorithm's assignment.
+ * Used for pattern analysis and weight adjustment suggestions.
+ */
+export interface AssignmentCorrection {
+  id: string;
+  playerId: string;
+  playerName: string;
+  originalTeamId: string;
+  originalTeamName: string;
+  originalReason: string;        // The AssignmentReason from the algorithm
+  correctedTeamId: string;
+  correctedTeamName: string;
+  correctionReason: CorrectionReason;
+  correctionNotes?: string;      // Required when reason is 'other'
+  timestamp: string;             // ISO date string
+}
+
+/**
+ * Analysis result from correction patterns.
+ */
+export interface CorrectionAnalysis {
+  totalCorrections: number;
+  correctionsByReason: Record<CorrectionReason, number>;
+  patterns: CorrectionPattern[];
+  suggestedWeights: WeightSuggestion[];
+}
+
+/**
+ * A detected pattern in user corrections.
+ */
+export interface CorrectionPattern {
+  description: string;           // e.g., "Coach requests overrode balance 80% of the time"
+  count: number;
+  percentage: number;
+  confidence: number;            // 0-1, higher means more confident in the pattern
+}
+
+/**
+ * Suggested weight adjustment based on correction patterns.
+ */
+export interface WeightSuggestion {
+  weightKey: keyof RequestsFirstConfig;
+  currentValue: number;
+  suggestedValue: number;
+  reason: string;
+  confidence: number;            // 0-1
+}
+
 // Helper to create initial division state
 export function createInitialDivision(
   id: string,

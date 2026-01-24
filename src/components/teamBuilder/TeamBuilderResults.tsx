@@ -17,16 +17,20 @@ import {
   AssignmentResult,
   TeamBuilderPlayer,
 } from '../../utils/teamBuilderAlgorithm';
-import { Player } from '../../types';
+import { Player, AssignmentCorrection, CorrectionReason, RequestsFirstConfig } from '../../types';
 import { generateHappinessReportCSV, downloadCSV, HappinessReportPlayer } from '../../utils/exports';
 import { PlayerDetailDrawer } from './PlayerDetailDrawer';
+import { CorrectionSummary } from './CorrectionSummary';
 
 interface TeamBuilderResultsProps {
   result: TeamBuilderResult;
   players: Player[];
   onRerun?: () => void;
   onSwap?: (player1Id: string, player2Id: string) => void;
-  onMovePlayer?: (playerId: string, toTeamId: string) => void;
+  onMovePlayer?: (playerId: string, toTeamId: string, correctionData?: { reason: CorrectionReason; notes?: string }) => void;
+  corrections?: AssignmentCorrection[];
+  requestsFirstConfig?: RequestsFirstConfig;
+  onApplySuggestedWeights?: (newConfig: RequestsFirstConfig) => void;
 }
 
 /**
@@ -39,6 +43,9 @@ export const TeamBuilderResults = ({
   onRerun,
   onSwap,
   onMovePlayer,
+  corrections = [],
+  requestsFirstConfig,
+  onApplySuggestedWeights,
 }: TeamBuilderResultsProps) => {
   const [expandedTeamId, setExpandedTeamId] = useState<string | null>(null);
   const [view, setView] = useState<'teams' | 'players' | 'stats'>('teams');
@@ -239,6 +246,15 @@ export const TeamBuilderResults = ({
             ))}
           </ul>
         </div>
+      )}
+
+      {/* Correction Summary - Algorithm Teaching Tool */}
+      {corrections.length > 0 && requestsFirstConfig && (
+        <CorrectionSummary
+          corrections={corrections}
+          config={requestsFirstConfig}
+          onApplySuggestions={onApplySuggestedWeights}
+        />
       )}
 
       {/* View tabs */}

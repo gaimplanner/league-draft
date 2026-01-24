@@ -11,7 +11,7 @@ import {
   Lightbulb,
   Scale,
 } from 'lucide-react';
-import { Player } from '../../types';
+import { Player, CorrectionReason } from '../../types';
 import {
   TeamBuilderResult,
   PlayerHappiness,
@@ -19,6 +19,7 @@ import {
   AssignmentResult,
   AssignmentReason,
 } from '../../utils/teamBuilderAlgorithm';
+import { CorrectionPrompt } from './CorrectionPrompt';
 
 interface PlayerDetailDrawerProps {
   player: Player;
@@ -28,7 +29,7 @@ interface PlayerDetailDrawerProps {
   allPlayers: Player[];
   assignment?: AssignmentResult;
   onClose: () => void;
-  onMovePlayer?: (playerId: string, toTeamId: string) => void;
+  onMovePlayer?: (playerId: string, toTeamId: string, correctionData?: { reason: CorrectionReason; notes?: string }) => void;
   onSwapPlayers?: (player1Id: string, player2Id: string) => void;
 }
 
@@ -131,9 +132,18 @@ export const PlayerDetailDrawer = ({
   onSwapPlayers,
 }: PlayerDetailDrawerProps) => {
   // 'confirm' mode is used when a suggested move is clicked - skip team selection
-  const [moveMode, setMoveMode] = useState<'none' | 'move' | 'swap' | 'confirm'>('none');
+  // 'correction' mode shows the CorrectionPrompt after a move is confirmed
+  const [moveMode, setMoveMode] = useState<'none' | 'move' | 'swap' | 'confirm' | 'correction'>('none');
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [selectedSwapPlayerId, setSelectedSwapPlayerId] = useState<string | null>(null);
+
+  // Pending move state for correction prompt flow
+  const [pendingMove, setPendingMove] = useState<{
+    playerId: string;
+    toTeamId: string;
+    fromTeamName: string;
+    toTeamName: string;
+  } | null>(null);
 
   const playerMap = useMemo(() => new Map(allPlayers.map(p => [p.id, p])), [allPlayers]);
 
@@ -294,9 +304,39 @@ export const PlayerDetailDrawer = ({
 
   const handleMove = () => {
     if (selectedTeamId && onMovePlayer) {
-      onMovePlayer(player.id, selectedTeamId);
+      const toTeam = result.teamSummaries.find(t => t.teamId === selectedTeamId);
+      // Set up pending move and show correction prompt
+      setPendingMove({
+        playerId: player.id,
+        toTeamId: selectedTeamId,
+        fromTeamName: currentTeam.teamName || currentTeam.coachName,
+        toTeamName: toTeam?.teamName || toTeam?.coachName || 'Unknown',
+      });
+      setMoveMode('correction');
+    }
+  };
+
+  const handleCorrectionSave = (reason: CorrectionReason, notes?: string) => {
+    if (pendingMove && onMovePlayer) {
+      // Execute the move with correction data
+      onMovePlayer(pendingMove.playerId, pendingMove.toTeamId, { reason, notes });
+      // Reset state and close drawer
+      setPendingMove(null);
       setMoveMode('none');
       setSelectedTeamId(null);
+      onClose();
+    }
+  };
+
+  const handleCorrectionSkip = () => {
+    if (pendingMove && onMovePlayer) {
+      // Execute the move without correction data
+      onMovePlayer(pendingMove.playerId, pendingMove.toTeamId);
+      // Reset state and close drawer
+      setPendingMove(null);
+      setMoveMode('none');
+      setSelectedTeamId(null);
+      onClose();
     }
   };
 
@@ -856,6 +896,19 @@ export const PlayerDetailDrawer = ({
                 Confirm Swap
               </button>
             </div>
+          </div>
+        )}
+
+        {/* Correction prompt - shown after confirming a move */}
+        {moveMode === 'correction' && pendingMove && (
+          <div className="px-4 py-3">
+            <CorrectionPrompt
+              playerName={player.name}
+              fromTeamName={pendingMove.fromTeamName}
+              toTeamName={pendingMove.toTeamName}
+              onSave={handleCorrectionSave}
+              onSkip={handleCorrectionSkip}
+            />
           </div>
         )}
 

@@ -18,10 +18,10 @@ import {
   Edit3,
   RefreshCw,
 } from 'lucide-react';
-import { Division, Player, Team, ResolvedRequest, RequestsFirstConfig, DEFAULT_REQUESTS_FIRST_CONFIG, TradeCandidate, AppPhase } from '../types';
+import { Division, Player, Team, ResolvedRequest, RequestsFirstConfig, DEFAULT_REQUESTS_FIRST_CONFIG, TradeCandidate, AppPhase, AssignmentCorrection, CorrectionReason } from '../types';
 import { RegistrationRecord } from '../types/evaluation';
 import { EvaluationImport } from './evaluation';
-import { NameMatchResolver, TeamBuilderResults, RequestConfirmation, TradeSuggestions } from './teamBuilder';
+import { NameMatchResolver, TeamBuilderResults, RequestConfirmation, TradeSuggestions, WeightSlider } from './teamBuilder';
 import { TradeModal } from './TradeModal';
 import {
   runTeamBuilderAlgorithm,
@@ -56,6 +56,7 @@ import {
   CoachKidMatch,
   SiblingMatch,
 } from '../utils/coachKidDetection';
+import { analyzeCorrections } from '../utils/correctionAnalysis';
 import * as XLSX from 'xlsx';
 
 // -----------------------------------------------------------------------------
@@ -143,12 +144,15 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
   // Request confirmation state
   const [resolvedRequests, setResolvedRequests] = useState<ResolvedRequest[]>([]);
   const [algorithmMode, setAlgorithmMode] = useState<AlgorithmMode>('skill-tiered');
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [requestsFirstConfig, _setRequestsFirstConfig] = useState<RequestsFirstConfig>(DEFAULT_REQUESTS_FIRST_CONFIG);
+  const [requestsFirstConfig, setRequestsFirstConfig] = useState<RequestsFirstConfig>(DEFAULT_REQUESTS_FIRST_CONFIG);
 
   // Trade suggestions state
   const [appliedTradeIds, setAppliedTradeIds] = useState<Set<string>>(new Set());
   const [dismissedTradeIds, setDismissedTradeIds] = useState<Set<string>>(new Set());
+
+  // Algorithm Teaching Tool - Correction tracking state
+  const [corrections, setCorrections] = useState<AssignmentCorrection[]>([]);
+  const [originalAssignments, setOriginalAssignments] = useState<Map<string, { teamId: string; teamName: string; reason: string }>>(new Map());
 
   // Player search for debugging request resolution
   const [playerSearchQuery, setPlayerSearchQuery] = useState('');
@@ -900,6 +904,24 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
   // Step 4: Generate
   // -----------------------------------------------------------------------------
 
+  // Helper to populate originalAssignments from algorithm result
+  const populateOriginalAssignments = useCallback((result: TeamBuilderResult, teamsArr: Team[]) => {
+    const teamNameMap = new Map(teamsArr.map(t => [t.id, t.teamName || t.headCoach || `Team ${t.draftPosition}`]));
+    const newOriginals = new Map<string, { teamId: string; teamName: string; reason: string }>();
+
+    for (const assignment of result.assignments) {
+      newOriginals.set(assignment.playerId, {
+        teamId: assignment.teamId,
+        teamName: teamNameMap.get(assignment.teamId) || 'Unknown',
+        reason: assignment.reason,
+      });
+    }
+
+    setOriginalAssignments(newOriginals);
+    // Reset corrections when rerunning algorithm
+    setCorrections([]);
+  }, []);
+
   const handleRunAlgorithm = useCallback(() => {
     // Create mapping from evaluation team IDs (team-0, team-1, etc.) to actual division team IDs
     const evalTeamIdToRealId = new Map<string, string>();
@@ -988,6 +1010,9 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
       setRequestsFirstResult(result as unknown as RequestsFirstResult);
       setAlgorithmResult(result);
 
+      // Populate original assignments for correction tracking
+      populateOriginalAssignments(result, teams);
+
       // Reset trade state
       setAppliedTradeIds(new Set());
       setDismissedTradeIds(new Set());
@@ -1025,6 +1050,9 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
       setRequestsFirstResult(result);
       setAlgorithmResult(result);
 
+      // Populate original assignments for correction tracking
+      populateOriginalAssignments(result, teams);
+
       // Reset trade state
       setAppliedTradeIds(new Set());
       setDismissedTradeIds(new Set());
@@ -1052,6 +1080,9 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
       setAlgorithmResult(result);
       setRequestsFirstResult(null);
 
+      // Populate original assignments for correction tracking
+      populateOriginalAssignments(result, teams);
+
       // Apply assignments to get final state
       const { players: updatedPlayers, teams: updatedTeams } = applyAssignments(
         teamBuilderPlayers,
@@ -1072,7 +1103,7 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
     }
 
     setStep('results');
-  }, [evalPlayers, teams, registrationPlayers, config, normalizationResult, algorithmMode, resolvedRequests, requestsFirstConfig, onUpdatePlayers, onUpdateTeams]);
+  }, [evalPlayers, teams, registrationPlayers, config, normalizationResult, algorithmMode, resolvedRequests, requestsFirstConfig, onUpdatePlayers, onUpdateTeams, populateOriginalAssignments]);
 
   // Handle applying a suggested trade
   const handleApplyTrade = useCallback((trade: TradeCandidate) => {
@@ -1135,6 +1166,20 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
   // Handle dismissing a trade
   const handleDismissTrade = useCallback((tradeId: string) => {
     setDismissedTradeIds(prev => new Set([...prev, tradeId]));
+  }, []);
+
+  // Handle applying suggested weights from correction analysis and rerunning
+  const handleApplySuggestedWeights = useCallback((newConfig: RequestsFirstConfig) => {
+    // Update the config with suggested weights
+    setRequestsFirstConfig(newConfig);
+
+    // Go back to configure step to run with new weights
+    setAlgorithmResult(null);
+    setFinalPlayers([]);
+    setFinalTeams([]);
+    setStep('configure');
+
+    console.log('Applied suggested weights and going to configure step:', newConfig);
   }, []);
 
   // -----------------------------------------------------------------------------
@@ -1340,12 +1385,38 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
   }, [finalPlayers, finalTeams, algorithmResult, onUpdatePlayers, onUpdateTeams]);
 
   // Handle moving a player to a different team (no swap)
-  const handleMovePlayer = useCallback((playerId: string, toTeamId: string) => {
+  // Optional correction data is used to track why the user made this correction
+  const handleMovePlayer = useCallback((
+    playerId: string,
+    toTeamId: string,
+    correctionData?: { reason: CorrectionReason; notes?: string }
+  ) => {
     const player = finalPlayers.find(p => p.id === playerId);
     if (!player) return;
 
     const fromTeamId = player.draftedByTeamId;
     if (!fromTeamId || fromTeamId === toTeamId) return;
+
+    // Track correction if this is a move from the original algorithm assignment
+    const originalAssignment = originalAssignments.get(playerId);
+    if (originalAssignment && correctionData) {
+      const toTeam = finalTeams.find(t => t.id === toTeamId);
+      const correction: AssignmentCorrection = {
+        id: `correction-${Date.now()}-${playerId}`,
+        playerId,
+        playerName: player.name,
+        originalTeamId: originalAssignment.teamId,
+        originalTeamName: originalAssignment.teamName,
+        originalReason: originalAssignment.reason,
+        correctedTeamId: toTeamId,
+        correctedTeamName: toTeam?.teamName || toTeam?.headCoach || 'Unknown',
+        correctionReason: correctionData.reason,
+        correctionNotes: correctionData.notes,
+        timestamp: new Date().toISOString(),
+      };
+      setCorrections(prev => [...prev, correction]);
+      console.log('Recorded correction:', correction);
+    }
 
     // Update player assignment
     const updatedPlayers = finalPlayers.map(p => {
@@ -1430,7 +1501,7 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
         };
       });
     }
-  }, [finalPlayers, finalTeams, algorithmResult, onUpdatePlayers, onUpdateTeams]);
+  }, [finalPlayers, finalTeams, algorithmResult, onUpdatePlayers, onUpdateTeams, originalAssignments]);
 
   // -----------------------------------------------------------------------------
   // Render
@@ -2033,6 +2104,88 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
                 </div>
               </div>
             </div>
+
+            {/* Weight Configuration Panel - only for skill-tiered or requests-first */}
+            {(algorithmMode === 'skill-tiered' || algorithmMode === 'requests-first') && (
+              <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                      Request Weights
+                    </h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      Adjust how the algorithm prioritizes different request types.
+                    </p>
+                  </div>
+                  {/* Show learned preferences badge if we have corrections */}
+                  {corrections.length >= 3 && (() => {
+                    const analysis = analyzeCorrections(corrections, requestsFirstConfig);
+                    return analysis.suggestedWeights.length > 0 ? (
+                      <div className="flex items-center gap-2 px-3 py-1 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 rounded-full text-xs font-medium">
+                        <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></span>
+                        Learned Preferences Available
+                      </div>
+                    ) : null;
+                  })()}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <WeightSlider
+                    label="Two-Way Teammate Requests"
+                    value={requestsFirstConfig.twoWayTeammateWeight}
+                    min={0}
+                    max={150}
+                    step={10}
+                    onChange={(value) => setRequestsFirstConfig(prev => ({ ...prev, twoWayTeammateWeight: value }))}
+                    description="Weight for mutual friend requests (both players requested each other)"
+                    suggestedValue={corrections.length >= 3 ? analyzeCorrections(corrections, requestsFirstConfig).suggestedWeights.find(s => s.weightKey === 'twoWayTeammateWeight')?.suggestedValue : undefined}
+                  />
+
+                  <WeightSlider
+                    label="One-Way Teammate Requests"
+                    value={requestsFirstConfig.oneWayTeammateWeight}
+                    min={0}
+                    max={100}
+                    step={10}
+                    onChange={(value) => setRequestsFirstConfig(prev => ({ ...prev, oneWayTeammateWeight: value }))}
+                    description="Weight for one-sided friend requests"
+                    suggestedValue={corrections.length >= 3 ? analyzeCorrections(corrections, requestsFirstConfig).suggestedWeights.find(s => s.weightKey === 'oneWayTeammateWeight')?.suggestedValue : undefined}
+                  />
+
+                  <WeightSlider
+                    label="Coach Requests"
+                    value={requestsFirstConfig.coachRequestWeight}
+                    min={0}
+                    max={100}
+                    step={10}
+                    onChange={(value) => setRequestsFirstConfig(prev => ({ ...prev, coachRequestWeight: value }))}
+                    description="Weight for requests to be on a specific coach's team"
+                    suggestedValue={corrections.length >= 3 ? analyzeCorrections(corrections, requestsFirstConfig).suggestedWeights.find(s => s.weightKey === 'coachRequestWeight')?.suggestedValue : undefined}
+                  />
+
+                  <WeightSlider
+                    label="School Clustering"
+                    value={requestsFirstConfig.schoolClusterWeight}
+                    min={0}
+                    max={50}
+                    step={5}
+                    onChange={(value) => setRequestsFirstConfig(prev => ({ ...prev, schoolClusterWeight: value }))}
+                    description="Weight for placing players from the same school together"
+                    suggestedValue={corrections.length >= 3 ? analyzeCorrections(corrections, requestsFirstConfig).suggestedWeights.find(s => s.weightKey === 'schoolClusterWeight')?.suggestedValue : undefined}
+                  />
+                </div>
+
+                {/* Reset to defaults */}
+                <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 flex justify-end">
+                  <button
+                    onClick={() => setRequestsFirstConfig(DEFAULT_REQUESTS_FIRST_CONFIG)}
+                    className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
+                  >
+                    Reset to Defaults
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Teams & Detection - Collapsible Panel */}
             <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
@@ -2979,6 +3132,9 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
               players={finalPlayers}
               onRerun={handleRerun}
               onMovePlayer={handleMovePlayer}
+              corrections={corrections}
+              requestsFirstConfig={requestsFirstConfig}
+              onApplySuggestedWeights={handleApplySuggestedWeights}
             />
 
             {/* Trade Suggestions (only for requests-first algorithm) */}
