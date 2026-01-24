@@ -511,13 +511,10 @@ function CoachFormModal({ coach, allCoaches, onClose, onSave }: CoachFormModalPr
       .finally(() => setDivisionsLoading(false));
   }, []);
 
-  // Get available coaches for pairing (opposite role, not already paired, not self)
+  // Get available coaches for pairing (not already paired, not self)
   const availableForPairing = allCoaches.filter(c => {
     // Can't pair with self
     if (coach && c.id === coach.id) return false;
-    // Must be opposite role (manager pairs with assistant)
-    if (role === 'manager' && c.role !== 'assistant_coach') return false;
-    if (role === 'assistant_coach' && c.role !== 'manager') return false;
     // Only active coaches
     if (!c.isActive) return false;
     // Not already paired with someone else (unless it's the current pairing)
@@ -683,11 +680,7 @@ function CoachFormModal({ coach, allCoaches, onClose, onSave }: CoachFormModalPr
             </label>
             <select
               value={role}
-              onChange={(e) => {
-                setRole(e.target.value as CoachRole);
-                // Clear pairing when role changes since pairing is role-dependent
-                setPairedWithId(null);
-              }}
+              onChange={(e) => setRole(e.target.value as CoachRole)}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
             >
               <option value="manager">Manager</option>
@@ -719,7 +712,7 @@ function CoachFormModal({ coach, allCoaches, onClose, onSave }: CoachFormModalPr
 
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Paired With {role === 'manager' ? '(Assistant)' : '(Manager)'}
+              Paired With
             </label>
             <select
               value={pairedWithId || ''}
