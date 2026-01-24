@@ -29,15 +29,20 @@ export function isDivisionPartiallySetup(division: Division | null): boolean {
   );
 }
 
-export function useDivisions() {
+export function useDivisions(isAuthenticated: boolean = false) {
   const [, setDivisionIds] = useState<string[]>([]);
   const [summaries, setSummaries] = useState<DivisionSummary[]>([]);
   const [activeDivision, setActiveDivision] = useState<Division | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Load divisions on mount
+  // Load divisions when authenticated
   useEffect(() => {
+    // Only fetch when authenticated
+    if (!isAuthenticated) {
+      return;
+    }
+
     setIsLoading(true);
     api.listDivisions()
       .then((data) => {
@@ -50,7 +55,7 @@ export function useDivisions() {
         setError('Failed to load divisions');
       })
       .finally(() => setIsLoading(false));
-  }, []);
+  }, [isAuthenticated]);
 
   // Check if a division name already exists (case-insensitive)
   // Only check divisions that have players - empty ones will be cleaned up by the backend

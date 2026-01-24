@@ -106,7 +106,7 @@ function App() {
     deleteDivision,
     clearActiveDivision,
     refreshDivisions,
-  } = useDivisions();
+  } = useDivisions(isAuthenticated);
 
   const {
     phase,
