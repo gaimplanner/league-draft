@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import { UserPlus, Trash2, Edit2, Search, AlertCircle, Loader2, ClipboardList, X, Link } from 'lucide-react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { UserPlus, Trash2, Edit2, Search, AlertCircle, Loader2, ClipboardList, X, Link, CheckSquare, Square } from 'lucide-react';
 import { api, ApiError } from '../../api/client';
 import { Coach, CoachRole, CoachCreateData, CoachUpdateData, DivisionSummary } from '../../types';
 
@@ -21,6 +21,11 @@ export function CoachesTab({ isAdmin }: CoachesTabProps) {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [editingCoach, setEditingCoach] = useState<Coach | null>(null);
+
+  // Bulk selection state
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showBulkEditModal, setShowBulkEditModal] = useState(false);
+  const [bulkActionLoading, setBulkActionLoading] = useState(false);
 
   const loadCoaches = useCallback(async () => {
     try {
@@ -92,6 +97,81 @@ export function CoachesTab({ isAdmin }: CoachesTabProps) {
 
   const formatRole = (role: CoachRole) => {
     return role === 'manager' ? 'Manager' : 'Assistant Coach';
+  };
+
+  // Bulk selection handlers
+  const allSelected = useMemo(() =>
+    coaches.length > 0 && coaches.every(c => selectedIds.has(c.id)),
+    [coaches, selectedIds]
+  );
+
+  const someSelected = useMemo(() =>
+    selectedIds.size > 0 && !allSelected,
+    [selectedIds, allSelected]
+  );
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(coaches.map(c => c.id)));
+    }
+  };
+
+  const toggleSelect = (coachId: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(coachId)) {
+        next.delete(coachId);
+      } else {
+        next.add(coachId);
+      }
+      return next;
+    });
+  };
+
+  const clearSelection = () => {
+    setSelectedIds(new Set());
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+
+    const confirmMsg = `Are you sure you want to delete ${selectedIds.size} coach${selectedIds.size > 1 ? 'es' : ''}? This action cannot be undone.`;
+    if (!window.confirm(confirmMsg)) return;
+
+    const previousCoaches = [...coaches];
+    try {
+      setBulkActionLoading(true);
+      // Optimistically update UI
+      setCoaches(coaches.filter(c => !selectedIds.has(c.id)));
+
+      // Delete all selected coaches
+      await Promise.all(
+        Array.from(selectedIds).map(id => api.deleteCoach(id))
+      );
+
+      clearSelection();
+    } catch (err) {
+      setCoaches(previousCoaches);
+      if (err instanceof ApiError) {
+        setError(err.details?.error as string || 'Failed to delete coaches');
+      } else {
+        setError('Failed to delete some coaches');
+      }
+    } finally {
+      setBulkActionLoading(false);
+    }
+  };
+
+  const handleBulkEditComplete = (updatedCoaches: Coach[]) => {
+    // Update the coaches in the list with the new data
+    setCoaches(prev => {
+      const updatedMap = new Map(updatedCoaches.map(c => [c.id, c]));
+      return prev.map(c => updatedMap.get(c.id) || c);
+    });
+    setShowBulkEditModal(false);
+    clearSelection();
   };
 
   if (loading) {
@@ -177,6 +257,45 @@ export function CoachesTab({ isAdmin }: CoachesTabProps) {
         )}
       </div>
 
+      {/* Bulk Actions Bar */}
+      {isAdmin && selectedIds.size > 0 && (
+        <div className="flex items-center justify-between p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
+              {selectedIds.size} selected
+            </span>
+            <button
+              onClick={clearSelection}
+              className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
+            >
+              Clear selection
+            </button>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowBulkEditModal(true)}
+              disabled={bulkActionLoading}
+              className="flex items-center gap-2 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+            >
+              <Edit2 className="w-4 h-4" />
+              Bulk Edit
+            </button>
+            <button
+              onClick={handleBulkDelete}
+              disabled={bulkActionLoading}
+              className="flex items-center gap-2 px-3 py-1.5 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
+            >
+              {bulkActionLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Trash2 className="w-4 h-4" />
+              )}
+              Delete
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Coaches List */}
       <div className="space-y-2">
         {coaches.length === 0 ? (
@@ -184,20 +303,57 @@ export function CoachesTab({ isAdmin }: CoachesTabProps) {
             {searchQuery || roleFilter ? 'No coaches match your filters.' : 'No coaches yet. Add your first coach to get started.'}
           </div>
         ) : (
-          coaches.map((coach) => {
+          <>
+            {/* Select All Header (Admin only) */}
+            {isAdmin && coaches.length > 0 && (
+              <div className="flex items-center gap-3 px-4 py-2 border-b border-gray-200 dark:border-gray-700">
+                <button
+                  onClick={toggleSelectAll}
+                  className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+                >
+                  {allSelected ? (
+                    <CheckSquare className="w-5 h-5 text-blue-600" />
+                  ) : someSelected ? (
+                    <div className="w-5 h-5 border-2 border-blue-600 rounded flex items-center justify-center">
+                      <div className="w-2.5 h-0.5 bg-blue-600" />
+                    </div>
+                  ) : (
+                    <Square className="w-5 h-5" />
+                  )}
+                  Select all
+                </button>
+              </div>
+            )}
+            {coaches.map((coach) => {
             const isLoading = actionLoading === coach.id;
             const showDeleteConfirm = deleteConfirm === coach.id;
+            const isSelected = selectedIds.has(coach.id);
 
             return (
               <div
                 key={coach.id}
                 className={`flex items-center justify-between p-4 rounded-lg ${
-                  coach.isActive
+                  isSelected
+                    ? 'bg-blue-50 dark:bg-blue-900/20 ring-1 ring-blue-300 dark:ring-blue-700'
+                    : coach.isActive
                     ? 'bg-gray-50 dark:bg-gray-700/50'
                     : 'bg-gray-100 dark:bg-gray-800/50 opacity-60'
                 }`}
               >
                 <div className="flex items-center gap-3">
+                  {/* Selection Checkbox (Admin only) */}
+                  {isAdmin && (
+                    <button
+                      onClick={() => toggleSelect(coach.id)}
+                      className="flex-shrink-0"
+                    >
+                      {isSelected ? (
+                        <CheckSquare className="w-5 h-5 text-blue-600" />
+                      ) : (
+                        <Square className="w-5 h-5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300" />
+                      )}
+                    </button>
+                  )}
                   <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center">
                     <span className="text-blue-600 dark:text-blue-400 font-medium">
                       {coach.firstName.charAt(0).toUpperCase()}
@@ -277,9 +433,19 @@ export function CoachesTab({ isAdmin }: CoachesTabProps) {
                 )}
               </div>
             );
-          })
+          })}
+          </>
         )}
       </div>
+
+      {/* Bulk Edit Modal */}
+      {showBulkEditModal && (
+        <BulkEditModal
+          selectedCoaches={coaches.filter(c => selectedIds.has(c.id))}
+          onClose={() => setShowBulkEditModal(false)}
+          onSave={handleBulkEditComplete}
+        />
+      )}
 
       {/* Add Coach Modal */}
       {showAddModal && (
@@ -713,6 +879,182 @@ Bob Wilson"
             >
               {loading && <Loader2 className="w-4 h-4 animate-spin" />}
               Add Coaches
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// -------------------------------------------------------------------
+// Bulk Edit Modal
+// -------------------------------------------------------------------
+
+interface BulkEditModalProps {
+  selectedCoaches: Coach[];
+  onClose: () => void;
+  onSave: (coaches: Coach[]) => void;
+}
+
+function BulkEditModal({ selectedCoaches, onClose, onSave }: BulkEditModalProps) {
+  const [divisionId, setDivisionId] = useState<string | null | 'no-change'>('no-change');
+  const [role, setRole] = useState<CoachRole | 'no-change'>('no-change');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [divisions, setDivisions] = useState<DivisionSummary[]>([]);
+  const [divisionsLoading, setDivisionsLoading] = useState(true);
+
+  // Load divisions for the dropdown
+  useEffect(() => {
+    api.listDivisions()
+      .then(setDivisions)
+      .catch(err => console.error('Failed to load divisions:', err))
+      .finally(() => setDivisionsLoading(false));
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (divisionId === 'no-change' && role === 'no-change') {
+      setError('Please select at least one field to update');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      const updateData: CoachUpdateData = {};
+      if (divisionId !== 'no-change') {
+        updateData.divisionId = divisionId;
+      }
+      if (role !== 'no-change') {
+        updateData.role = role;
+      }
+
+      // Update all selected coaches
+      const updatedCoaches = await Promise.all(
+        selectedCoaches.map(coach => api.updateCoach(coach.id, updateData))
+      );
+
+      onSave(updatedCoaches);
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(err.details?.error as string || 'Failed to update coaches');
+      } else {
+        setError('Failed to update some coaches');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full">
+        <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+            Bulk Edit ({selectedCoaches.length} coaches)
+          </h3>
+          <button
+            onClick={onClose}
+            className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+          >
+            <X className="w-5 h-5 text-gray-500" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-4 space-y-4">
+          <div className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+            Update the following fields for all selected coaches. Leave a field as "No change" to keep existing values.
+          </div>
+
+          {error && (
+            <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+              <span className="text-sm text-red-700 dark:text-red-300">{error}</span>
+            </div>
+          )}
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Division
+            </label>
+            <select
+              value={divisionId === null ? 'none' : divisionId}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val === 'no-change') {
+                  setDivisionId('no-change');
+                } else if (val === 'none') {
+                  setDivisionId(null);
+                } else {
+                  setDivisionId(val);
+                }
+              }}
+              disabled={divisionsLoading}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+            >
+              <option value="no-change">-- No change --</option>
+              <option value="none">No division assigned</option>
+              {divisions.map(div => (
+                <option key={div.id} value={div.id}>
+                  {div.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Role
+            </label>
+            <select
+              value={role}
+              onChange={(e) => setRole(e.target.value as CoachRole | 'no-change')}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="no-change">-- No change --</option>
+              <option value="manager">Manager</option>
+              <option value="assistant_coach">Assistant Coach</option>
+            </select>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              Note: Changing role will clear any existing pairings
+            </p>
+          </div>
+
+          {/* Preview of selected coaches */}
+          <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-3 max-h-40 overflow-y-auto">
+            <div className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">
+              Selected coaches:
+            </div>
+            <div className="space-y-1">
+              {selectedCoaches.map(coach => (
+                <div key={coach.id} className="text-sm text-gray-700 dark:text-gray-300">
+                  {coach.fullName}
+                  <span className="text-gray-400 dark:text-gray-500 ml-2">
+                    ({coach.role === 'manager' ? 'Manager' : 'Assistant'})
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={loading || (divisionId === 'no-change' && role === 'no-change')}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+            >
+              {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+              Update {selectedCoaches.length} Coaches
             </button>
           </div>
         </form>
