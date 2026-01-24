@@ -284,7 +284,22 @@ export const TeamBuilderResults = ({
           {result.teamSummaries.map((team) => {
             const isExpanded = expandedTeamId === team.teamId;
             const teamPlayers = getTeamPlayers(team.teamId);
-            const balanceClass = team.meanDeltaPercent >= 0
+
+            // Calculate scores from actual roster data (not from potentially stale teamSummary)
+            const sortedByScore = [...teamPlayers].sort((a, b) => b.player.totalScore - a.player.totalScore);
+            const totalScore = teamPlayers.reduce((sum, tp) => sum + tp.player.totalScore, 0);
+            const top8Score = sortedByScore.slice(0, 8).reduce((sum, tp) => sum + tp.player.totalScore, 0);
+            const avgScore = teamPlayers.length > 0 ? totalScore / teamPlayers.length : 0;
+
+            // Calculate mean across all teams for delta
+            const allTeamsAvg = result.teamSummaries.reduce((sum, t) => {
+              const tPlayers = getTeamPlayers(t.teamId);
+              const tTotal = tPlayers.reduce((s, tp) => s + tp.player.totalScore, 0);
+              return sum + (tPlayers.length > 0 ? tTotal / tPlayers.length : 0);
+            }, 0) / result.teamSummaries.length;
+
+            const deltaPercent = allTeamsAvg > 0 ? ((avgScore - allTeamsAvg) / allTeamsAvg) * 100 : 0;
+            const balanceClass = deltaPercent >= 0
               ? 'text-green-600 dark:text-green-400'
               : 'text-red-600 dark:text-red-400';
 
@@ -303,17 +318,30 @@ export const TeamBuilderResults = ({
                         {team.teamName || team.coachName}
                       </span>
                       <span className="ml-2 text-sm text-gray-500 dark:text-gray-400">
-                        ({team.rosterCount} players)
+                        ({teamPlayers.length} players)
                       </span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-6">
                     <div className="text-right">
+                      <div className="text-xs text-gray-500 dark:text-gray-400">Total</div>
                       <div className="text-sm font-medium text-gray-900 dark:text-white">
-                        {team.averageScore.toFixed(1)} avg
+                        {totalScore.toFixed(1)}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xs text-gray-500 dark:text-gray-400">Top 8</div>
+                      <div className="text-sm font-medium text-gray-900 dark:text-white">
+                        {top8Score.toFixed(1)}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xs text-gray-500 dark:text-gray-400">Avg</div>
+                      <div className="text-sm font-medium text-gray-900 dark:text-white">
+                        {avgScore.toFixed(1)}
                       </div>
                       <div className={`text-xs ${balanceClass}`}>
-                        {team.meanDeltaPercent >= 0 ? '+' : ''}{team.meanDeltaPercent.toFixed(1)}%
+                        {deltaPercent >= 0 ? '+' : ''}{deltaPercent.toFixed(1)}%
                       </div>
                     </div>
                     {isExpanded ? (
