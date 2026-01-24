@@ -1,8 +1,12 @@
 from django.db import transaction
+from django.db.models import Max, Sum
 from django.utils import timezone
 from uuid import UUID
 
 from .models import Division, Team, Player, DraftState, DraftPick, Trade
+from .logging import get_logger, log_draft_event
+
+logger = get_logger(__name__)
 
 
 class DraftService:
@@ -60,6 +64,14 @@ class DraftService:
         # Check for mandatory pick
         cls._check_and_set_mandatory_pick(draft_state, current_team, 1)
 
+        log_draft_event(
+            "start",
+            draft_state_id=str(draft_state.id),
+            division_id=str(division_id),
+            draft_format=draft_format,
+            team_count=len(draft_order),
+        )
+
         return draft_state
 
     @classmethod
@@ -68,11 +80,7 @@ class DraftService:
         cls, draft_state_id: UUID, player_id: UUID, team_id: UUID
     ) -> DraftState:
         """Draft a player."""
-        import logging
-        logger = logging.getLogger(__name__)
-
         draft_state = DraftState.objects.select_for_update().get(id=draft_state_id)
-        logger.info(f"[draft_player] Starting pick. current_round={draft_state.current_round}, current_pick_in_round={draft_state.current_pick_in_round}, picks_so_far={draft_state.picks.count()}")
 
         if draft_state.is_draft_complete:
             raise ValueError("Draft is already complete")
@@ -94,7 +102,9 @@ class DraftService:
             raise ValueError("Player is already drafted")
 
         team = Team.objects.get(id=team_id)
-        overall_pick = draft_state.picks.count() + 1
+        # Use Max aggregation for atomic pick number calculation (prevents race conditions)
+        max_pick = draft_state.picks.aggregate(Max('pick'))['pick__max'] or 0
+        overall_pick = max_pick + 1
 
         # Create the pick
         DraftPick.objects.create(
@@ -112,8 +122,8 @@ class DraftService:
         player.drafted_at_pick = overall_pick
         player.save()
 
-        # Update team score
-        team.total_score = sum(p.total_score for p in team.roster.all())
+        # Update team score using database aggregation (avoids N+1)
+        team.total_score = team.roster.aggregate(total=Sum("total_score"))["total"] or 0
         age_breakdown = dict(team.age_breakdown)
         age_key = str(player.little_league_age)
         age_breakdown[age_key] = age_breakdown.get(age_key, 0) + 1
@@ -125,6 +135,17 @@ class DraftService:
 
         # Advance to next pick
         cls._advance_to_next_pick(draft_state)
+
+        log_draft_event(
+            "pick",
+            draft_state_id=str(draft_state_id),
+            player_id=str(player_id),
+            player_name=player.name,
+            team_id=str(team_id),
+            team_name=team.name,
+            round=draft_state.current_round,
+            pick_number=overall_pick,
+        )
 
         draft_state.refresh_from_db()
         return draft_state
@@ -156,7 +177,9 @@ class DraftService:
         if available_players >= remaining_spots:
             raise ValueError("Cannot skip - all remaining players must be drafted")
 
-        overall_pick = draft_state.picks.count() + 1
+        # Use Max aggregation for atomic pick number calculation (prevents race conditions)
+        max_pick = draft_state.picks.aggregate(Max('pick'))['pick__max'] or 0
+        overall_pick = max_pick + 1
 
         # Create a skipped pick record (no player assigned)
         DraftPick.objects.create(
@@ -170,6 +193,14 @@ class DraftService:
 
         # Advance to next pick
         cls._advance_to_next_pick(draft_state)
+
+        log_draft_event(
+            "skip",
+            draft_state_id=str(draft_state_id),
+            team_id=str(team_id),
+            round=draft_state.current_round,
+            pick_number=overall_pick,
+        )
 
         draft_state.refresh_from_db()
         return draft_state
@@ -207,6 +238,13 @@ class DraftService:
             current_team = Team.objects.get(id=last_pick.team_id)
             cls._check_and_set_mandatory_pick(draft_state, current_team, last_pick.round)
 
+            log_draft_event(
+                "undo",
+                draft_state_id=str(draft_state_id),
+                pick_number=last_pick.pick,
+                was_skipped=True,
+            )
+
             draft_state.refresh_from_db()
             return draft_state
 
@@ -224,8 +262,8 @@ class DraftService:
         # If player had siblings, remove sibling locks for the entire chain
         cls._unlock_sibling_chain(player)
 
-        # Update team score
-        team.total_score = sum(p.total_score for p in team.roster.all())
+        # Update team score using database aggregation (avoids N+1)
+        team.total_score = team.roster.aggregate(total=Sum("total_score"))["total"] or 0
         age_breakdown = dict(team.age_breakdown)
         age_key = str(player.little_league_age)
         if age_key in age_breakdown:
@@ -255,6 +293,16 @@ class DraftService:
         # Check for mandatory pick at reverted position
         current_team = Team.objects.get(id=last_pick.team_id)
         cls._check_and_set_mandatory_pick(draft_state, current_team, last_pick.round)
+
+        log_draft_event(
+            "undo",
+            draft_state_id=str(draft_state_id),
+            player_id=str(player.id),
+            player_name=player.name,
+            team_id=str(team.id),
+            pick_number=last_pick.pick,
+            was_skipped=False,
+        )
 
         draft_state.refresh_from_db()
         return draft_state
@@ -316,11 +364,25 @@ class DraftService:
         player2.drafted_by_team = team1
         player2.save()
 
-        # Update team scores
-        team1.total_score = sum(p.total_score for p in team1.roster.all())
+        # Update team scores using database aggregation (avoids N+1)
+        team1.total_score = team1.roster.aggregate(total=Sum("total_score"))["total"] or 0
         team1.save()
-        team2.total_score = sum(p.total_score for p in team2.roster.all())
+        team2.total_score = team2.roster.aggregate(total=Sum("total_score"))["total"] or 0
         team2.save()
+
+        log_draft_event(
+            "trade",
+            draft_state_id=str(draft_state_id),
+            team1_id=str(team1_id),
+            team1_name=team1.name,
+            team2_id=str(team2_id),
+            team2_name=team2.name,
+            player1_id=str(player1_id),
+            player1_name=player1.name,
+            player2_id=str(player2_id),
+            player2_name=player2.name,
+            reason=reason,
+        )
 
         draft_state.refresh_from_db()
         return draft_state
@@ -328,8 +390,6 @@ class DraftService:
     @classmethod
     def _advance_to_next_pick(cls, draft_state: DraftState) -> None:
         """Advance to the next pick."""
-        import logging
-        logger = logging.getLogger(__name__)
 
         division = draft_state.division
         draft_order = draft_state.draft_order
@@ -337,8 +397,6 @@ class DraftService:
         roster_size = division.roster_size
         total_picks = team_count * roster_size
         current_picks = draft_state.picks.count()
-
-        logger.info(f"[_advance_to_next_pick] team_count={team_count}, roster_size={roster_size}, total_picks={total_picks}, current_picks={current_picks}")
 
         if current_picks >= total_picks:
             # Draft complete
@@ -352,6 +410,13 @@ class DraftService:
             division.phase = "complete"
             division.completed_at = timezone.now()
             division.save()
+
+            log_draft_event(
+                "complete",
+                draft_state_id=str(draft_state.id),
+                division_id=str(division.id),
+                total_picks=current_picks,
+            )
             return
 
         # Calculate next position
@@ -508,13 +573,15 @@ class DraftService:
 
         For 3+ siblings (e.g., Braden → Austin → Caden), this follows the chain
         in both directions to lock ALL related siblings, not just direct links.
-        """
-        from django.db.models import Q
 
+        Uses bulk_update for atomicity - either all siblings are locked or none.
+        """
         division = player.division
         processed_ids = {player.id}
         to_process = [player]
+        siblings_to_lock = []
 
+        # First pass: collect all siblings in the chain
         while to_process:
             current = to_process.pop(0)
 
@@ -524,21 +591,25 @@ class DraftService:
                     id=current.sibling_id, division=division, is_drafted=False
                 ).first()
                 if sibling:
-                    sibling.locked_to_team = team
-                    sibling.save()
                     processed_ids.add(sibling.id)
                     to_process.append(sibling)
+                    siblings_to_lock.append(sibling)
 
             # Reverse direction: anyone whose sibling_id points to current
-            reverse_siblings = Player.objects.filter(
+            reverse_siblings = list(Player.objects.filter(
                 sibling_id=current.id, division=division, is_drafted=False
-            ).exclude(id__in=processed_ids)
+            ).exclude(id__in=processed_ids))
 
             for sibling in reverse_siblings:
-                sibling.locked_to_team = team
-                sibling.save()
                 processed_ids.add(sibling.id)
                 to_process.append(sibling)
+                siblings_to_lock.append(sibling)
+
+        # Atomic bulk update - all siblings locked together
+        if siblings_to_lock:
+            for sibling in siblings_to_lock:
+                sibling.locked_to_team = team
+            Player.objects.bulk_update(siblings_to_lock, ['locked_to_team'])
 
     @classmethod
     def _unlock_sibling_chain(cls, player: Player) -> None:
@@ -547,11 +618,15 @@ class DraftService:
         Similar to _lock_sibling_chain but removes locks instead of adding them.
         Only unlocks siblings that are NOT drafted (since drafted siblings
         should stay with their team).
+
+        Uses bulk_update for atomicity - either all siblings are unlocked or none.
         """
         division = player.division
         processed_ids = {player.id}
         to_process = [player]
+        siblings_to_unlock = []
 
+        # First pass: collect all siblings in the chain
         while to_process:
             current = to_process.pop(0)
 
@@ -561,18 +636,22 @@ class DraftService:
                     id=current.sibling_id, division=division, is_drafted=False
                 ).first()
                 if sibling:
-                    sibling.locked_to_team = None
-                    sibling.save()
                     processed_ids.add(sibling.id)
                     to_process.append(sibling)
+                    siblings_to_unlock.append(sibling)
 
             # Reverse direction: anyone whose sibling_id points to current
-            reverse_siblings = Player.objects.filter(
+            reverse_siblings = list(Player.objects.filter(
                 sibling_id=current.id, division=division, is_drafted=False
-            ).exclude(id__in=processed_ids)
+            ).exclude(id__in=processed_ids))
 
             for sibling in reverse_siblings:
-                sibling.locked_to_team = None
-                sibling.save()
                 processed_ids.add(sibling.id)
                 to_process.append(sibling)
+                siblings_to_unlock.append(sibling)
+
+        # Atomic bulk update - all siblings unlocked together
+        if siblings_to_unlock:
+            for sibling in siblings_to_unlock:
+                sibling.locked_to_team = None
+            Player.objects.bulk_update(siblings_to_unlock, ['locked_to_team'])

@@ -24,12 +24,24 @@ from .helpers import (
 
 
 def _get_full_draft_response(draft_state):
-    """Get full draft response with players and teams."""
+    """Get full draft response with players and teams.
+
+    Prefetches related data to avoid N+1 queries.
+    """
+    # Refresh draft_state with prefetched picks and trades
+    draft_state = DraftState.objects.prefetch_related(
+        "picks", "trades"
+    ).select_related("division", "mandatory_player").get(id=draft_state.id)
+
     division = draft_state.division
+
+    # Prefetch teams with their rosters and coach_kids
+    teams = division.teams.prefetch_related("roster", "coach_kids").all()
+
     return {
         "draft_state": transform_draft_state(draft_state),
         "players": [transform_player(p) for p in division.players.all()],
-        "teams": [transform_team(t) for t in division.teams.all()],
+        "teams": [transform_team(t) for t in teams],
     }
 
 

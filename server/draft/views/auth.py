@@ -13,6 +13,7 @@ from django.utils.text import slugify
 from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
 from django.views.decorators.http import require_http_methods
 
+from ..logging import log_auth_event
 from ..models import Organization, OrganizationMembership
 # Legacy aliases
 League = Organization
@@ -42,11 +43,40 @@ User = get_user_model()
 @require_http_methods(["GET"])
 @rate_limit(anon_rate_limiter)
 def health_view(request):
-    """Health check endpoint."""
-    return json_response({
-        "status": "ok",
+    """
+    Health check endpoint with database connectivity verification.
+
+    Returns:
+        - status: "healthy" or "degraded"
+        - version: Application version
+        - database: "connected" or "disconnected"
+        - timestamp: Current server time
+        - response_time_ms: Database query time (if connected)
+    """
+    import time
+    from django.db import connection
+
+    response_data = {
+        "status": "healthy",
+        "version": "1.0.0",  # TODO: Read from package or env
+        "database": "connected",
         "timestamp": timezone.now().isoformat(),
-    })
+    }
+
+    # Test database connectivity
+    start_time = time.time()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+            cursor.fetchone()
+        response_data["response_time_ms"] = round((time.time() - start_time) * 1000, 2)
+    except Exception:
+        response_data["status"] = "degraded"
+        response_data["database"] = "disconnected"
+        response_data["response_time_ms"] = None
+
+    status_code = 200 if response_data["status"] == "healthy" else 503
+    return json_response(response_data, status=status_code)
 
 
 @require_http_methods(["GET"])
@@ -103,6 +133,14 @@ def register_view(request):
     # Auto-login after registration
     login(request, user)
 
+    log_auth_event(
+        "register",
+        user_id=str(user.id),
+        email=user.email,
+        success=True,
+        created_league=league.name if league else None,
+    )
+
     return json_response(transform_user(user), status=201)
 
 
@@ -127,9 +165,22 @@ def login_view(request):
     )
 
     if user is None:
+        log_auth_event(
+            "login",
+            email=cleaned["email"],
+            success=False,
+        )
         return json_response({"error": "Invalid email or password"}, status=401)
 
     login(request, user)
+
+    log_auth_event(
+        "login",
+        user_id=str(user.id),
+        email=user.email,
+        success=True,
+    )
+
     return json_response(transform_user(user))
 
 
@@ -138,7 +189,11 @@ def login_view(request):
 @require_auth
 def logout_view(request):
     """User logout endpoint."""
+    user_id = str(request.user.id)
     logout(request)
+
+    log_auth_event("logout", user_id=user_id, success=True)
+
     return json_response({}, status=204)
 
 
@@ -193,6 +248,8 @@ def change_password_view(request):
 
     # Keep user logged in after password change
     login(request, user)
+
+    log_auth_event("password_change", user_id=str(user.id), success=True)
 
     return json_response({"message": "Password changed successfully."})
 
@@ -249,9 +306,11 @@ Little League Draft Team
             [user.email],
             fail_silently=False,
         )
+        log_auth_event("password_reset_request", user_id=str(user.id), email=email, success=True)
     except User.DoesNotExist:
         # Don't reveal that the user doesn't exist
-        pass
+        # Log without user_id to track potential enumeration attempts
+        log_auth_event("password_reset_request", email=email, success=False)
 
     return json_response({
         "message": "If an account exists with this email, a reset link has been sent."
@@ -286,4 +345,46 @@ def password_reset_confirm_view(request):
     user.set_password(cleaned["new_password"])
     user.save()
 
+    log_auth_event("password_reset_confirm", user_id=str(user.id), success=True)
+
     return json_response({"message": "Password has been reset successfully."})
+
+
+@require_http_methods(["POST"])
+@ensure_csrf_cookie
+@csrf_protect
+def log_client_error_view(request):
+    """
+    Log a client-side error from the frontend.
+    Used by ErrorBoundary to report React errors.
+    """
+    from ..logging import get_logger
+
+    logger = get_logger("draft.client")
+
+    data, parse_error = parse_json_body(request)
+    if parse_error:
+        return json_response({"error": parse_error}, status=400)
+
+    # Extract error details
+    message = data.get("message", "Unknown error")
+    stack = data.get("stack", "")
+    component_stack = data.get("componentStack", "")
+    url = data.get("url", "")
+    user_agent = data.get("userAgent", "")
+    timestamp = data.get("timestamp", "")
+
+    # Log the error with context
+    logger.error(
+        f"Client error: {message}",
+        extra={
+            "error_type": "client_error",
+            "stack": stack[:2000] if stack else None,  # Truncate long stacks
+            "component_stack": component_stack[:1000] if component_stack else None,
+            "client_url": url,
+            "user_agent": user_agent,
+            "client_timestamp": timestamp,
+        }
+    )
+
+    return json_response({"status": "logged"})

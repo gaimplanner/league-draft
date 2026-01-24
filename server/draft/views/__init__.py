@@ -12,6 +12,7 @@ from .auth import (
     change_password_view,
     password_reset_request_view,
     password_reset_confirm_view,
+    log_client_error_view,
 )
 from .divisions import (
     divisions_list_create,
@@ -66,6 +67,7 @@ __all__ = [
     "change_password_view",
     "password_reset_request_view",
     "password_reset_confirm_view",
+    "log_client_error_view",
     # Divisions
     "divisions_list_create",
     "division_detail",

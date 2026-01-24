@@ -25,8 +25,9 @@ def teams_list_create(request):
 
     if request.method == "GET":
         # Get teams, optionally filtered by division
+        # Prefetch roster and coach_kids to avoid N+1 queries
         division_id = request.GET.get("division_id")
-        queryset = Team.objects.all()
+        queryset = Team.objects.prefetch_related("roster", "coach_kids")
 
         if division_id:
             queryset = queryset.filter(division_id=division_id)
@@ -68,10 +69,12 @@ def team_detail(request, pk):
     organization = get_organization_from_request(request)
 
     try:
+        # Prefetch roster and coach_kids to avoid N+1 queries
+        base_queryset = Team.objects.prefetch_related("roster", "coach_kids")
         if request.user.role == "master_admin":
-            team = Team.objects.get(id=pk)
+            team = base_queryset.get(id=pk)
         elif organization:
-            team = Team.objects.get(id=pk, division__organization=organization)
+            team = base_queryset.get(id=pk, division__organization=organization)
         else:
             return json_response({"error": "Not found"}, status=404)
     except Team.DoesNotExist:

@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { Player, Team, DraftState, DraftFormat, AppPhase, Division } from '../types';
 import { api, ApiError } from '../api/client';
 
@@ -59,6 +59,24 @@ export const useDraft = (_divisionId?: string) => {
 
   // Synchronous lock to prevent concurrent operations (prevents race conditions from rapid clicks)
   const operationInProgress = useRef(false);
+  // Track when lock was acquired for timeout-based failsafe
+  const lockAcquiredAt = useRef<number | null>(null);
+  const LOCK_TIMEOUT_MS = 30000; // 30 seconds
+
+  // Monitor for stuck locks and auto-release them
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (operationInProgress.current && lockAcquiredAt.current) {
+        const elapsed = Date.now() - lockAcquiredAt.current;
+        if (elapsed > LOCK_TIMEOUT_MS) {
+          console.warn('[useDraft] Lock stuck for', elapsed, 'ms - releasing');
+          operationInProgress.current = false;
+          lockAcquiredAt.current = null;
+        }
+      }
+    }, 5000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Flag to override auto-complete detection (when user explicitly goes back to draft)
   const overrideCompleteDetection = useRef(false);
@@ -226,6 +244,7 @@ export const useDraft = (_divisionId?: string) => {
         return;
       }
       operationInProgress.current = true;
+      lockAcquiredAt.current = Date.now();
 
       // Guard against double-submit during API call (Issue #1)
       if (isLoading) {
@@ -277,6 +296,7 @@ export const useDraft = (_divisionId?: string) => {
         setError(getErrorMessage(err, 'Failed to draft player. Please try again.'));
       } finally {
         operationInProgress.current = false;
+        lockAcquiredAt.current = null;
         setIsLoading(false);
       }
     },
@@ -301,6 +321,7 @@ export const useDraft = (_divisionId?: string) => {
 
     try {
       operationInProgress.current = true;
+      lockAcquiredAt.current = Date.now();
       setIsLoading(true);
       const result = await api.undoLastPick(draftStateId.current);
       setDraftState(result.draftState);
@@ -315,6 +336,7 @@ export const useDraft = (_divisionId?: string) => {
       setError(getErrorMessage(err, 'Failed to undo pick. Please try again.'));
     } finally {
       operationInProgress.current = false;
+      lockAcquiredAt.current = null;
       setIsLoading(false);
     }
   }, [phase, isLoading]);
@@ -343,6 +365,7 @@ export const useDraft = (_divisionId?: string) => {
 
     try {
       operationInProgress.current = true;
+      lockAcquiredAt.current = Date.now();
       setIsLoading(true);
       const result = await api.skipPick({
         draftStateId: draftStateId.current,
@@ -355,6 +378,7 @@ export const useDraft = (_divisionId?: string) => {
       setError(getErrorMessage(err, 'Failed to skip pick. Please try again.'));
     } finally {
       operationInProgress.current = false;
+      lockAcquiredAt.current = null;
       setIsLoading(false);
     }
   }, [draftState?.currentTeamId, isLoading]);
@@ -384,6 +408,7 @@ export const useDraft = (_divisionId?: string) => {
 
     try {
       operationInProgress.current = true;
+      lockAcquiredAt.current = Date.now();
       setIsLoading(true);
       const result = await api.createTrade({
         draftStateId: draftStateId.current,
@@ -402,6 +427,7 @@ export const useDraft = (_divisionId?: string) => {
       throw err;
     } finally {
       operationInProgress.current = false;
+      lockAcquiredAt.current = null;
       setIsLoading(false);
     }
   }, [isLoading]);

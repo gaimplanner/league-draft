@@ -330,6 +330,9 @@ class Division(models.Model):
     class Meta:
         db_table = "divisions"
         ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["organization"], name="division_organization_idx"),
+        ]
 
     def __str__(self):
         return self.name
@@ -373,6 +376,9 @@ class Team(models.Model):
     class Meta:
         db_table = "teams"
         ordering = ["draft_position"]
+        indexes = [
+            models.Index(fields=["division"], name="team_division_idx"),
+        ]
 
     def __str__(self):
         return self.name or f"Team {self.draft_position}"
@@ -472,6 +478,16 @@ class Player(models.Model):
                 fields=["division", "bib"], name="unique_player_bib_per_division"
             )
         ]
+        indexes = [
+            # Composite index for available player queries (most common during draft)
+            models.Index(fields=["division", "is_drafted"], name="player_division_drafted_idx"),
+            # Coach kid lookups in mandatory pick checks
+            models.Index(fields=["coach_team"], name="player_coach_team_idx"),
+            # Sibling locking checks
+            models.Index(fields=["locked_to_team"], name="player_locked_team_idx"),
+            # Sibling chain traversal
+            models.Index(fields=["sibling_id"], name="player_sibling_idx"),
+        ]
 
     def __str__(self):
         return self.name
@@ -529,6 +545,9 @@ class DraftState(models.Model):
 
     class Meta:
         db_table = "draft_states"
+        indexes = [
+            models.Index(fields=["division"], name="draftstate_division_idx"),
+        ]
 
     def __str__(self):
         return f"Draft for {self.division.name}"

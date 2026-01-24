@@ -23,7 +23,7 @@ interface PlayerReviewTableProps {
   onRunAutoDetection: () => void;
 }
 
-type SortField = 'rank' | 'proj' | 'bib' | 'name' | 'age' | 'allstar' | 'coach' | 'sibling' | 'fielding' | 'hitting' | 'pitching' | 'catch' | 'running' | 'adjust' | 'total';
+type SortField = 'rank' | 'proj' | 'bib' | 'name' | 'age' | 'school' | 'allstar' | 'coach' | 'sibling' | 'fielding' | 'hitting' | 'pitching' | 'catch' | 'running' | 'adjust' | 'total';
 type SortDirection = 'asc' | 'desc';
 
 // Editable score fields
@@ -93,6 +93,10 @@ export function PlayerReviewTable({
       case 'age':
         aVal = a.littleLeagueAge;
         bVal = b.littleLeagueAge;
+        break;
+      case 'school':
+        aVal = a.school || '';
+        bVal = b.school || '';
         break;
       case 'allstar':
         aVal = a.isAllStar ? 1 : 0;
@@ -485,6 +489,12 @@ export function PlayerReviewTable({
                   Age<SortIndicator field="age" />
                 </th>
                 <th
+                  className="px-2 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 w-24"
+                  onClick={() => handleSort('school')}
+                >
+                  School<SortIndicator field="school" />
+                </th>
+                <th
                   className="px-1 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-300 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 w-8"
                   onClick={() => handleSort('allstar')}
                 >
@@ -589,6 +599,10 @@ export function PlayerReviewTable({
                   {/* Age */}
                   <td className="px-2 py-1.5 text-gray-600 dark:text-gray-400 text-center">
                     {player.littleLeagueAge}
+                  </td>
+                  {/* School */}
+                  <td className="px-2 py-1.5 text-gray-500 dark:text-gray-400 text-left text-xs truncate max-w-[6rem]" title={player.school || undefined}>
+                    {player.school || '-'}
                   </td>
                   {/* All-Star */}
                   <td className="px-1 py-1 text-center">
