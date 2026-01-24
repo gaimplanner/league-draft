@@ -91,7 +91,13 @@ For younger divisions that don't use live drafts:
   - **Balance-First**: Traditional approach prioritizing team balance
 - **Trade Suggestions**: Apply suggested trades to improve balance
 - **Happiness Indicators**: Visual status showing request fulfillment (🟢 all, 🟡 some, 🔴 none, ⚪ no requests)
-- **Player Detail Drawer**: Request analysis and inline team moves
+- **Player Detail Drawer**:
+  - Algorithm decision reasoning (WHY player was placed)
+  - Team-by-team analysis comparing request satisfaction
+  - Requested player context (score, other friends)
+  - Inline moves with sticky confirm footer
+- **Team Score Display**: Total, Top 8, and Avg scores with delta from mean
+- **Live Happiness Updates**: Scores recalculate on every manual move/swap
 
 ### Post-Draft Features
 

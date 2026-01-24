@@ -254,10 +254,14 @@ As a league admin for a younger division, I want to:
 | Skill-Tiered Draft algorithm | ✅ Complete | Simulated rounds |
 | Balance-First algorithm | ✅ Complete | Original implementation |
 | Trade suggestions | ✅ Complete | Balance improvement scoring |
-| Player Detail Drawer | ✅ Complete | Request analysis, inline moves |
+| Player Detail Drawer | ✅ Complete | Decision reasoning, request analysis, inline moves |
 | Happiness indicators | ✅ Complete | 🟢🟡🔴⚪ |
 | Quick re-run workflow | ✅ Complete | Persist registration data |
 | Happiness report export | ✅ Complete | CSV format |
+| Algorithm Decision Inspector | ✅ Complete | Shows WHY each player was placed |
+| Team-by-Team Analysis | ✅ Complete | Compares request satisfaction across teams |
+| Happiness recalculation | ✅ Complete | Updates on manual moves/swaps |
+| Team score display | ✅ Complete | Total, Top 8, Avg with delta % |
 
 ### Out of Scope (Deferred to Future)
 
@@ -277,14 +281,15 @@ As a league admin for a younger division, I want to:
 
 | File | Purpose |
 |------|---------|
-| `src/components/TeamBuilderFlow.tsx` | Main orchestration (1300+ lines) |
-| `src/components/teamBuilder/TeamBuilderResults.tsx` | Results display with happiness |
-| `src/components/teamBuilder/PlayerDetailDrawer.tsx` | Request analysis, inline moves |
+| `src/components/TeamBuilderFlow.tsx` | Main orchestration (1400+ lines) |
+| `src/components/teamBuilder/TeamBuilderResults.tsx` | Results display with team scores (Total/Top 8/Avg) |
+| `src/components/teamBuilder/PlayerDetailDrawer.tsx` | Decision reasoning, request analysis, inline moves |
 | `src/components/teamBuilder/NameMatchResolver.tsx` | Unmatched name resolution |
 | `src/components/teamBuilder/RequestConfirmation.tsx` | Request confirmation UI |
 | `src/components/teamBuilder/TradeSuggestions.tsx` | Balance trade suggestions |
-| `src/utils/teamBuilderAlgorithm.ts` | All three algorithms (800+ lines) |
+| `src/utils/teamBuilderAlgorithm.ts` | All three algorithms + recalculateHappiness() |
 | `src/utils/teamBuilderParser.ts` | Request parsing, name matching |
+| `docs/ALGORITHM_TEACHING_TOOL.md` | Teaching tool design (Phase 1 implemented) |
 
 ### Data Model Additions
 
@@ -328,3 +333,45 @@ interface Division {
 | Is happiness report exportable? | Yes. Visible in UI AND exportable as CSV. |
 | What's the mode called? | "League Generated Teams" (not "Team Builder" - that's internal name) |
 | Which algorithm is default? | Requests-First (best for honoring requests while maintaining balance) |
+
+---
+
+## Recent Improvements (January 2025)
+
+### Algorithm Decision Inspector
+The PlayerDetailDrawer now shows comprehensive decision reasoning:
+- **Algorithm Decision section**: Shows WHY each player was placed (Coach's Kid, Two-Way Friend, Balance, etc.)
+- **Round and pick number**: When the player was assigned in the algorithm
+- **Context for balance picks**: Explains why requests couldn't be honored
+- **Team-by-Team Analysis**: Collapsible section comparing request satisfaction across all teams
+
+### UX Improvements
+- **Sticky confirm footer**: Confirm button always visible above fold
+- **Direct-to-confirm for suggested moves**: Click "Move to X" goes directly to confirm, skips team selection
+- **Teammate request context**: Shows requested player's score and other friends on their team
+- **Correct team scores**: Total, Top 8, and Avg calculated from actual roster data
+
+### Happiness Recalculation
+- New `recalculateHappiness()` function in teamBuilderAlgorithm.ts
+- Called after every manual move or swap
+- Updates individual player happiness (none → some → all)
+- Updates division-wide happiness percentage and all stats
+
+---
+
+## Future Work: Algorithm Teaching Tool
+
+See `docs/ALGORITHM_TEACHING_TOOL.md` for full design. Phase 1 (Decision Inspector) is complete.
+
+**Remaining Phases:**
+- Phase 2: Manual Override with Persistence - Track corrections vs algorithm results
+- Phase 3: Correction Capture - Prompt for reason when admin moves a player
+- Phase 4: Pattern Analysis - Suggest weight adjustments based on corrections
+- Phase 5: Pre-Algorithm Training - Apply learned preferences before running
+
+**User's Proposed Algorithm Flow:**
+1. Assign all coach kids to parent's team
+2. Place kids who the coach kids have requested
+3. Place players who requested specific coaches
+4. Friend-chain placement (complex - needs careful design)
+5. Review & optimization phase

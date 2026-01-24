@@ -204,6 +204,43 @@ Uses simulated draft rounds for balanced distribution:
 - 🔴 No requests honored
 - ⚪ No requests made
 
+### PlayerDetailDrawer Features
+The player detail drawer (`src/components/teamBuilder/PlayerDetailDrawer.tsx`) provides comprehensive decision analysis:
+
+**Algorithm Decision Section:**
+- Shows WHY the player was placed on this team with descriptive labels and icons
+- Assignment reasons: Coach's Kid, Assistant Coach's Kid, Sibling Lock, Two-Way Friend, One-Way Friend, Coach Request, School Cluster, Team Balance
+- Shows round and pick number when player was assigned
+- For balance picks: explains why requests couldn't be honored
+- For request-based picks: confirms what request was satisfied
+
+**Team-by-Team Analysis (collapsible):**
+- Current team highlighted with request count
+- All other teams with how many requests would be honored there
+- Teams with better options highlighted in purple
+- Shows which friends/coach are on each team
+
+**Teammate Request Context:**
+- Shows each requested player's score
+- Shows how many OTHER friends are on the same team as that request
+
+**Action Flow:**
+- Suggested moves go directly to confirm (skip team selection)
+- Confirm button in sticky footer (always visible)
+- Move and Swap with inline confirmation
+
+**Happiness Recalculation:**
+- `recalculateHappiness()` function in teamBuilderAlgorithm.ts
+- Called after any manual move or swap
+- Updates individual player happiness scores
+- Updates division-wide happiness percentage and stats
+
+### Team Score Display
+Team headers show three score metrics calculated from actual roster data:
+- **Total**: Sum of all player scores
+- **Top 8**: Sum of top 8 players by score
+- **Avg**: Average score per player with delta % from mean
+
 ## Backend Development
 
 ### Running the Backend
@@ -394,3 +431,29 @@ The application underwent a comprehensive stabilization effort. All phases compl
 - ML-based fuzzy name matching
 - Request gaming detection
 - Grade-based clustering algorithm improvements
+- Algorithm Teaching Tool (Phases 2-5): Correction capture, pattern analysis, learned preferences
+
+## Session Continuation Notes
+
+### Current Work: Team Builder Algorithm Teaching Tool
+
+**Completed (January 2025):**
+- Phase 1: Decision Inspector - Fully implemented in PlayerDetailDrawer
+- Happiness recalculation on manual moves/swaps
+- UX improvements: sticky confirm footer, direct-to-confirm for suggested moves
+- Team score display: Total, Top 8, Avg with delta %
+
+**In Progress:**
+- Algorithm Teaching Tool Phases 2-5 (see `docs/ALGORITHM_TEACHING_TOOL.md`)
+- User's proposed algorithm flow:
+  1. Assign coach kids to parent's team
+  2. Place kids requested BY coach kids
+  3. Place players who requested specific coaches
+  4. Friend-chain placement (complex logic needed)
+  5. Review & optimization phase
+
+**Key Files for Continuation:**
+- `src/components/teamBuilder/PlayerDetailDrawer.tsx` - Decision reasoning UI
+- `src/components/teamBuilder/TeamBuilderResults.tsx` - Results display with team scores
+- `src/utils/teamBuilderAlgorithm.ts` - Algorithm logic and happiness recalculation
+- `docs/ALGORITHM_TEACHING_TOOL.md` - Teaching tool design doc

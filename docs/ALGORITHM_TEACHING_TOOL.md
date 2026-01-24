@@ -173,6 +173,18 @@ interface LearnedPreferences {
   - Highlights teams where more requests could have been honored
   - Shows which friends/coach are on each team
 
+**UX Improvements (January 2025):**
+- Teammate request cards show requested player's score
+- Teammate request cards show if other friends are on the same team
+- Suggested moves go directly to confirm mode (skip team selection step)
+- Confirm button in sticky footer (always visible above fold)
+- Happiness scores recalculate on every manual move/swap
+
+**Team Score Display:**
+- Team headers show Total, Top 8, and Avg scores
+- Scores calculated from actual roster data (not stale cache)
+- Delta % from mean shown for balance comparison
+
 #### Phase 2: Manual Override with Persistence
 - Allow moving players post-algorithm
 - Persist these moves to database (already implemented)
