@@ -612,6 +612,28 @@ def validate_player_data(data: Dict[str, Any]) -> Tuple[Optional[Dict], Optional
     if "is_drafted" in data:
         cleaned["is_drafted"] = bool(data["is_drafted"])
 
+    # Team Builder fields
+    if "coach_request" in data:
+        cleaned["coach_request"] = str(data["coach_request"]) if data["coach_request"] else ""
+
+    if "teammate_requests" in data:
+        teammate_requests = data["teammate_requests"]
+        if isinstance(teammate_requests, list):
+            cleaned["teammate_requests"] = [str(r) for r in teammate_requests if r]
+        else:
+            cleaned["teammate_requests"] = []
+
+    if "school" in data:
+        cleaned["school"] = str(data["school"]) if data["school"] else ""
+
+    if "grade" in data:
+        grade = data["grade"]
+        if grade is not None:
+            try:
+                cleaned["grade"] = int(grade)
+            except (ValueError, TypeError):
+                pass
+
     return cleaned, None
 
 

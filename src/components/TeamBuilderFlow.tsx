@@ -1278,6 +1278,14 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
     setFinalTeams(updatedTeams);
     setShowSwapModal(false);
 
+    // Persist the changes to the database
+    if (onUpdatePlayers) {
+      onUpdatePlayers(updatedPlayers);
+    }
+    if (onUpdateTeams) {
+      onUpdateTeams(updatedTeams);
+    }
+
     // Update algorithm result to reflect the swap
     if (algorithmResult) {
       const meanScore = updatedPlayers.length > 0
@@ -1313,7 +1321,7 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
         };
       });
     }
-  }, [finalPlayers, finalTeams, algorithmResult]);
+  }, [finalPlayers, finalTeams, algorithmResult, onUpdatePlayers, onUpdateTeams]);
 
   // Handle moving a player to a different team (no swap)
   const handleMovePlayer = useCallback((playerId: string, toTeamId: string) => {
@@ -1351,6 +1359,14 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
     setFinalPlayers(updatedPlayers);
     setFinalTeams(updatedTeams);
 
+    // Persist the changes to the database
+    if (onUpdatePlayers) {
+      onUpdatePlayers(updatedPlayers);
+    }
+    if (onUpdateTeams) {
+      onUpdateTeams(updatedTeams);
+    }
+
     // Update algorithm result to reflect the move
     if (algorithmResult) {
       const meanScore = updatedPlayers.length > 0
@@ -1383,7 +1399,7 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
         };
       });
     }
-  }, [finalPlayers, finalTeams, algorithmResult]);
+  }, [finalPlayers, finalTeams, algorithmResult, onUpdatePlayers, onUpdateTeams]);
 
   // -----------------------------------------------------------------------------
   // Render
