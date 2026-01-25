@@ -437,6 +437,13 @@ export interface DivisionAgeRange {
   max: number;
 }
 
+// Algorithm mode for Team Builder (league-generated divisions)
+// Note: 'manual-draft' was removed in the simplified Team Builder refactor
+export type TeamBuilderAlgorithmMode = 'balance-first' | 'requests-first' | 'skill-tiered';
+
+// Simplified algorithm mode names for the comparison UI
+export type SimplifiedAlgorithmMode = 'skill-priority' | 'request-priority' | 'balance-priority';
+
 export interface Division {
   id: string;
   name: string;
@@ -456,6 +463,9 @@ export interface Division {
   createdAt: string; // ISO date string
   updatedAt?: string; // ISO date string (from API)
   completedAt?: string; // ISO date string
+
+  // Team Builder settings (only used for league-generated mode)
+  teamBuilderAlgorithmMode?: TeamBuilderAlgorithmMode; // Algorithm mode selected by user
 
   // Organization or personal workspace ownership
   organizationId?: string; // If part of an organization
@@ -600,67 +610,38 @@ export interface TradeCandidate {
 }
 
 // -----------------------------------------------------------------------------
-// Algorithm Teaching Tool Types (Correction Tracking)
+// Algorithm Comparison Types (Simplified Team Builder)
 // -----------------------------------------------------------------------------
 
 /**
- * Reason categories for why a user manually moved a player.
- * Used to train the algorithm based on user corrections.
+ * Stats for comparing algorithm results.
+ * Uses Top 6 for smaller divisions (AA).
  */
-export type CorrectionReason =
-  | 'coach-request-priority'    // Coach request should have been honored
-  | 'friend-request-priority'   // Friend request should have been honored
-  | 'balance-override'          // Balance was more important than requests
-  | 'sibling-issue'             // Sibling placement needed adjustment
-  | 'other';                    // Custom reason (notes required)
-
-/**
- * Record of a user's manual correction to the algorithm's assignment.
- * Used for pattern analysis and weight adjustment suggestions.
- */
-export interface AssignmentCorrection {
-  id: string;
-  playerId: string;
-  playerName: string;
-  originalTeamId: string;
-  originalTeamName: string;
-  originalReason: string;        // The AssignmentReason from the algorithm
-  correctedTeamId: string;
-  correctedTeamName: string;
-  correctionReason: CorrectionReason;
-  correctionNotes?: string;      // Required when reason is 'other'
-  timestamp: string;             // ISO date string
+export interface AlgorithmStats {
+  top6Total: number;           // Sum of top 6 player scores per team (highest)
+  top6Average: number;         // Average of top 6 scores across teams
+  top6Spread: number;          // Highest - lowest team top 6 score
+  top6Highest: number;         // Highest team's top 6 score
+  top6Lowest: number;          // Lowest team's top 6 score
+  happinessPercent: number;    // Division-wide happiness (0-100)
+  happinessBreakdown: {
+    all: number;               // Players with all requests honored
+    some: number;              // Players with some requests honored
+    none: number;              // Players with no requests honored
+    noRequests: number;        // Players who made no requests
+  };
 }
 
 /**
- * Analysis result from correction patterns.
+ * Result from running one algorithm for comparison.
  */
-export interface CorrectionAnalysis {
-  totalCorrections: number;
-  correctionsByReason: Record<CorrectionReason, number>;
-  patterns: CorrectionPattern[];
-  suggestedWeights: WeightSuggestion[];
-}
-
-/**
- * A detected pattern in user corrections.
- */
-export interface CorrectionPattern {
-  description: string;           // e.g., "Coach requests overrode balance 80% of the time"
-  count: number;
-  percentage: number;
-  confidence: number;            // 0-1, higher means more confident in the pattern
-}
-
-/**
- * Suggested weight adjustment based on correction patterns.
- */
-export interface WeightSuggestion {
-  weightKey: keyof RequestsFirstConfig;
-  currentValue: number;
-  suggestedValue: number;
-  reason: string;
-  confidence: number;            // 0-1
+export interface AlgorithmComparisonResult {
+  mode: SimplifiedAlgorithmMode;
+  label: string;               // Display name (e.g., "Skill Priority")
+  description: string;         // Short description of what this algorithm optimizes
+  stats: AlgorithmStats;
+  isRecommended: boolean;      // True if this is the "best" result
+  // The actual TeamBuilderResult is stored separately since it's large
 }
 
 // Helper to create initial division state

@@ -11,7 +11,7 @@ import {
   Lightbulb,
   Scale,
 } from 'lucide-react';
-import { Player, CorrectionReason } from '../../types';
+import { Player } from '../../types';
 import {
   TeamBuilderResult,
   PlayerHappiness,
@@ -19,7 +19,6 @@ import {
   AssignmentResult,
   AssignmentReason,
 } from '../../utils/teamBuilderAlgorithm';
-import { CorrectionPrompt } from './CorrectionPrompt';
 
 interface PlayerDetailDrawerProps {
   player: Player;
@@ -29,7 +28,7 @@ interface PlayerDetailDrawerProps {
   allPlayers: Player[];
   assignment?: AssignmentResult;
   onClose: () => void;
-  onMovePlayer?: (playerId: string, toTeamId: string, correctionData?: { reason: CorrectionReason; notes?: string }) => void;
+  onMovePlayer?: (playerId: string, toTeamId: string) => void;
   onSwapPlayers?: (player1Id: string, player2Id: string) => void;
 }
 
@@ -132,20 +131,60 @@ export const PlayerDetailDrawer = ({
   onSwapPlayers,
 }: PlayerDetailDrawerProps) => {
   // 'confirm' mode is used when a suggested move is clicked - skip team selection
-  // 'correction' mode shows the CorrectionPrompt after a move is confirmed
-  const [moveMode, setMoveMode] = useState<'none' | 'move' | 'swap' | 'confirm' | 'correction'>('none');
+  const [moveMode, setMoveMode] = useState<'none' | 'move' | 'swap' | 'confirm'>('none');
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [selectedSwapPlayerId, setSelectedSwapPlayerId] = useState<string | null>(null);
 
-  // Pending move state for correction prompt flow
-  const [pendingMove, setPendingMove] = useState<{
-    playerId: string;
-    toTeamId: string;
-    fromTeamName: string;
-    toTeamName: string;
-  } | null>(null);
-
   const playerMap = useMemo(() => new Map(allPlayers.map(p => [p.id, p])), [allPlayers]);
+
+  // Get sibling information for this player
+  const siblingInfo = useMemo(() => {
+    if (!player.siblingId) return null;
+
+    // Find all siblings in the group
+    const siblings: Player[] = [];
+    const visited = new Set<string>([player.id]);
+
+    // Follow sibling links forward
+    let current = player;
+    while (current.siblingId && !visited.has(current.siblingId)) {
+      const sibling = allPlayers.find(p => p.id === current.siblingId);
+      if (sibling) {
+        siblings.push(sibling);
+        visited.add(sibling.id);
+        current = sibling;
+      } else {
+        break;
+      }
+    }
+
+    // Also find players whose siblingId points to visited players
+    for (const p of allPlayers) {
+      if (!visited.has(p.id) && p.siblingId && visited.has(p.siblingId)) {
+        siblings.push(p);
+        visited.add(p.id);
+      }
+    }
+
+    if (siblings.length === 0) return null;
+
+    // Get sibling team assignments
+    const siblingsWithTeams = siblings.map(s => {
+      const assignment = result.assignments.find(a => a.playerId === s.id);
+      const team = assignment
+        ? result.teamSummaries.find(t => t.teamId === assignment.teamId)
+        : null;
+      return { player: s, team };
+    });
+
+    // Check if all siblings are on the same team
+    const allOnSameTeam = siblingsWithTeams.every(s => s.team?.teamId === currentTeam.teamId);
+
+    return {
+      siblings: siblingsWithTeams,
+      allOnSameTeam,
+    };
+  }, [player, allPlayers, result, currentTeam]);
 
   // Get the selected team details for confirm mode
   const selectedTeam = useMemo(() => {
@@ -304,36 +343,9 @@ export const PlayerDetailDrawer = ({
 
   const handleMove = () => {
     if (selectedTeamId && onMovePlayer) {
-      const toTeam = result.teamSummaries.find(t => t.teamId === selectedTeamId);
-      // Set up pending move and show correction prompt
-      setPendingMove({
-        playerId: player.id,
-        toTeamId: selectedTeamId,
-        fromTeamName: currentTeam.teamName || currentTeam.coachName,
-        toTeamName: toTeam?.teamName || toTeam?.coachName || 'Unknown',
-      });
-      setMoveMode('correction');
-    }
-  };
-
-  const handleCorrectionSave = (reason: CorrectionReason, notes?: string) => {
-    if (pendingMove && onMovePlayer) {
-      // Execute the move with correction data
-      onMovePlayer(pendingMove.playerId, pendingMove.toTeamId, { reason, notes });
+      // Execute the move directly
+      onMovePlayer(player.id, selectedTeamId);
       // Reset state and close drawer
-      setPendingMove(null);
-      setMoveMode('none');
-      setSelectedTeamId(null);
-      onClose();
-    }
-  };
-
-  const handleCorrectionSkip = () => {
-    if (pendingMove && onMovePlayer) {
-      // Execute the move without correction data
-      onMovePlayer(pendingMove.playerId, pendingMove.toTeamId);
-      // Reset state and close drawer
-      setPendingMove(null);
       setMoveMode('none');
       setSelectedTeamId(null);
       onClose();
@@ -470,6 +482,49 @@ export const PlayerDetailDrawer = ({
                 </ul>
               </div>
             )}
+          </section>
+        )}
+
+        {/* Sibling Info Section */}
+        {siblingInfo && (
+          <section>
+            <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
+              <Users className="w-4 h-4" />
+              Sibling{siblingInfo.siblings.length > 1 ? 's' : ''} ({siblingInfo.siblings.length})
+            </h4>
+            <div className={`p-3 rounded-lg border ${
+              siblingInfo.allOnSameTeam
+                ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+                : 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800'
+            }`}>
+              {siblingInfo.siblings.map(({ player: sibling, team }) => (
+                <div key={sibling.id} className="flex items-center justify-between py-1.5">
+                  <span className={`text-sm ${
+                    siblingInfo.allOnSameTeam
+                      ? 'text-green-700 dark:text-green-300'
+                      : 'text-amber-700 dark:text-amber-300'
+                  }`}>
+                    {sibling.firstName} {sibling.lastName}
+                  </span>
+                  <span className={`text-xs px-2 py-0.5 rounded ${
+                    team?.teamId === currentTeam.teamId
+                      ? 'bg-green-200 dark:bg-green-800 text-green-700 dark:text-green-300'
+                      : 'bg-amber-200 dark:bg-amber-800 text-amber-700 dark:text-amber-300'
+                  }`}>
+                    {team ? (team.teamName || team.coachName) : 'Unassigned'}
+                  </span>
+                </div>
+              ))}
+              <p className={`text-xs mt-2 ${
+                siblingInfo.allOnSameTeam
+                  ? 'text-green-600 dark:text-green-400'
+                  : 'text-amber-600 dark:text-amber-400'
+              }`}>
+                {siblingInfo.allOnSameTeam
+                  ? 'All siblings are on the same team. Moving this player will move siblings together.'
+                  : 'Siblings are on different teams. Moving this player will reunite them.'}
+              </p>
+            </div>
           </section>
         )}
 
@@ -683,6 +738,12 @@ export const PlayerDetailDrawer = ({
                   <div className="mt-1 text-xs text-purple-700 dark:text-purple-300">
                     {suggestion.reason}
                   </div>
+                  {siblingInfo && siblingInfo.siblings.filter(s => s.team?.teamId === currentTeam.teamId).length > 0 && (
+                    <div className="mt-1 text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                      <Users className="w-3 h-3" />
+                      Sibling{siblingInfo.siblings.filter(s => s.team?.teamId === currentTeam.teamId).length > 1 ? 's' : ''} will move together
+                    </div>
+                  )}
                 </button>
               ))}
             </div>
@@ -729,6 +790,19 @@ export const PlayerDetailDrawer = ({
                 <div>Current team: {currentTeam.teamName || currentTeam.coachName}</div>
                 <div>New team has {selectedTeam.rosterCount} players (avg: {selectedTeam.averageScore.toFixed(1)})</div>
               </div>
+              {siblingInfo && siblingInfo.siblings.filter(s => s.team?.teamId === currentTeam.teamId).length > 0 && (
+                <div className="mt-2 p-2 rounded bg-amber-100 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700">
+                  <div className="text-xs text-amber-700 dark:text-amber-300 flex items-center gap-1">
+                    <Users className="w-3 h-3" />
+                    <span className="font-medium">
+                      {siblingInfo.siblings.filter(s => s.team?.teamId === currentTeam.teamId).length} sibling{siblingInfo.siblings.filter(s => s.team?.teamId === currentTeam.teamId).length > 1 ? 's' : ''} will also move:
+                    </span>
+                  </div>
+                  <div className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                    {siblingInfo.siblings.filter(s => s.team?.teamId === currentTeam.teamId).map(s => `${s.player.firstName} ${s.player.lastName}`).join(', ')}
+                  </div>
+                </div>
+              )}
             </div>
             <div className="flex gap-2">
               <button
@@ -896,19 +970,6 @@ export const PlayerDetailDrawer = ({
                 Confirm Swap
               </button>
             </div>
-          </div>
-        )}
-
-        {/* Correction prompt - shown after confirming a move */}
-        {moveMode === 'correction' && pendingMove && (
-          <div className="px-4 py-3">
-            <CorrectionPrompt
-              playerName={player.name}
-              fromTeamName={pendingMove.fromTeamName}
-              toTeamName={pendingMove.toTeamName}
-              onSave={handleCorrectionSave}
-              onSkip={handleCorrectionSkip}
-            />
           </div>
         )}
 

@@ -21,6 +21,10 @@ import {
   RequestsFirstConfig,
   DEFAULT_REQUESTS_FIRST_CONFIG,
   TradeCandidate,
+  AlgorithmStats,
+  AlgorithmComparisonResult,
+  SimplifiedAlgorithmMode,
+  TeamBuilderAlgorithmMode,
 } from '../types';
 import { buildRequestClusters, splitOversizedCluster } from './teamBuilderParser';
 
@@ -2450,5 +2454,206 @@ export function runSkillTieredDraft(
     },
     draftLog,
     suggestedTrades,
+  };
+}
+
+// -----------------------------------------------------------------------------
+// Algorithm Comparison Functions
+// -----------------------------------------------------------------------------
+
+/**
+ * Calculate Top 6 stats for algorithm comparison.
+ * Uses Top 6 because smaller divisions (AA) have fewer players per team.
+ */
+export function calculateTop6Stats(
+  teamSummaries: TeamSummary[],
+  playerHappiness: PlayerHappiness[],
+  players: TeamBuilderPlayer[],
+  assignments: AssignmentResult[]
+): AlgorithmStats {
+  // Build team rosters
+  const teamPlayerScores = new Map<string, number[]>();
+  for (const team of teamSummaries) {
+    teamPlayerScores.set(team.teamId, []);
+  }
+
+  for (const assignment of assignments) {
+    const player = players.find(p => p.id === assignment.playerId);
+    if (player) {
+      const scores = teamPlayerScores.get(assignment.teamId);
+      if (scores) {
+        scores.push(player.totalScore);
+      }
+    }
+  }
+
+  // Calculate Top 6 scores per team
+  const top6Scores: number[] = [];
+  for (const [, scores] of teamPlayerScores) {
+    const sortedScores = [...scores].sort((a, b) => b - a);
+    const top6 = sortedScores.slice(0, 6);
+    const top6Total = top6.reduce((sum, s) => sum + s, 0);
+    top6Scores.push(top6Total);
+  }
+
+  const top6Total = top6Scores.reduce((sum, s) => sum + s, 0);
+  const top6Average = top6Scores.length > 0 ? top6Total / top6Scores.length : 0;
+  const top6Highest = top6Scores.length > 0 ? Math.max(...top6Scores) : 0;
+  const top6Lowest = top6Scores.length > 0 ? Math.min(...top6Scores) : 0;
+  const top6Spread = top6Highest - top6Lowest;
+
+  // Calculate happiness breakdown
+  const happinessBreakdown = {
+    all: playerHappiness.filter(h => h.score === 'all').length,
+    some: playerHappiness.filter(h => h.score === 'some').length,
+    none: playerHappiness.filter(h => h.score === 'none').length,
+    noRequests: playerHappiness.filter(h => h.score === 'no-requests').length,
+  };
+
+  // Calculate happiness percent (only for players who made requests)
+  // Uses weighted formula: all=1.0, some=0.5, none=0 (matches TeamBuilderResults)
+  const playersWithRequests = happinessBreakdown.all + happinessBreakdown.some + happinessBreakdown.none;
+  const weightedHappiness = happinessBreakdown.all * 1.0 + happinessBreakdown.some * 0.5;
+  const happinessPercent = playersWithRequests > 0
+    ? Math.round((weightedHappiness / playersWithRequests) * 100)
+    : 100;
+
+  return {
+    top6Total,
+    top6Average,
+    top6Spread,
+    top6Highest,
+    top6Lowest,
+    happinessPercent,
+    happinessBreakdown,
+  };
+}
+
+/**
+ * Algorithm labels and descriptions for the comparison UI.
+ */
+const ALGORITHM_INFO: Record<SimplifiedAlgorithmMode, { label: string; description: string }> = {
+  'skill-priority': {
+    label: 'Skill Priority',
+    description: 'Simulates a real draft by skill tier, using requests as tiebreakers',
+  },
+  'request-priority': {
+    label: 'Request Priority',
+    description: 'Maximizes friend/coach requests first, then suggests trades for balance',
+  },
+  'balance-priority': {
+    label: 'Balance Priority',
+    description: 'Spreads top talent first, honors requests only if balance allows',
+  },
+};
+
+/**
+ * Map simplified algorithm mode to internal algorithm mode.
+ */
+function mapToInternalMode(mode: SimplifiedAlgorithmMode): TeamBuilderAlgorithmMode {
+  switch (mode) {
+    case 'skill-priority': return 'skill-tiered';
+    case 'request-priority': return 'requests-first';
+    case 'balance-priority': return 'balance-first';
+  }
+}
+
+/**
+ * Result from running all algorithms for comparison.
+ */
+export interface AllAlgorithmsResult {
+  comparisons: AlgorithmComparisonResult[];
+  results: Map<SimplifiedAlgorithmMode, TeamBuilderResult>;
+}
+
+/**
+ * Run all three algorithms and return comparison results.
+ * Marks the recommended result based on lowest spread + highest happiness.
+ */
+export function runAllAlgorithms(
+  players: TeamBuilderPlayer[],
+  teams: Team[],
+  resolvedRequests: ResolvedRequest[],
+  config: Partial<RequestsFirstConfig> = {}
+): AllAlgorithmsResult {
+  const fullConfig = { ...DEFAULT_REQUESTS_FIRST_CONFIG, ...config };
+  const modes: SimplifiedAlgorithmMode[] = ['skill-priority', 'request-priority', 'balance-priority'];
+
+  const resultsMap = new Map<SimplifiedAlgorithmMode, TeamBuilderResult>();
+  const comparisons: AlgorithmComparisonResult[] = [];
+
+  // Run each algorithm
+  for (const mode of modes) {
+    const internalMode = mapToInternalMode(mode);
+    let result: TeamBuilderResult;
+
+    if (internalMode === 'skill-tiered') {
+      result = runSkillTieredDraft(players, teams, resolvedRequests, {
+        ...DEFAULT_SKILL_TIERED_CONFIG,
+        maxRosterSize: fullConfig.maxRosterSize,
+        minRosterSize: fullConfig.minRosterSize,
+        forceEvenTeams: fullConfig.forceEvenTeams,
+        twoWayTeammateWeight: fullConfig.twoWayTeammateWeight,
+        oneWayTeammateWeight: fullConfig.oneWayTeammateWeight,
+        coachRequestWeight: fullConfig.coachRequestWeight,
+      });
+    } else if (internalMode === 'requests-first') {
+      result = runRequestsFirstAlgorithm(players, teams, resolvedRequests, fullConfig);
+    } else {
+      result = runTeamBuilderAlgorithm(players, teams, {
+        ...DEFAULT_TEAM_BUILDER_CONFIG,
+        maxRosterSize: fullConfig.maxRosterSize,
+        minRosterSize: fullConfig.minRosterSize,
+        forceEvenTeams: fullConfig.forceEvenTeams,
+      });
+    }
+
+    resultsMap.set(mode, result);
+
+    // Calculate stats
+    const stats = calculateTop6Stats(
+      result.teamSummaries,
+      result.playerHappiness,
+      players,
+      result.assignments
+    );
+
+    const info = ALGORITHM_INFO[mode];
+    comparisons.push({
+      mode,
+      label: info.label,
+      description: info.description,
+      stats,
+      isRecommended: false, // Will be set below
+    });
+  }
+
+  // Determine recommended result: lowest spread + highest happiness
+  // Score = happiness% - (spread / 10) to balance both factors
+  let bestIndex = 0;
+  let bestScore = -Infinity;
+
+  for (let i = 0; i < comparisons.length; i++) {
+    const { stats } = comparisons[i];
+    // Normalize spread to roughly same scale as happiness (assuming spread is ~0-50)
+    const score = stats.happinessPercent - (stats.top6Spread * 2);
+    if (score > bestScore) {
+      bestScore = score;
+      bestIndex = i;
+    }
+  }
+
+  comparisons[bestIndex].isRecommended = true;
+
+  // Sort so recommended is first, then by happiness descending
+  comparisons.sort((a, b) => {
+    if (a.isRecommended && !b.isRecommended) return -1;
+    if (!a.isRecommended && b.isRecommended) return 1;
+    return b.stats.happinessPercent - a.stats.happinessPercent;
+  });
+
+  return {
+    comparisons,
+    results: resultsMap,
   };
 }

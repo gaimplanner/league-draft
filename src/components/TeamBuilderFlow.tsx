@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import {
   ArrowLeft,
   Wand2,
@@ -7,7 +7,6 @@ import {
   BarChart3,
   Check,
   Settings,
-  Play,
   ArrowLeftRight,
   Search,
   ClipboardCheck,
@@ -18,21 +17,17 @@ import {
   Edit3,
   RefreshCw,
 } from 'lucide-react';
-import { Division, Player, Team, ResolvedRequest, RequestsFirstConfig, DEFAULT_REQUESTS_FIRST_CONFIG, TradeCandidate, AppPhase, AssignmentCorrection, CorrectionReason } from '../types';
+import { Division, Player, Team, ResolvedRequest, RequestsFirstConfig, DEFAULT_REQUESTS_FIRST_CONFIG, TradeCandidate, AppPhase, SimplifiedAlgorithmMode } from '../types';
 import { RegistrationRecord } from '../types/evaluation';
 import { EvaluationImport } from './evaluation';
-import { NameMatchResolver, TeamBuilderResults, RequestConfirmation, TradeSuggestions, WeightSlider } from './teamBuilder';
+import { NameMatchResolver, TeamBuilderResults, RequestConfirmation, TradeSuggestions, AlgorithmComparisonPanel } from './teamBuilder';
 import { TradeModal } from './TradeModal';
 import {
-  runTeamBuilderAlgorithm,
-  runRequestsFirstAlgorithm,
-  runSkillTieredDraft,
   TeamBuilderConfig,
   TeamBuilderResult,
   RequestsFirstResult,
   TeamBuilderPlayer,
   DEFAULT_TEAM_BUILDER_CONFIG,
-  DEFAULT_SKILL_TIERED_CONFIG,
   applyAssignments,
   recalculateHappiness,
   TeamSummary,
@@ -56,16 +51,14 @@ import {
   CoachKidMatch,
   SiblingMatch,
 } from '../utils/coachKidDetection';
-import { analyzeCorrections } from '../utils/correctionAnalysis';
 import * as XLSX from 'xlsx';
 
 // -----------------------------------------------------------------------------
 // Types
 // -----------------------------------------------------------------------------
 
-type TeamBuilderStep = 'setup' | 'import' | 'resolution' | 'confirm-requests' | 'configure' | 'generate' | 'results';
-
-type AlgorithmMode = 'balance-first' | 'requests-first' | 'skill-tiered';
+// Simplified flow: import → confirm-requests → confirm-locks → results
+type TeamBuilderStep = 'setup' | 'import' | 'resolution' | 'confirm-requests' | 'confirm-locks' | 'results';
 
 interface TeamBuilderFlowProps {
   division: Division;
@@ -96,15 +89,21 @@ interface RegistrationPlayer {
 // -----------------------------------------------------------------------------
 
 export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, onUpdatePlayers, onUpdatePhase: _onUpdatePhase }: TeamBuilderFlowProps) => {
+  // Check for completed results (all players assigned)
+  const hasCompletedResults = useMemo(() => {
+    if (division.players.length === 0) return false;
+    return division.players.every(p => p.draftedByTeamId);
+  }, [division.players]);
+
   // Determine initial step based on division state
   const getInitialStep = (): TeamBuilderStep => {
-    // If we have players with team assignments (results), go to results
-    if (division.players.length > 0 && division.players.some(p => p.draftedByTeamId)) {
+    // If all players have team assignments (completed), go to results
+    if (hasCompletedResults) {
       return 'results';
     }
-    // If we have players but no assignments, go to configure (ready to generate)
+    // If we have players but no assignments, go to confirm-locks (ready for comparison)
     if (division.players.length > 0) {
-      return 'configure';
+      return 'confirm-locks';
     }
     // If teams have coach names, go to import
     if (division.teams.some(t => t.headCoach)) {
@@ -126,33 +125,30 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
   const [unmatchedPlayers, setUnmatchedPlayers] = useState<RegistrationPlayer[]>([]);
 
   // Algorithm config
-  const [config, setConfig] = useState<TeamBuilderConfig>(DEFAULT_TEAM_BUILDER_CONFIG);
+  const [config, _setConfig] = useState<TeamBuilderConfig>(DEFAULT_TEAM_BUILDER_CONFIG);
 
   // Normalization result (from request resolution step)
   const [normalizationResult, setNormalizationResult] = useState<NormalizationResult | null>(null);
 
-  // Results - initialize from division if we have results (players with team assignments)
-  const hasResults = division.players.length > 0 && division.players.some(p => p.draftedByTeamId);
+  // Results - initialize from division if we have completed results (all players assigned)
   const [algorithmResult, setAlgorithmResult] = useState<TeamBuilderResult | null>(null);
   const [requestsFirstResult, setRequestsFirstResult] = useState<RequestsFirstResult | null>(null);
-  const [finalPlayers, setFinalPlayers] = useState<Player[]>(hasResults ? division.players : []);
-  const [finalTeams, setFinalTeams] = useState<Team[]>(hasResults ? division.teams : []);
+  const [finalPlayers, setFinalPlayers] = useState<Player[]>(hasCompletedResults ? division.players : []);
+  const [finalTeams, setFinalTeams] = useState<Team[]>(hasCompletedResults ? division.teams : []);
 
   // Swap modal
   const [showSwapModal, setShowSwapModal] = useState(false);
 
   // Request confirmation state
   const [resolvedRequests, setResolvedRequests] = useState<ResolvedRequest[]>([]);
-  const [algorithmMode, setAlgorithmMode] = useState<AlgorithmMode>('skill-tiered');
-  const [requestsFirstConfig, setRequestsFirstConfig] = useState<RequestsFirstConfig>(DEFAULT_REQUESTS_FIRST_CONFIG);
+  const [requestsFirstConfig, _setRequestsFirstConfig] = useState<RequestsFirstConfig>(DEFAULT_REQUESTS_FIRST_CONFIG);
 
   // Trade suggestions state
   const [appliedTradeIds, setAppliedTradeIds] = useState<Set<string>>(new Set());
   const [dismissedTradeIds, setDismissedTradeIds] = useState<Set<string>>(new Set());
 
-  // Algorithm Teaching Tool - Correction tracking state
-  const [corrections, setCorrections] = useState<AssignmentCorrection[]>([]);
-  const [originalAssignments, setOriginalAssignments] = useState<Map<string, { teamId: string; teamName: string; reason: string }>>(new Map());
+  // Algorithm comparison state (for simplified flow)
+  const [selectedAlgorithmMode, setSelectedAlgorithmMode] = useState<SimplifiedAlgorithmMode | null>(null);
 
   // Player search for debugging request resolution
   const [playerSearchQuery, setPlayerSearchQuery] = useState('');
@@ -190,7 +186,7 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
 
   // Reconstruct algorithm result when resuming with persisted results
   useEffect(() => {
-    if (hasResults && !algorithmResult && finalPlayers.length > 0 && finalTeams.length > 0) {
+    if (hasCompletedResults && !algorithmResult && finalPlayers.length > 0 && finalTeams.length > 0) {
       // Reconstruct assignments from player data
       const assignments: AssignmentResult[] = finalPlayers
         .filter(p => p.draftedByTeamId)
@@ -258,18 +254,18 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
 
       setAlgorithmResult(reconstructedResult);
     }
-  }, [hasResults, algorithmResult, finalPlayers, finalTeams]);
+  }, [hasCompletedResults, algorithmResult, finalPlayers, finalTeams]);
 
   // Rebuild resolvedRequests from persisted player data when starting at configure step
   // This handles the case where user navigated away and came back, or is doing a re-run
   useEffect(() => {
     // Only run if:
-    // 1. We're at configure or generate step (where we need resolvedRequests for algorithm)
+    // 1. We're at confirm-locks or results step (where we need resolvedRequests for algorithm)
     // 2. resolvedRequests is empty (not already built)
     // 3. Players have request data (from previous session)
     const hasPlayerRequestData = evalPlayers.some(p => p.coachRequest || (p.teammateRequests && p.teammateRequests.length > 0));
 
-    if ((step === 'configure' || step === 'generate') && resolvedRequests.length === 0 && hasPlayerRequestData) {
+    if ((step === 'confirm-locks' || step === 'results') && resolvedRequests.length === 0 && hasPlayerRequestData) {
       console.log('Rebuilding resolvedRequests from persisted player data on mount...');
 
       // Build coach info from teams
@@ -385,15 +381,22 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
     // Update teams with coach info from eval import
     // IMPORTANT: Preserve existing coach names if they were already set in Setup step
     // Note: teamNames from evaluation actually contains head coach names, not actual team names
-    const updatedTeams = teams.map((team, index) => ({
-      ...team,
-      // headCoach is the manager's last name - only update if not already set
-      headCoach: team.headCoach || teamNames[index] || '',
-      assistantCoach: team.assistantCoach || assistantCoaches[index] || '',
-      // Populate coachKids array from detected coach kids
-      coachKids: coachKidsByTeamIndex.get(index) || team.coachKids || [],
-      // teamName stays empty until actual team name (e.g., "Guardians") is assigned
-    }));
+    const updatedTeams = teams.map((team, index) => {
+      // Merge detected coach kids with existing, deduplicating
+      const detectedKids = coachKidsByTeamIndex.get(index) || [];
+      const existingKids = team.coachKids || [];
+      const mergedKids = [...new Set([...existingKids, ...detectedKids])];
+
+      return {
+        ...team,
+        // headCoach is the manager's last name - only update if not already set
+        headCoach: team.headCoach || teamNames[index] || '',
+        assistantCoach: team.assistantCoach || assistantCoaches[index] || '',
+        // Populate coachKids array from detected coach kids (deduplicated)
+        coachKids: mergedKids,
+        // teamName stays empty until actual team name (e.g., "Guardians") is assigned
+      };
+    });
     setTeams(updatedTeams);
 
     // Also update players with the actual team IDs (not "team-0" format)
@@ -734,13 +737,13 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
     }));
   }, []);
 
-  // Proceed from request confirmation to configure
-  const handleProceedToConfigure = useCallback(() => {
-    setStep('configure');
+  // Proceed from request confirmation to confirm-locks
+  const handleProceedToConfirmLocks = useCallback(() => {
+    setStep('confirm-locks');
   }, []);
 
   // -----------------------------------------------------------------------------
-  // Step 3: Configure
+  // Step 3: Confirm Locks (Coach Kids & Siblings)
   // -----------------------------------------------------------------------------
 
   const handleUpdateTeam = useCallback((teamId: string, updates: Partial<Team>) => {
@@ -758,13 +761,13 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
     });
   }, [onUpdateTeams]);
 
-  const handleProceedToGenerate = useCallback(() => {
+  const handleProceedToResults = useCallback(() => {
     // Save teams before proceeding (mark as local update to prevent sync loop)
     if (onUpdateTeams) {
       isLocalUpdate.current = true;
       onUpdateTeams(teams);
     }
-    setStep('generate');
+    setStep('results');
   }, [onUpdateTeams, teams]);
 
   // -----------------------------------------------------------------------------
@@ -823,12 +826,14 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
             ? { ...p, isCoachKid: true, coachTeamId: match.teamId }
             : p
         );
-        // Add to team's coachKids array
-        updatedTeams = updatedTeams.map(t =>
-          t.id === match.teamId
-            ? { ...t, coachKids: t.coachKids.includes(match.playerId) ? t.coachKids : [...t.coachKids, match.playerId] }
-            : t
-        );
+        // Add to team's coachKids array (ensure no duplicates)
+        updatedTeams = updatedTeams.map(t => {
+          if (t.id !== match.teamId) return t;
+          // Dedupe the coachKids array to prevent any accumulation issues
+          const existingIds = new Set(t.coachKids);
+          if (existingIds.has(match.playerId)) return t;
+          return { ...t, coachKids: [...t.coachKids, match.playerId] };
+        });
       } else {
         // Not selected - clear coach kid status if previously set
         updatedPlayers = updatedPlayers.map(p =>
@@ -901,28 +906,11 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
   }, []);
 
   // -----------------------------------------------------------------------------
-  // Step 4: Generate
+  // Algorithm Selection (Simplified Flow)
   // -----------------------------------------------------------------------------
 
-  // Helper to populate originalAssignments from algorithm result
-  const populateOriginalAssignments = useCallback((result: TeamBuilderResult, teamsArr: Team[]) => {
-    const teamNameMap = new Map(teamsArr.map(t => [t.id, t.teamName || t.headCoach || `Team ${t.draftPosition}`]));
-    const newOriginals = new Map<string, { teamId: string; teamName: string; reason: string }>();
-
-    for (const assignment of result.assignments) {
-      newOriginals.set(assignment.playerId, {
-        teamId: assignment.teamId,
-        teamName: teamNameMap.get(assignment.teamId) || 'Unknown',
-        reason: assignment.reason,
-      });
-    }
-
-    setOriginalAssignments(newOriginals);
-    // Reset corrections when rerunning algorithm
-    setCorrections([]);
-  }, []);
-
-  const handleRunAlgorithm = useCallback(() => {
+  // Build team builder players from eval players
+  const buildTeamBuilderPlayers = useCallback((): TeamBuilderPlayer[] => {
     // Create mapping from evaluation team IDs (team-0, team-1, etc.) to actual division team IDs
     const evalTeamIdToRealId = new Map<string, string>();
     teams.forEach((team, index) => {
@@ -935,7 +923,7 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
     );
 
     // Build enhanced players using normalization results
-    const teamBuilderPlayers: TeamBuilderPlayer[] = evalPlayers.map(evalPlayer => {
+    return evalPlayers.map(evalPlayer => {
       // Find matching registration data
       const regPlayer = registrationPlayers.find(r => r.evalBib === evalPlayer.bib);
 
@@ -980,130 +968,43 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
         oneWayTeammateIds,
       };
     });
+  }, [evalPlayers, teams, registrationPlayers, normalizationResult]);
 
-    // Debug logging for testing
-    console.log('=== Algorithm Run Debug ===');
-    console.log('evalPlayers:', evalPlayers.length);
-    console.log('teams:', teams.length);
-    console.log('registrationPlayers:', registrationPlayers.length);
-    console.log('resolvedRequests:', resolvedRequests.length);
-    console.log('normalizationResult:', normalizationResult ? 'present' : 'null');
-    console.log('algorithmMode:', algorithmMode);
+  // Handle selecting an algorithm from comparison panel
+  const handleSelectAlgorithm = useCallback((mode: SimplifiedAlgorithmMode, result: TeamBuilderResult) => {
+    setSelectedAlgorithmMode(mode);
+    setAlgorithmResult(result);
 
-    if (algorithmMode === 'skill-tiered') {
-      // Run skill-tiered draft algorithm (simulates real draft)
-      const result = runSkillTieredDraft(
-        teamBuilderPlayers,
-        teams,
-        resolvedRequests,
-        {
-          ...DEFAULT_SKILL_TIERED_CONFIG,
-          maxRosterSize: config.maxRosterSize,
-          minRosterSize: config.minRosterSize,
-          forceEvenTeams: config.forceEvenTeams,
-          twoWayTeammateWeight: requestsFirstConfig.twoWayTeammateWeight,
-          oneWayTeammateWeight: requestsFirstConfig.oneWayTeammateWeight,
-          coachRequestWeight: requestsFirstConfig.coachRequestWeight,
-        }
-      );
-      // Cast to RequestsFirstResult since SkillTieredDraftResult extends it
-      setRequestsFirstResult(result as unknown as RequestsFirstResult);
-      setAlgorithmResult(result);
-
-      // Populate original assignments for correction tracking
-      populateOriginalAssignments(result, teams);
-
-      // Reset trade state
-      setAppliedTradeIds(new Set());
-      setDismissedTradeIds(new Set());
-
-      // Apply assignments to get final state
-      const { players: updatedPlayers, teams: updatedTeams } = applyAssignments(
-        teamBuilderPlayers,
-        teams,
-        result.assignments
-      );
-
-      setFinalPlayers(updatedPlayers);
-      setFinalTeams(updatedTeams);
-
-      // Persist the results
-      if (onUpdatePlayers) {
-        onUpdatePlayers(updatedPlayers);
-      }
-      if (onUpdateTeams) {
-        onUpdateTeams(updatedTeams);
-      }
-    } else if (algorithmMode === 'requests-first') {
-      // Run requests-first algorithm
-      const result = runRequestsFirstAlgorithm(
-        teamBuilderPlayers,
-        teams,
-        resolvedRequests,
-        {
-          ...requestsFirstConfig,
-          maxRosterSize: config.maxRosterSize,
-          minRosterSize: config.minRosterSize,
-          forceEvenTeams: config.forceEvenTeams,
-        }
-      );
-      setRequestsFirstResult(result);
-      setAlgorithmResult(result);
-
-      // Populate original assignments for correction tracking
-      populateOriginalAssignments(result, teams);
-
-      // Reset trade state
-      setAppliedTradeIds(new Set());
-      setDismissedTradeIds(new Set());
-
-      // Apply assignments to get final state
-      const { players: updatedPlayers, teams: updatedTeams } = applyAssignments(
-        teamBuilderPlayers,
-        teams,
-        result.assignments
-      );
-
-      setFinalPlayers(updatedPlayers);
-      setFinalTeams(updatedTeams);
-
-      // Persist the results
-      if (onUpdatePlayers) {
-        onUpdatePlayers(updatedPlayers);
-      }
-      if (onUpdateTeams) {
-        onUpdateTeams(updatedTeams);
-      }
+    // Check if this is a requests-first result (has suggestedTrades)
+    if ('suggestedTrades' in result) {
+      setRequestsFirstResult(result as RequestsFirstResult);
     } else {
-      // Run balance-first algorithm (original)
-      const result = runTeamBuilderAlgorithm(teamBuilderPlayers, teams, config);
-      setAlgorithmResult(result);
       setRequestsFirstResult(null);
-
-      // Populate original assignments for correction tracking
-      populateOriginalAssignments(result, teams);
-
-      // Apply assignments to get final state
-      const { players: updatedPlayers, teams: updatedTeams } = applyAssignments(
-        teamBuilderPlayers,
-        teams,
-        result.assignments
-      );
-
-      setFinalPlayers(updatedPlayers);
-      setFinalTeams(updatedTeams);
-
-      // Persist the results
-      if (onUpdatePlayers) {
-        onUpdatePlayers(updatedPlayers);
-      }
-      if (onUpdateTeams) {
-        onUpdateTeams(updatedTeams);
-      }
     }
 
-    setStep('results');
-  }, [evalPlayers, teams, registrationPlayers, config, normalizationResult, algorithmMode, resolvedRequests, requestsFirstConfig, onUpdatePlayers, onUpdateTeams, populateOriginalAssignments]);
+    // Reset trade state
+    setAppliedTradeIds(new Set());
+    setDismissedTradeIds(new Set());
+
+    // Apply assignments to get final state
+    const teamBuilderPlayers = buildTeamBuilderPlayers();
+    const { players: updatedPlayers, teams: updatedTeams } = applyAssignments(
+      teamBuilderPlayers,
+      teams,
+      result.assignments
+    );
+
+    setFinalPlayers(updatedPlayers);
+    setFinalTeams(updatedTeams);
+
+    // Persist the results
+    if (onUpdatePlayers) {
+      onUpdatePlayers(updatedPlayers);
+    }
+    if (onUpdateTeams) {
+      onUpdateTeams(updatedTeams);
+    }
+  }, [teams, buildTeamBuilderPlayers, onUpdatePlayers, onUpdateTeams]);
 
   // Handle applying a suggested trade
   const handleApplyTrade = useCallback((trade: TradeCandidate) => {
@@ -1168,28 +1069,16 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
     setDismissedTradeIds(prev => new Set([...prev, tradeId]));
   }, []);
 
-  // Handle applying suggested weights from correction analysis and rerunning
-  const handleApplySuggestedWeights = useCallback((newConfig: RequestsFirstConfig) => {
-    // Update the config with suggested weights
-    setRequestsFirstConfig(newConfig);
-
-    // Go back to configure step to run with new weights
-    setAlgorithmResult(null);
-    setFinalPlayers([]);
-    setFinalTeams([]);
-    setStep('configure');
-
-    console.log('Applied suggested weights and going to configure step:', newConfig);
-  }, []);
-
   // -----------------------------------------------------------------------------
-  // Step 5: Results
+  // Step 4: Results
   // -----------------------------------------------------------------------------
 
+  // Handle re-running with different settings - goes to confirm-locks to show comparison again
   const handleRerun = useCallback(() => {
-    // Go back to configure step so user can adjust algorithm settings before re-running
+    // Clear previous results
     setAlgorithmResult(null);
-    // Clear final results so algorithm runs fresh
+    setSelectedAlgorithmMode(null);
+    // Clear comparison state
     setFinalPlayers([]);
     setFinalTeams([]);
 
@@ -1225,56 +1114,57 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
       console.log(`Rebuilt ${preparedRequests.length} requests from player data`);
     }
 
-    setStep('configure');
+    setStep('confirm-locks');
   }, [resolvedRequests, evalPlayers, teams, requestsFirstConfig]);
 
-  // Quick re-run that skips configure and runs algorithm immediately with current settings
+  // Quick re-run that clears the selected algorithm and shows comparison again
   const handleQuickRerun = useCallback(() => {
     setAlgorithmResult(null);
+    setSelectedAlgorithmMode(null);
+    // Clear comparison state
     setFinalPlayers([]);
     setFinalTeams([]);
-
-    // If resolvedRequests is empty but players have request data, rebuild it
-    if (resolvedRequests.length === 0 && evalPlayers.some(p => p.coachRequest || (p.teammateRequests && p.teammateRequests.length > 0))) {
-      console.log('Rebuilding resolvedRequests from player data...');
-
-      // Build coach info from teams
-      const coachInfos: CoachInfo[] = teams.map(t => ({
-        teamId: t.id,
-        teamName: t.teamName || t.headCoach,
-        coachName: t.headCoach,
-        assistantCoach: t.assistantCoach,
-      }));
-
-      // Build player data for normalization from stored evalPlayers
-      const playersForNormalization = evalPlayers.map(p => ({
-        id: p.id,
-        bib: p.bib,
-        firstName: p.firstName,
-        lastName: p.lastName,
-        coachRequest: p.coachRequest,
-        teammateRequests: p.teammateRequests,
-        school: p.school,
-      }));
-
-      const normResult = normalizeRequestData(playersForNormalization, coachInfos);
-      setNormalizationResult(normResult);
-
-      const preparedRequests = prepareRequestsForConfirmation(normResult, requestsFirstConfig);
-      setResolvedRequests(preparedRequests);
-
-      console.log(`Rebuilt ${preparedRequests.length} requests from player data`);
-    }
-
-    // Go to generate step which shows the run button
-    setStep('generate');
-  }, [resolvedRequests, evalPlayers, teams, requestsFirstConfig]);
+    // Stay on results step - the comparison panel will show again
+  }, []);
 
   const handleFinalize = useCallback(() => {
     if (onComplete && algorithmResult) {
       onComplete(finalPlayers, finalTeams);
     }
   }, [onComplete, algorithmResult, finalPlayers, finalTeams]);
+
+  // Helper to get all siblings of a player (including the player themselves)
+  const getSiblingGroup = useCallback((playerId: string, players: Player[]): Player[] => {
+    const player = players.find(p => p.id === playerId);
+    if (!player || !player.siblingId) return [player].filter(Boolean) as Player[];
+
+    // Find all players in the sibling group
+    const siblingGroup: Player[] = [player];
+    const visited = new Set<string>([playerId]);
+
+    // Follow sibling links
+    let current = player;
+    while (current.siblingId && !visited.has(current.siblingId)) {
+      const sibling = players.find(p => p.id === current.siblingId);
+      if (sibling) {
+        siblingGroup.push(sibling);
+        visited.add(sibling.id);
+        current = sibling;
+      } else {
+        break;
+      }
+    }
+
+    // Also find players whose siblingId points to this player
+    for (const p of players) {
+      if (!visited.has(p.id) && p.siblingId && visited.has(p.siblingId)) {
+        siblingGroup.push(p);
+        visited.add(p.id);
+      }
+    }
+
+    return siblingGroup;
+  }, []);
 
   // Handle player swap (local, no API)
   const handleSwap = useCallback((
@@ -1289,6 +1179,28 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
     const player2 = finalPlayers.find(p => p.id === player2Id);
 
     if (!player1 || !player2) return;
+
+    // Check for sibling constraints
+    const player1Siblings = getSiblingGroup(player1Id, finalPlayers);
+    const player2Siblings = getSiblingGroup(player2Id, finalPlayers);
+
+    // If player1 has siblings on team1, swapping would separate them
+    const player1SiblingsOnTeam1 = player1Siblings.filter(
+      s => s.id !== player1Id && s.draftedByTeamId === team1Id
+    );
+    if (player1SiblingsOnTeam1.length > 0) {
+      alert(`Cannot swap: ${player1.firstName} ${player1.lastName} has sibling(s) on this team (${player1SiblingsOnTeam1.map(s => `${s.firstName} ${s.lastName}`).join(', ')}). Move both siblings together instead.`);
+      return;
+    }
+
+    // If player2 has siblings on team2, swapping would separate them
+    const player2SiblingsOnTeam2 = player2Siblings.filter(
+      s => s.id !== player2Id && s.draftedByTeamId === team2Id
+    );
+    if (player2SiblingsOnTeam2.length > 0) {
+      alert(`Cannot swap: ${player2.firstName} ${player2.lastName} has sibling(s) on this team (${player2SiblingsOnTeam2.map(s => `${s.firstName} ${s.lastName}`).join(', ')}). Move both siblings together instead.`);
+      return;
+    }
 
     // Update player assignments
     const updatedPlayers = finalPlayers.map(p => {
@@ -1385,11 +1297,10 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
   }, [finalPlayers, finalTeams, algorithmResult, onUpdatePlayers, onUpdateTeams]);
 
   // Handle moving a player to a different team (no swap)
-  // Optional correction data is used to track why the user made this correction
+  // Automatically moves siblings together
   const handleMovePlayer = useCallback((
     playerId: string,
-    toTeamId: string,
-    correctionData?: { reason: CorrectionReason; notes?: string }
+    toTeamId: string
   ) => {
     const player = finalPlayers.find(p => p.id === playerId);
     if (!player) return;
@@ -1397,30 +1308,14 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
     const fromTeamId = player.draftedByTeamId;
     if (!fromTeamId || fromTeamId === toTeamId) return;
 
-    // Track correction if this is a move from the original algorithm assignment
-    const originalAssignment = originalAssignments.get(playerId);
-    if (originalAssignment && correctionData) {
-      const toTeam = finalTeams.find(t => t.id === toTeamId);
-      const correction: AssignmentCorrection = {
-        id: `correction-${Date.now()}-${playerId}`,
-        playerId,
-        playerName: player.name,
-        originalTeamId: originalAssignment.teamId,
-        originalTeamName: originalAssignment.teamName,
-        originalReason: originalAssignment.reason,
-        correctedTeamId: toTeamId,
-        correctedTeamName: toTeam?.teamName || toTeam?.headCoach || 'Unknown',
-        correctionReason: correctionData.reason,
-        correctionNotes: correctionData.notes,
-        timestamp: new Date().toISOString(),
-      };
-      setCorrections(prev => [...prev, correction]);
-      console.log('Recorded correction:', correction);
-    }
+    // Get all siblings that need to move together
+    const siblingGroup = getSiblingGroup(playerId, finalPlayers);
+    const playersToMove = siblingGroup.filter(p => p.draftedByTeamId === fromTeamId);
+    const playerIdsToMove = new Set(playersToMove.map(p => p.id));
 
-    // Update player assignment
+    // Update player assignments (move all siblings together)
     const updatedPlayers = finalPlayers.map(p => {
-      if (p.id === playerId) {
+      if (playerIdsToMove.has(p.id)) {
         return { ...p, draftedByTeamId: toTeamId };
       }
       return p;
@@ -1429,14 +1324,17 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
     // Update team rosters
     const updatedTeams = finalTeams.map(team => {
       if (team.id === fromTeamId) {
-        // Remove player from source team
-        const newRoster = team.roster.filter(p => p.id !== playerId);
+        // Remove all moving players from source team
+        const newRoster = team.roster.filter(p => !playerIdsToMove.has(p.id));
         const newTotalScore = newRoster.reduce((sum, p) => sum + p.totalScore, 0);
         return { ...team, roster: newRoster, totalScore: newTotalScore };
       }
       if (team.id === toTeamId) {
-        // Add player to destination team
-        const newRoster = [...team.roster, { ...player, draftedByTeamId: toTeamId }];
+        // Add all moving players to destination team
+        const newRoster = [
+          ...team.roster,
+          ...playersToMove.map(p => ({ ...p, draftedByTeamId: toTeamId }))
+        ];
         const newTotalScore = newRoster.reduce((sum, p) => sum + p.totalScore, 0);
         return { ...team, roster: newRoster, totalScore: newTotalScore };
       }
@@ -1460,9 +1358,9 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
         ? updatedPlayers.reduce((sum, p) => sum + p.totalScore, 0) / updatedTeams.length / (updatedPlayers.length / updatedTeams.length)
         : 0;
 
-      // Update assignments
+      // Update assignments (move all siblings together)
       const updatedAssignments = algorithmResult.assignments.map(a => {
-        if (a.playerId === playerId) {
+        if (playerIdsToMove.has(a.playerId)) {
           return { ...a, teamId: toTeamId };
         }
         return a;
@@ -1501,19 +1399,19 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
         };
       });
     }
-  }, [finalPlayers, finalTeams, algorithmResult, onUpdatePlayers, onUpdateTeams, originalAssignments]);
+  }, [finalPlayers, finalTeams, algorithmResult, onUpdatePlayers, onUpdateTeams, getSiblingGroup]);
 
   // -----------------------------------------------------------------------------
   // Render
   // -----------------------------------------------------------------------------
 
+  // Simplified step progression
   const steps: { key: TeamBuilderStep; label: string; icon: typeof Upload }[] = [
     { key: 'setup', label: 'Setup', icon: Settings },
     { key: 'import', label: 'Import', icon: Upload },
     { key: 'resolution', label: 'Resolution', icon: Users },
     { key: 'confirm-requests', label: 'Confirm', icon: ClipboardCheck },
-    { key: 'configure', label: 'Configure', icon: Wand2 },
-    { key: 'generate', label: 'Generate', icon: Play },
+    { key: 'confirm-locks', label: 'Locks', icon: Wand2 },
     { key: 'results', label: 'Results', icon: BarChart3 },
   ];
 
@@ -1992,202 +1890,22 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
             }))}
             teams={teams}
             onUpdateRequest={handleUpdateRequest}
-            onContinue={handleProceedToConfigure}
+            onContinue={handleProceedToConfirmLocks}
             onBack={() => setStep('resolution')}
           />
         )}
 
-        {/* Step 4: Configure */}
-        {step === 'configure' && (
+        {/* Step 4: Confirm Locks (Coach Kids & Siblings) */}
+        {step === 'confirm-locks' && (
           <div className="space-y-6">
             <div className="text-center mb-8">
               <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-                Configure Teams
+                Confirm Team Locks
               </h2>
               <p className="text-gray-600 dark:text-gray-400">
-                Review team coaches and algorithm settings.
+                Verify coach kids and siblings are assigned correctly before comparing algorithms.
               </p>
             </div>
-
-            {/* Algorithm Mode Selection */}
-            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                Algorithm Mode
-              </h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                Choose how teams should be built. The skill-tiered algorithm simulates a real draft process.
-              </p>
-              <div className="grid grid-cols-3 gap-4">
-                {/* Skill-Tiered Draft (Recommended) */}
-                <div
-                  className={`p-4 rounded-lg border-2 cursor-pointer transition-colors ${
-                    algorithmMode === 'skill-tiered'
-                      ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-500'
-                      : 'bg-gray-50 dark:bg-gray-700/50 border-transparent hover:border-gray-300 dark:hover:border-gray-600'
-                  }`}
-                  onClick={() => setAlgorithmMode('skill-tiered')}
-                >
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${
-                      algorithmMode === 'skill-tiered'
-                        ? 'bg-purple-600'
-                        : 'border-2 border-gray-300 dark:border-gray-600'
-                    }`}>
-                      {algorithmMode === 'skill-tiered' && (
-                        <div className="w-2 h-2 rounded-full bg-white" />
-                      )}
-                    </div>
-                    <h4 className="font-semibold text-gray-900 dark:text-white">
-                      Skill-Tiered Draft (Recommended)
-                    </h4>
-                  </div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 ml-8">
-                    Simulates a real draft. Picks players by skill tier (projected round), using
-                    requests as tiebreakers. Recalculates draft order each round for balance.
-                  </p>
-                </div>
-                {/* Requests First */}
-                <div
-                  className={`p-4 rounded-lg border-2 cursor-pointer transition-colors ${
-                    algorithmMode === 'requests-first'
-                      ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-500'
-                      : 'bg-gray-50 dark:bg-gray-700/50 border-transparent hover:border-gray-300 dark:hover:border-gray-600'
-                  }`}
-                  onClick={() => setAlgorithmMode('requests-first')}
-                >
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${
-                      algorithmMode === 'requests-first'
-                        ? 'bg-purple-600'
-                        : 'border-2 border-gray-300 dark:border-gray-600'
-                    }`}>
-                      {algorithmMode === 'requests-first' && (
-                        <div className="w-2 h-2 rounded-full bg-white" />
-                      )}
-                    </div>
-                    <h4 className="font-semibold text-gray-900 dark:text-white">
-                      Requests First
-                    </h4>
-                  </div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 ml-8">
-                    Prioritizes friend requests. Two-way friends placed together first,
-                    then trades suggested for balance.
-                  </p>
-                </div>
-                {/* Balance First */}
-                <div
-                  className={`p-4 rounded-lg border-2 cursor-pointer transition-colors ${
-                    algorithmMode === 'balance-first'
-                      ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-500'
-                      : 'bg-gray-50 dark:bg-gray-700/50 border-transparent hover:border-gray-300 dark:hover:border-gray-600'
-                  }`}
-                  onClick={() => setAlgorithmMode('balance-first')}
-                >
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${
-                      algorithmMode === 'balance-first'
-                        ? 'bg-purple-600'
-                        : 'border-2 border-gray-300 dark:border-gray-600'
-                    }`}>
-                      {algorithmMode === 'balance-first' && (
-                        <div className="w-2 h-2 rounded-full bg-white" />
-                      )}
-                    </div>
-                    <h4 className="font-semibold text-gray-900 dark:text-white">
-                      Balance First
-                    </h4>
-                  </div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 ml-8">
-                    Spreads top talent first, then honors requests only
-                    if they don't impact balance.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Weight Configuration Panel - only for skill-tiered or requests-first */}
-            {(algorithmMode === 'skill-tiered' || algorithmMode === 'requests-first') && (
-              <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                      Request Weights
-                    </h3>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">
-                      Adjust how the algorithm prioritizes different request types.
-                    </p>
-                  </div>
-                  {/* Show learned preferences badge if we have corrections */}
-                  {corrections.length >= 3 && (() => {
-                    const analysis = analyzeCorrections(corrections, requestsFirstConfig);
-                    return analysis.suggestedWeights.length > 0 ? (
-                      <div className="flex items-center gap-2 px-3 py-1 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 rounded-full text-xs font-medium">
-                        <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></span>
-                        Learned Preferences Available
-                      </div>
-                    ) : null;
-                  })()}
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <WeightSlider
-                    label="Two-Way Teammate Requests"
-                    value={requestsFirstConfig.twoWayTeammateWeight}
-                    min={0}
-                    max={150}
-                    step={10}
-                    onChange={(value) => setRequestsFirstConfig(prev => ({ ...prev, twoWayTeammateWeight: value }))}
-                    description="Weight for mutual friend requests (both players requested each other)"
-                    suggestedValue={corrections.length >= 3 ? analyzeCorrections(corrections, requestsFirstConfig).suggestedWeights.find(s => s.weightKey === 'twoWayTeammateWeight')?.suggestedValue : undefined}
-                  />
-
-                  <WeightSlider
-                    label="One-Way Teammate Requests"
-                    value={requestsFirstConfig.oneWayTeammateWeight}
-                    min={0}
-                    max={100}
-                    step={10}
-                    onChange={(value) => setRequestsFirstConfig(prev => ({ ...prev, oneWayTeammateWeight: value }))}
-                    description="Weight for one-sided friend requests"
-                    suggestedValue={corrections.length >= 3 ? analyzeCorrections(corrections, requestsFirstConfig).suggestedWeights.find(s => s.weightKey === 'oneWayTeammateWeight')?.suggestedValue : undefined}
-                  />
-
-                  <WeightSlider
-                    label="Coach Requests"
-                    value={requestsFirstConfig.coachRequestWeight}
-                    min={0}
-                    max={100}
-                    step={10}
-                    onChange={(value) => setRequestsFirstConfig(prev => ({ ...prev, coachRequestWeight: value }))}
-                    description="Weight for requests to be on a specific coach's team"
-                    suggestedValue={corrections.length >= 3 ? analyzeCorrections(corrections, requestsFirstConfig).suggestedWeights.find(s => s.weightKey === 'coachRequestWeight')?.suggestedValue : undefined}
-                  />
-
-                  <WeightSlider
-                    label="School Clustering"
-                    value={requestsFirstConfig.schoolClusterWeight}
-                    min={0}
-                    max={50}
-                    step={5}
-                    onChange={(value) => setRequestsFirstConfig(prev => ({ ...prev, schoolClusterWeight: value }))}
-                    description="Weight for placing players from the same school together"
-                    suggestedValue={corrections.length >= 3 ? analyzeCorrections(corrections, requestsFirstConfig).suggestedWeights.find(s => s.weightKey === 'schoolClusterWeight')?.suggestedValue : undefined}
-                  />
-                </div>
-
-                {/* Reset to defaults */}
-                <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 flex justify-end">
-                  <button
-                    onClick={() => setRequestsFirstConfig(DEFAULT_REQUESTS_FIRST_CONFIG)}
-                    className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
-                  >
-                    Reset to Defaults
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Teams & Detection - Collapsible Panel */}
             <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
               <div className="px-4 py-3 flex items-center justify-between">
                 <button
@@ -2276,12 +1994,24 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
                         <div className="flex items-center gap-3 pt-2 border-t border-gray-200 dark:border-gray-700">
                           <button
                             onClick={() => {
-                              // Clear coach kids from all teams
-                              teams.forEach(team => {
-                                if (team.coachKids.length > 0) {
-                                  handleUpdateTeam(team.id, { coachKids: [] });
-                                }
-                              });
+                              // Clear coach kids from all teams in one batch update
+                              const clearedTeams = teams.map(t => ({ ...t, coachKids: [] }));
+                              setTeams(clearedTeams);
+                              // Also clear isCoachKid flag on players
+                              const clearedPlayers = evalPlayers.map(p => ({
+                                ...p,
+                                isCoachKid: false,
+                                coachTeamId: undefined,
+                              }));
+                              setEvalPlayers(clearedPlayers);
+                              // Persist changes
+                              if (onUpdateTeams) {
+                                isLocalUpdate.current = true;
+                                onUpdateTeams(clearedTeams);
+                              }
+                              if (onUpdatePlayers) {
+                                onUpdatePlayers(clearedPlayers);
+                              }
                             }}
                             className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
                           >
@@ -2817,236 +2547,6 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
                 })()}
               </div>
             )}
-
-            {/* Algorithm config */}
-            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                Algorithm Settings
-              </h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
-                Fine-tune how teams are balanced and requests are honored.
-              </p>
-
-              <div className="space-y-6">
-                {/* Balance Tolerance */}
-                <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1">
-                      <label className="block text-sm font-semibold text-gray-900 dark:text-white mb-1">
-                        Balance Tolerance
-                      </label>
-                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                        How much team total scores can differ from the average.
-                      </p>
-                      <p className="text-xs text-gray-500 dark:text-gray-500">
-                        <span className="font-medium">Example:</span> With {teams.length} teams averaging ~{Math.round(evalPlayers.reduce((sum, p) => sum + p.totalScore, 0) / teams.length)} points each,
-                        ±{Math.round(config.balanceTolerance * 100)}% means teams can range from {Math.round((evalPlayers.reduce((sum, p) => sum + p.totalScore, 0) / teams.length) * (1 - config.balanceTolerance))} to {Math.round((evalPlayers.reduce((sum, p) => sum + p.totalScore, 0) / teams.length) * (1 + config.balanceTolerance))} points.
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => setConfig({ ...config, balanceTolerance: Math.max(0.05, config.balanceTolerance - 0.01) })}
-                        className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 font-bold"
-                      >
-                        −
-                      </button>
-                      <div className="w-16 h-10 flex items-center justify-center rounded-lg bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 font-semibold text-gray-900 dark:text-white">
-                        ±{Math.round(config.balanceTolerance * 100)}%
-                      </div>
-                      <button
-                        onClick={() => setConfig({ ...config, balanceTolerance: Math.min(0.25, config.balanceTolerance + 0.01) })}
-                        className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 font-bold"
-                      >
-                        +
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Top Talent Rounds */}
-                <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1">
-                      <label className="block text-sm font-semibold text-gray-900 dark:text-white mb-1">
-                        Top Talent Rounds
-                      </label>
-                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                        Number of rounds where top players are distributed purely by skill (ignoring friend requests).
-                      </p>
-                      <p className="text-xs text-gray-500 dark:text-gray-500">
-                        <span className="font-medium">Example:</span> With {config.topTalentRounds} rounds and {teams.length} teams,
-                        the top {config.topTalentRounds * teams.length} players will be spread evenly across teams before friend requests are considered.
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => setConfig({ ...config, topTalentRounds: Math.max(1, config.topTalentRounds - 1) })}
-                        className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 font-bold"
-                      >
-                        −
-                      </button>
-                      <div className="w-16 h-10 flex items-center justify-center rounded-lg bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 font-semibold text-gray-900 dark:text-white">
-                        {config.topTalentRounds}
-                      </div>
-                      <button
-                        onClick={() => setConfig({ ...config, topTalentRounds: Math.min(5, config.topTalentRounds + 1) })}
-                        className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 font-bold"
-                      >
-                        +
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Max Roster Size */}
-                <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1">
-                      <label className="block text-sm font-semibold text-gray-900 dark:text-white mb-1">
-                        Maximum Roster Size
-                      </label>
-                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                        Hard limit on players per team. Teams won't exceed this even to honor requests.
-                      </p>
-                      <p className="text-xs text-gray-500 dark:text-gray-500">
-                        <span className="font-medium">Target:</span> With {evalPlayers.length} players and {teams.length} teams,
-                        average roster is {Math.round(evalPlayers.length / teams.length)} players.
-                        {evalPlayers.length % teams.length !== 0 && ` Some teams will have ${Math.ceil(evalPlayers.length / teams.length)}.`}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => setConfig({ ...config, maxRosterSize: Math.max(config.minRosterSize, config.maxRosterSize - 1) })}
-                        className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 font-bold"
-                      >
-                        −
-                      </button>
-                      <div className="w-16 h-10 flex items-center justify-center rounded-lg bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 font-semibold text-gray-900 dark:text-white">
-                        {config.maxRosterSize}
-                      </div>
-                      <button
-                        onClick={() => setConfig({ ...config, maxRosterSize: Math.min(18, config.maxRosterSize + 1) })}
-                        className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 font-bold"
-                      >
-                        +
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Min Roster Size */}
-                <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1">
-                      <label className="block text-sm font-semibold text-gray-900 dark:text-white mb-1">
-                        Minimum Roster Size
-                      </label>
-                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                        All teams will have at least this many players before any team gets extras.
-                      </p>
-                      <p className="text-xs text-gray-500 dark:text-gray-500">
-                        <span className="font-medium">Note:</span> Setting this higher ensures balanced team sizes but may limit friend request matching.
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => setConfig({ ...config, minRosterSize: Math.max(1, config.minRosterSize - 1) })}
-                        className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 font-bold"
-                      >
-                        −
-                      </button>
-                      <div className="w-16 h-10 flex items-center justify-center rounded-lg bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 font-semibold text-gray-900 dark:text-white">
-                        {config.minRosterSize}
-                      </div>
-                      <button
-                        onClick={() => setConfig({ ...config, minRosterSize: Math.min(config.maxRosterSize, config.minRosterSize + 1) })}
-                        className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 font-bold"
-                      >
-                        +
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Prioritize Balance */}
-                <div
-                  className={`p-4 rounded-lg border-2 cursor-pointer transition-colors ${
-                    config.prioritizeBalance
-                      ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-300 dark:border-purple-700'
-                      : 'bg-gray-50 dark:bg-gray-700/50 border-transparent hover:border-gray-300 dark:hover:border-gray-600'
-                  }`}
-                  onClick={() => setConfig({ ...config, prioritizeBalance: !config.prioritizeBalance })}
-                >
-                  <div className="flex items-start gap-3">
-                    <div className={`w-5 h-5 mt-0.5 rounded flex items-center justify-center flex-shrink-0 ${
-                      config.prioritizeBalance
-                        ? 'bg-purple-600 text-white'
-                        : 'border-2 border-gray-300 dark:border-gray-600'
-                    }`}>
-                      {config.prioritizeBalance && (
-                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                        </svg>
-                      )}
-                    </div>
-                    <div className="flex-1">
-                      <label className="block text-sm font-semibold text-gray-900 dark:text-white mb-1 cursor-pointer">
-                        Prioritize Balance over Happiness
-                      </label>
-                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                        {config.prioritizeBalance
-                          ? "Team balance takes priority. Some friend requests may not be honored if they would create unbalanced teams."
-                          : "Friend requests take priority. Teams may be slightly unbalanced to honor more requests."}
-                      </p>
-                      <p className="text-xs text-gray-500 dark:text-gray-500">
-                        <span className="font-medium">Recommended:</span> Enable for competitive divisions, disable for younger recreational divisions.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Force Even Teams */}
-                <div
-                  className={`p-4 rounded-lg border-2 cursor-pointer transition-colors ${
-                    config.forceEvenTeams
-                      ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-300 dark:border-purple-700'
-                      : 'bg-gray-50 dark:bg-gray-700/50 border-transparent hover:border-gray-300 dark:hover:border-gray-600'
-                  }`}
-                  onClick={() => setConfig({ ...config, forceEvenTeams: !config.forceEvenTeams })}
-                >
-                  <div className="flex items-start gap-3">
-                    <div className={`w-5 h-5 mt-0.5 rounded flex items-center justify-center flex-shrink-0 ${
-                      config.forceEvenTeams
-                        ? 'bg-purple-600 text-white'
-                        : 'border-2 border-gray-300 dark:border-gray-600'
-                    }`}>
-                      {config.forceEvenTeams && (
-                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                        </svg>
-                      )}
-                    </div>
-                    <div className="flex-1">
-                      <label className="block text-sm font-semibold text-gray-900 dark:text-white mb-1 cursor-pointer">
-                        Force Even Teams
-                      </label>
-                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                        {config.forceEvenTeams
-                          ? "All teams will have the same number of players (or differ by at most 1 player)."
-                          : "Teams may have uneven sizes to better honor friend requests or balance skill levels."}
-                      </p>
-                      <p className="text-xs text-gray-500 dark:text-gray-500">
-                        <span className="font-medium">With {evalPlayers.length} players and {teams.length} teams:</span>{' '}
-                        {evalPlayers.length % teams.length === 0
-                          ? `Each team will have exactly ${evalPlayers.length / teams.length} players.`
-                          : `${teams.length - (evalPlayers.length % teams.length)} teams will have ${Math.floor(evalPlayers.length / teams.length)} players, ${evalPlayers.length % teams.length} teams will have ${Math.ceil(evalPlayers.length / teams.length)} players.`}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
             {/* Continue button */}
             <div className="flex justify-between">
               <button
@@ -3056,85 +2556,78 @@ export const TeamBuilderFlow = ({ division, onBack, onComplete, onUpdateTeams, o
                 Back
               </button>
               <button
-                onClick={handleProceedToGenerate}
+                onClick={handleProceedToResults}
                 className="px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium"
               >
-                Continue to Generate
+                Compare Algorithms
               </button>
             </div>
           </div>
         )}
 
-        {/* Step 5: Generate */}
-        {step === 'generate' && (
+        {/* Step 5: Results - shows comparison panel first, then results after selection */}
+        {step === 'results' && !algorithmResult && (
           <div className="space-y-6">
             <div className="text-center mb-8">
               <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-                Generate Teams
+                Compare Algorithms
               </h2>
               <p className="text-gray-600 dark:text-gray-400">
-                Run the auto-assignment algorithm to create balanced teams.
+                Review and select the best algorithm for your teams.
               </p>
             </div>
 
-            {/* Summary before running */}
-            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                Ready to Generate
-              </h3>
-              <div className="grid grid-cols-3 gap-4 mb-6">
-                <div className="text-center p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                  <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                    {evalPlayers.length}
-                  </div>
-                  <div className="text-sm text-gray-500 dark:text-gray-400">Players</div>
-                </div>
-                <div className="text-center p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                  <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                    {teams.length}
-                  </div>
-                  <div className="text-sm text-gray-500 dark:text-gray-400">Teams</div>
-                </div>
-                <div className="text-center p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                  <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                    {registrationPlayers.filter(p => p.teammateRequests.length > 0).length}
-                  </div>
-                  <div className="text-sm text-gray-500 dark:text-gray-400">With Requests</div>
-                </div>
-              </div>
-
-              <button
-                onClick={handleRunAlgorithm}
-                className="w-full py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-semibold flex items-center justify-center gap-2"
-              >
-                <Play className="w-5 h-5" />
-                Run Auto-Assignment
-              </button>
-            </div>
+            <AlgorithmComparisonPanel
+              players={buildTeamBuilderPlayers()}
+              teams={teams}
+              resolvedRequests={resolvedRequests}
+              config={{
+                ...requestsFirstConfig,
+                maxRosterSize: config.maxRosterSize,
+                minRosterSize: config.minRosterSize,
+                forceEvenTeams: config.forceEvenTeams,
+              }}
+              onSelectResult={handleSelectAlgorithm}
+            />
 
             {/* Back button */}
             <div className="flex justify-start">
               <button
-                onClick={() => setStep('configure')}
+                onClick={() => setStep('confirm-locks')}
                 className="px-6 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-50 dark:hover:bg-gray-700"
               >
-                Back to Configure
+                Back to Settings
               </button>
             </div>
           </div>
         )}
 
-        {/* Step 6: Results */}
         {step === 'results' && algorithmResult && (
           <div className="space-y-6">
+            {/* Show selected algorithm info */}
+            {selectedAlgorithmMode && (
+              <div className="flex items-center justify-between bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-3">
+                <div className="flex items-center gap-3">
+                  <Check className="w-5 h-5 text-green-500" />
+                  <span className="text-gray-900 dark:text-white font-medium">
+                    Selected: {selectedAlgorithmMode === 'skill-priority' ? 'Skill Priority' :
+                              selectedAlgorithmMode === 'request-priority' ? 'Request Priority' : 'Balance Priority'}
+                  </span>
+                </div>
+                <button
+                  onClick={handleQuickRerun}
+                  className="text-sm text-purple-600 dark:text-purple-400 hover:underline"
+                >
+                  Change Algorithm
+                </button>
+              </div>
+            )}
+
             <TeamBuilderResults
               result={algorithmResult}
               players={finalPlayers}
               onRerun={handleRerun}
               onMovePlayer={handleMovePlayer}
-              corrections={corrections}
-              requestsFirstConfig={requestsFirstConfig}
-              onApplySuggestedWeights={handleApplySuggestedWeights}
             />
 
             {/* Trade Suggestions (only for requests-first algorithm) */}

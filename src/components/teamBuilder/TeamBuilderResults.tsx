@@ -17,20 +17,16 @@ import {
   AssignmentResult,
   TeamBuilderPlayer,
 } from '../../utils/teamBuilderAlgorithm';
-import { Player, AssignmentCorrection, CorrectionReason, RequestsFirstConfig } from '../../types';
+import { Player } from '../../types';
 import { generateHappinessReportCSV, downloadCSV, HappinessReportPlayer } from '../../utils/exports';
 import { PlayerDetailDrawer } from './PlayerDetailDrawer';
-import { CorrectionSummary } from './CorrectionSummary';
 
 interface TeamBuilderResultsProps {
   result: TeamBuilderResult;
   players: Player[];
   onRerun?: () => void;
   onSwap?: (player1Id: string, player2Id: string) => void;
-  onMovePlayer?: (playerId: string, toTeamId: string, correctionData?: { reason: CorrectionReason; notes?: string }) => void;
-  corrections?: AssignmentCorrection[];
-  requestsFirstConfig?: RequestsFirstConfig;
-  onApplySuggestedWeights?: (newConfig: RequestsFirstConfig) => void;
+  onMovePlayer?: (playerId: string, toTeamId: string) => void;
 }
 
 /**
@@ -43,9 +39,6 @@ export const TeamBuilderResults = ({
   onRerun,
   onSwap,
   onMovePlayer,
-  corrections = [],
-  requestsFirstConfig,
-  onApplySuggestedWeights,
 }: TeamBuilderResultsProps) => {
   const [expandedTeamId, setExpandedTeamId] = useState<string | null>(null);
   const [view, setView] = useState<'teams' | 'players' | 'stats'>('teams');
@@ -108,7 +101,7 @@ export const TeamBuilderResults = ({
         const happiness = result.playerHappiness.find(h => h.playerId === assignment.playerId)!;
         return { player, assignment, happiness };
       })
-      .sort((a, b) => a.assignment.round - b.assignment.round || a.assignment.pick - b.assignment.pick);
+      .sort((a, b) => b.player.totalScore - a.player.totalScore);
   };
 
   // Build happiness report data for export
@@ -248,15 +241,6 @@ export const TeamBuilderResults = ({
         </div>
       )}
 
-      {/* Correction Summary - Algorithm Teaching Tool */}
-      {corrections.length > 0 && requestsFirstConfig && (
-        <CorrectionSummary
-          corrections={corrections}
-          config={requestsFirstConfig}
-          onApplySuggestions={onApplySuggestedWeights}
-        />
-      )}
-
       {/* View tabs */}
       <div className="flex gap-2 border-b border-gray-200 dark:border-gray-700">
         <button
@@ -301,20 +285,22 @@ export const TeamBuilderResults = ({
             const isExpanded = expandedTeamId === team.teamId;
             const teamPlayers = getTeamPlayers(team.teamId);
 
-            // Calculate scores from actual roster data (not from potentially stale teamSummary)
+            // Calculate Top 6 scores from actual roster data
             const sortedByScore = [...teamPlayers].sort((a, b) => b.player.totalScore - a.player.totalScore);
-            const totalScore = teamPlayers.reduce((sum, tp) => sum + tp.player.totalScore, 0);
-            const top8Score = sortedByScore.slice(0, 8).reduce((sum, tp) => sum + tp.player.totalScore, 0);
-            const avgScore = teamPlayers.length > 0 ? totalScore / teamPlayers.length : 0;
+            const top6Players = sortedByScore.slice(0, 6);
+            const top6Total = top6Players.reduce((sum, tp) => sum + tp.player.totalScore, 0);
+            const top6Avg = top6Players.length > 0 ? top6Total / top6Players.length : 0;
 
-            // Calculate mean across all teams for delta
-            const allTeamsAvg = result.teamSummaries.reduce((sum, t) => {
+            // Calculate mean Top 6 average across all teams for delta
+            const allTeamsTop6Avg = result.teamSummaries.reduce((sum, t) => {
               const tPlayers = getTeamPlayers(t.teamId);
-              const tTotal = tPlayers.reduce((s, tp) => s + tp.player.totalScore, 0);
-              return sum + (tPlayers.length > 0 ? tTotal / tPlayers.length : 0);
+              const tSorted = [...tPlayers].sort((a, b) => b.player.totalScore - a.player.totalScore);
+              const tTop6 = tSorted.slice(0, 6);
+              const tTop6Total = tTop6.reduce((s, tp) => s + tp.player.totalScore, 0);
+              return sum + (tTop6.length > 0 ? tTop6Total / tTop6.length : 0);
             }, 0) / result.teamSummaries.length;
 
-            const deltaPercent = allTeamsAvg > 0 ? ((avgScore - allTeamsAvg) / allTeamsAvg) * 100 : 0;
+            const deltaPercent = allTeamsTop6Avg > 0 ? ((top6Avg - allTeamsTop6Avg) / allTeamsTop6Avg) * 100 : 0;
             const balanceClass = deltaPercent >= 0
               ? 'text-green-600 dark:text-green-400'
               : 'text-red-600 dark:text-red-400';
@@ -340,21 +326,15 @@ export const TeamBuilderResults = ({
                   </div>
                   <div className="flex items-center gap-6">
                     <div className="text-right">
-                      <div className="text-xs text-gray-500 dark:text-gray-400">Total</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">Top 6</div>
                       <div className="text-sm font-medium text-gray-900 dark:text-white">
-                        {totalScore.toFixed(1)}
+                        {top6Total.toFixed(1)}
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="text-xs text-gray-500 dark:text-gray-400">Top 8</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">Top 6 Avg</div>
                       <div className="text-sm font-medium text-gray-900 dark:text-white">
-                        {top8Score.toFixed(1)}
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-xs text-gray-500 dark:text-gray-400">Avg</div>
-                      <div className="text-sm font-medium text-gray-900 dark:text-white">
-                        {avgScore.toFixed(1)}
+                        {top6Avg.toFixed(1)}
                       </div>
                       <div className={`text-xs ${balanceClass}`}>
                         {deltaPercent >= 0 ? '+' : ''}{deltaPercent.toFixed(1)}%
@@ -374,7 +354,7 @@ export const TeamBuilderResults = ({
                       <thead className="bg-gray-50 dark:bg-gray-700/50">
                         <tr>
                           <th className="px-4 py-2 text-left text-gray-500 dark:text-gray-400 font-medium">
-                            Pick
+                            Rank
                           </th>
                           <th className="px-4 py-2 text-left text-gray-500 dark:text-gray-400 font-medium">
                             Player
@@ -397,7 +377,7 @@ export const TeamBuilderResults = ({
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                        {teamPlayers.map(({ player, assignment, happiness }) => {
+                        {teamPlayers.map(({ player, happiness }, rankIndex) => {
                           // Check if player has school match with same-grade teammate on this team
                           const tbPlayer = player as TeamBuilderPlayer;
                           let hasSchoolMatch = false;
@@ -421,7 +401,7 @@ export const TeamBuilderResults = ({
                               className="hover:bg-gray-50 dark:hover:bg-gray-700/30 cursor-pointer"
                             >
                               <td className="px-4 py-2 text-gray-600 dark:text-gray-400">
-                                {assignment.round}.{assignment.pick}
+                                {rankIndex + 1}
                               </td>
                               <td className="px-4 py-2 text-gray-900 dark:text-white">
                                 {player.name}

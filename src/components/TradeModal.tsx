@@ -34,24 +34,14 @@ export const TradeModal = ({ teams, players, onExecuteTrade, onClose }: TradeMod
 
   const team1Roster = useMemo(() => {
     if (!team1) return [];
-    return team1.roster.slice().sort((a, b) => {
-      // Primary: Round drafted (ascending)
-      const roundDiff = (a.draftedInRound ?? 99) - (b.draftedInRound ?? 99);
-      if (roundDiff !== 0) return roundDiff;
-      // Secondary: Overall rank (ascending)
-      return (a.rank ?? 99) - (b.rank ?? 99);
-    });
+    // Sort by total score (descending) - highest scores first
+    return team1.roster.slice().sort((a, b) => b.totalScore - a.totalScore);
   }, [team1]);
 
   const team2Roster = useMemo(() => {
     if (!team2) return [];
-    return team2.roster.slice().sort((a, b) => {
-      // Primary: Round drafted (ascending)
-      const roundDiff = (a.draftedInRound ?? 99) - (b.draftedInRound ?? 99);
-      if (roundDiff !== 0) return roundDiff;
-      // Secondary: Overall rank (ascending)
-      return (a.rank ?? 99) - (b.rank ?? 99);
-    });
+    // Sort by total score (descending) - highest scores first
+    return team2.roster.slice().sort((a, b) => b.totalScore - a.totalScore);
   }, [team2]);
 
   // Get selected players for comparison
@@ -188,7 +178,7 @@ export const TradeModal = ({ teams, players, onExecuteTrade, onClose }: TradeMod
                   Player from {getTeamDisplayName(team1!)}
                 </label>
                 <div className="border border-gray-300 dark:border-gray-600 rounded-lg max-h-48 overflow-y-auto">
-                  {team1Roster.map(player => (
+                  {team1Roster.map((player, rankIndex) => (
                     <button
                       key={player.id}
                       onClick={() => setPlayer1Id(player.id)}
@@ -198,7 +188,7 @@ export const TradeModal = ({ teams, players, onExecuteTrade, onClose }: TradeMod
                     >
                       <div>
                         <span className="text-xs text-purple-600 dark:text-purple-400 font-medium mr-2">
-                          R{player.draftedInRound}
+                          #{rankIndex + 1}
                         </span>
                         <span className="font-medium text-gray-900 dark:text-white">
                           {player.lastName}, {player.firstName}
@@ -223,7 +213,7 @@ export const TradeModal = ({ teams, players, onExecuteTrade, onClose }: TradeMod
                   Player from {getTeamDisplayName(team2!)}
                 </label>
                 <div className="border border-gray-300 dark:border-gray-600 rounded-lg max-h-48 overflow-y-auto">
-                  {team2Roster.map(player => (
+                  {team2Roster.map((player, rankIndex) => (
                     <button
                       key={player.id}
                       onClick={() => setPlayer2Id(player.id)}
@@ -233,7 +223,7 @@ export const TradeModal = ({ teams, players, onExecuteTrade, onClose }: TradeMod
                     >
                       <div>
                         <span className="text-xs text-purple-600 dark:text-purple-400 font-medium mr-2">
-                          R{player.draftedInRound}
+                          #{rankIndex + 1}
                         </span>
                         <span className="font-medium text-gray-900 dark:text-white">
                           {player.lastName}, {player.firstName}
@@ -272,10 +262,7 @@ export const TradeModal = ({ teams, players, onExecuteTrade, onClose }: TradeMod
                   <div className="text-sm text-gray-600 dark:text-gray-400">
                     Age {player1.littleLeagueAge}
                   </div>
-                  <div className="text-sm text-purple-600 dark:text-purple-400">
-                    Drafted: Round {player1.draftedInRound}
-                  </div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">
+                  <div className="text-sm text-purple-600 dark:text-purple-400 font-medium">
                     Score: {player1.totalScore.toFixed(1)}
                   </div>
                 </div>
@@ -296,10 +283,7 @@ export const TradeModal = ({ teams, players, onExecuteTrade, onClose }: TradeMod
                   <div className="text-sm text-gray-600 dark:text-gray-400">
                     Age {player2.littleLeagueAge}
                   </div>
-                  <div className="text-sm text-purple-600 dark:text-purple-400">
-                    Drafted: Round {player2.draftedInRound}
-                  </div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">
+                  <div className="text-sm text-purple-600 dark:text-purple-400 font-medium">
                     Score: {player2.totalScore.toFixed(1)}
                   </div>
                 </div>

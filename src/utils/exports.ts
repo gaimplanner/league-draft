@@ -458,16 +458,23 @@ export interface HappinessReportPlayer {
  * Includes per-player request fulfillment details.
  */
 export function generateHappinessReportCSV(players: HappinessReportPlayer[]): string {
+  // Sort players: first by team name (alphabetically), then by score (descending)
+  const sortedPlayers = [...players].sort((a, b) => {
+    const teamCompare = a.teamName.localeCompare(b.teamName);
+    if (teamCompare !== 0) return teamCompare;
+    return b.totalScore - a.totalScore;
+  });
+
   // Find max teammate requests for column count
   const maxTeammateRequests = Math.max(
-    ...players.map(p => p.teammateRequests.length),
+    ...sortedPlayers.map(p => p.teammateRequests.length),
     0
   );
 
   // Build headers
   const headers = [
-    'Player Name',
     'Team',
+    'Player Name',
     'Total Score',
     'School',
     'Grade',
@@ -484,10 +491,10 @@ export function generateHappinessReportCSV(players: HappinessReportPlayer[]): st
   }
 
   // Build rows
-  const rows = players.map(player => {
+  const rows = sortedPlayers.map(player => {
     const row = [
-      player.playerName,
       player.teamName,
+      player.playerName,
       player.totalScore.toFixed(1),
       player.school || '',
       player.grade?.toString() || '',
