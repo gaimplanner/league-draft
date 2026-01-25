@@ -363,6 +363,14 @@ class Division(models.Model):
         ("league-generated", "League Generated Teams"),
     ]
 
+    # Team Builder algorithm mode choices (only for league-generated mode)
+    TEAM_BUILDER_ALGORITHM_MODE_CHOICES = [
+        ("balance-first", "Balance First"),
+        ("requests-first", "Requests First"),
+        ("skill-tiered", "Skill Tiered"),
+        ("manual-draft", "Manual Draft"),
+    ]
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
     # Organization (null for personal workspaces)
@@ -404,6 +412,15 @@ class Division(models.Model):
     # league-generated: Auto-assignment algorithm creates balanced teams
     mode = models.CharField(
         max_length=20, choices=MODE_CHOICES, default="live-draft"
+    )
+
+    # Team Builder algorithm mode (only used for league-generated mode)
+    # Persists the selected algorithm so in-progress drafts can be resumed
+    team_builder_algorithm_mode = models.CharField(
+        max_length=20,
+        choices=TEAM_BUILDER_ALGORITHM_MODE_CHOICES,
+        null=True,
+        blank=True,
     )
 
     created_at = models.DateTimeField(auto_now_add=True)

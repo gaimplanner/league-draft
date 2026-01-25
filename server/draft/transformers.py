@@ -238,6 +238,7 @@ def transform_division(division, include_all: bool = False) -> dict:
         "scoring_mode": division.scoring_mode,
         "mode": division.mode,
         "phase": division.phase,
+        "team_builder_algorithm_mode": division.team_builder_algorithm_mode,
         "created_at": division.created_at.isoformat(),
         "updated_at": division.updated_at.isoformat(),
         "completed_at": division.completed_at.isoformat() if division.completed_at else None,

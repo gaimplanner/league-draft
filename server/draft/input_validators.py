@@ -442,6 +442,15 @@ def validate_division_update_data(data: Dict[str, Any]) -> Tuple[Optional[Dict],
     if "mode" in data:
         errors["mode"] = ["Division mode cannot be changed after creation"]
 
+    # Team Builder algorithm mode (only for league-generated divisions)
+    if "team_builder_algorithm_mode" in data:
+        mode = data["team_builder_algorithm_mode"]
+        valid_modes = ["balance-first", "requests-first", "skill-tiered", "manual-draft"]
+        if mode is not None and mode not in valid_modes:
+            errors["team_builder_algorithm_mode"] = [f"Invalid mode. Must be one of: {', '.join(valid_modes)}"]
+        else:
+            cleaned["team_builder_algorithm_mode"] = mode
+
     if errors:
         return None, errors
 

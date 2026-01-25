@@ -14,6 +14,7 @@ import type {
   DraftFormat,
   ScoringWeights,
   ScoringMode,
+  TeamBuilderAlgorithmMode,
   Trade,
   DraftPick,
   User,
@@ -388,6 +389,8 @@ function transformDivisionFromApi(data: Record<string, unknown>): Division {
     updatedAt: (data.updated_at as string | null) ?? undefined,
     // Convert null to undefined (Issue #8)
     completedAt: (data.completed_at as string | null) ?? undefined,
+    // Team Builder settings
+    teamBuilderAlgorithmMode: (data.team_builder_algorithm_mode as TeamBuilderAlgorithmMode | null) ?? undefined,
     // Organization/personal workspace fields
     organizationId: (data.organization_id as string | null) ?? undefined,
     ownerId: (data.owner_id as string | null) ?? undefined,
@@ -791,6 +794,7 @@ export const api = {
       scoringWeights: ScoringWeights;
       scoringMode: ScoringMode;
       phase: Division['phase'];
+      teamBuilderAlgorithmMode: TeamBuilderAlgorithmMode;
     }>
   ): Promise<Division> {
     const body: Record<string, unknown> = {};
@@ -804,6 +808,7 @@ export const api = {
     if (updates.scoringWeights !== undefined) body.scoring_weights = updates.scoringWeights;
     if (updates.scoringMode !== undefined) body.scoring_mode = updates.scoringMode;
     if (updates.phase !== undefined) body.phase = updates.phase;
+    if (updates.teamBuilderAlgorithmMode !== undefined) body.team_builder_algorithm_mode = updates.teamBuilderAlgorithmMode;
 
     const response = await fetchWithCSRFRetry(`${API_BASE_URL}/divisions/${id}/`, {
       ...getDefaultOptions('PATCH'),

@@ -171,6 +171,7 @@ export function useDivisions(isAuthenticated: boolean = false) {
       if (updates.scoringWeights !== undefined) apiUpdates.scoringWeights = updates.scoringWeights;
       if (updates.scoringMode !== undefined) apiUpdates.scoringMode = updates.scoringMode;
       if (updates.phase !== undefined) apiUpdates.phase = updates.phase;
+      if (updates.teamBuilderAlgorithmMode !== undefined) apiUpdates.teamBuilderAlgorithmMode = updates.teamBuilderAlgorithmMode;
 
       // Only call API if there are API-supported updates
       if (Object.keys(apiUpdates).length > 0) {
