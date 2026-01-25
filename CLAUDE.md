@@ -442,33 +442,69 @@ The application underwent a comprehensive stabilization effort. All phases compl
 - Request gaming detection
 - Grade-based clustering algorithm improvements
 
-## Session Continuation Notes
+## Quick Start for Resuming Work
 
-### Current Work: Simplified Team Builder (January 2025)
+### Project State (January 2025)
+The application is **production-ready** with all features complete. Both Live Draft and Team Builder modes are fully functional.
 
-**Completed:**
-- Simplified Team Builder to "run all algorithms, compare results" approach
-- Algorithm Comparison Panel with 3 tabs (Skill Priority, Request Priority, Balance Priority)
-- Removed complex modes: manual draft, weight sliders, algorithm teaching tool
-- Top 6 metrics throughout (appropriate for smaller divisions like AA)
-- Weighted happiness formula: all=1.0, some=0.5, none=0.0
-- Sibling safeguards: auto-move siblings together, block swaps that separate siblings
-- Score-based ranking (not pick order) throughout UI
-- Finalize flow: shows DraftComplete, can edit after finalizing
-- Export improvements: grouped by team alphabetically, Team column first
+### How to Run Locally
+```bash
+# Terminal 1: Start backend
+docker compose up -d
 
-**Deleted Files:**
-- `src/components/teamBuilder/WeightSlider.tsx`
-- `src/components/teamBuilder/ManualDraftBoard.tsx`
-- `src/components/teamBuilder/ManualDraftPlayerList.tsx`
-- `src/components/teamBuilder/CorrectionPrompt.tsx`
-- `src/components/teamBuilder/CorrectionSummary.tsx`
-- `src/hooks/useManualTeamBuilderDraft.ts`
-- `src/utils/fitScoreCalculator.ts`
-- `src/utils/correctionAnalysis.ts`
+# Terminal 2: Start frontend
+npm run dev
 
-**Key Files:**
-- `src/components/teamBuilder/AlgorithmComparisonPanel.tsx` - Side-by-side algorithm comparison
-- `src/components/teamBuilder/PlayerDetailDrawer.tsx` - Decision reasoning + sibling info
-- `src/components/teamBuilder/TeamBuilderResults.tsx` - Results with Top 6 metrics
-- `src/utils/teamBuilderAlgorithm.ts` - runAllAlgorithms(), calculateTop6Stats()
+# Visit http://localhost:5173
+```
+
+### Recent Major Changes
+
+**Team Builder Simplification (January 2025):**
+- Replaced complex 4-mode flow with streamlined "compare 3 algorithms" approach
+- User imports data → confirms requests → sees side-by-side algorithm comparison → selects preferred result
+- Algorithms: Skill Priority, Request Priority, Balance Priority
+- Top 6 metrics for smaller divisions (AA)
+- Sibling safeguards: siblings always stay together during moves/swaps
+- Finalize flow with ability to edit after finalizing
+
+### Key Entry Points by Task
+
+| Task | Start Here |
+|------|------------|
+| **Live Draft changes** | `src/components/DraftBoard.tsx`, `src/hooks/useDraft.ts` |
+| **Team Builder changes** | `src/components/TeamBuilderFlow.tsx`, `src/components/teamBuilder/` |
+| **Algorithm logic** | `src/utils/teamBuilderAlgorithm.ts` |
+| **Player import** | `src/utils/evaluationProcessor.ts`, `src/utils/importPipeline/` |
+| **API changes** | `src/api/client.ts`, `server/draft/views/` |
+| **Type definitions** | `src/types/index.ts` |
+| **Draft rules** | `src/utils/draftLogic.ts` |
+| **Exports** | `src/utils/exports.ts` |
+
+### Division Modes at a Glance
+
+**Live Draft** (`mode: 'live-draft'`):
+- Teams take turns picking players
+- Formats: Straight, Snake, Recalculated
+- Mandatory picks: coach's kids, siblings
+- Phases: upload → mapping → review → config → draft → complete
+
+**Team Builder** (`mode: 'league-generated'`):
+- Algorithm assigns players to balanced teams
+- Honors friend/coach requests
+- Phases: import → confirm-requests → confirm-locks → results → complete
+- Can edit teams even after finalizing
+
+### Testing Quick Reference
+```bash
+npm run test              # Frontend unit tests (67 tests)
+npm run build             # Verify build passes
+docker compose exec api python manage.py test draft.tests  # Backend tests (40 tests)
+```
+
+### Common Gotchas
+- **Sibling links**: `siblingId` is the actual link; `sibling` is just display text from CSV
+- **Phase persistence**: Division phase is saved to API, so users can resume where they left off
+- **Happiness formula**: Weighted (all=1.0, some=0.5, none=0.0), not simple count
+- **Top N scoring**: Team Builder uses Top 6 (not Top 8) for smaller divisions
+- **CSRF**: Frontend must call `/api/auth/csrf/` on app load before any mutations

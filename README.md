@@ -2,9 +2,29 @@
 
 A production-ready draft management system for Little League baseball divisions. Supports two modes: **Live Draft** for traditional team-by-team player selection, and **League Generated Teams** (Team Builder) for automatic balanced team creation. Streamlines the entire process from player evaluation import through final team roster generation.
 
+## Quick Start
+
+```bash
+# Install dependencies
+npm install
+
+# Start backend (API + PostgreSQL)
+docker compose up -d
+
+# Start frontend dev server
+npm run dev
+
+# Visit http://localhost:5173
+```
+
 ## Current Status
 
-**Production Ready** - All stabilization phases (0-6) complete. 107 unit tests passing. Comprehensive documentation and operations runbook available.
+**Production Ready** (January 2025) - All stabilization phases complete. 107 unit tests passing.
+
+| Mode | Status | Description |
+|------|--------|-------------|
+| **Live Draft** | Complete | Teams pick players in real-time with rule enforcement |
+| **Team Builder** | Complete | Algorithm comparison panel, sibling safeguards, finalize flow |
 
 ## Features
 
