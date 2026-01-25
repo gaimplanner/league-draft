@@ -906,10 +906,99 @@ function App() {
 
   // Route to Team Builder for league-generated mode
   if (activeDivision.mode === 'league-generated') {
+    // Handle finalization - update phase and persist data
+    const handleTeamBuilderComplete = (players: Player[], teams: Team[]) => {
+      updateActiveDivision({
+        players,
+        teams,
+        phase: 'complete'
+      });
+    };
+
+    // Handle editing after finalization - go back to Team Builder results step
+    const handleEditTeams = () => {
+      updateActiveDivision({ phase: 'draft' });
+    };
+
+    // If finalized, show completion view with edit option
+    if (activeDivision.phase === 'complete') {
+      return (
+        <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+          {/* Back button bar */}
+          <div className="bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-2">
+            <button
+              onClick={handleBackToSelector}
+              className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors text-sm flex items-center gap-1"
+            >
+              ← Back to Divisions
+            </button>
+          </div>
+          <DraftComplete
+            draftState={{
+              teams: activeDivision.teams,
+              players: activeDivision.players,
+              currentTeamId: null,
+              currentRound: 0,
+              currentPickInRound: 0,
+              currentRoundOrder: [],
+              isDraftComplete: true,
+              draftOrder: [],
+              draftFormat: 'snake',
+              picks: [],
+              trades: [],
+            }}
+            division={activeDivision}
+            onReset={() => {
+              // Reset to start of Team Builder
+              updateActiveDivision({ phase: 'upload' });
+            }}
+            onExecuteTrade={(team1Id, team2Id, player1Id, player2Id, _reason) => {
+              // Handle trade/swap for league-generated mode
+              const player1 = activeDivision.players.find(p => p.id === player1Id);
+              const player2 = activeDivision.players.find(p => p.id === player2Id);
+              if (!player1 || !player2) return;
+
+              const updatedPlayers = activeDivision.players.map(p => {
+                if (p.id === player1Id) return { ...p, draftedByTeamId: team2Id };
+                if (p.id === player2Id) return { ...p, draftedByTeamId: team1Id };
+                return p;
+              });
+
+              const updatedTeams = activeDivision.teams.map(team => {
+                if (team.id === team1Id) {
+                  const newRoster = team.roster.filter(p => p.id !== player1Id);
+                  newRoster.push({ ...player2, draftedByTeamId: team1Id });
+                  return { ...team, roster: newRoster, totalScore: newRoster.reduce((sum, p) => sum + p.totalScore, 0) };
+                }
+                if (team.id === team2Id) {
+                  const newRoster = team.roster.filter(p => p.id !== player2Id);
+                  newRoster.push({ ...player1, draftedByTeamId: team2Id });
+                  return { ...team, roster: newRoster, totalScore: newRoster.reduce((sum, p) => sum + p.totalScore, 0) };
+                }
+                return team;
+              });
+
+              updateActiveDivision({ players: updatedPlayers, teams: updatedTeams });
+            }}
+            onUpdateTeam={(teamId, updates) => {
+              const updatedTeams = activeDivision.teams.map(t =>
+                t.id === teamId ? { ...t, ...updates } : t
+              );
+              updateActiveDivision({ teams: updatedTeams });
+            }}
+            onReturnToDraftBoard={handleEditTeams}
+            returnButtonLabel="Edit Teams"
+            resetButtonLabel="Start Over"
+          />
+        </div>
+      );
+    }
+
     return (
       <TeamBuilderFlow
         division={activeDivision}
         onBack={handleBackToSelector}
+        onComplete={handleTeamBuilderComplete}
         onUpdateTeams={(teams) => updateActiveDivision({ teams })}
         onUpdatePlayers={(players) => updateActiveDivision({ players })}
         onUpdatePhase={(phase) => updateActiveDivision({ phase })}

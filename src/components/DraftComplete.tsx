@@ -29,9 +29,22 @@ interface DraftCompleteProps {
   ) => void;
   onUpdateTeam?: (teamId: string, updates: Partial<Team>) => void;
   onReturnToDraftBoard?: () => void;
+  /** Custom label for the return button (default: "Back to Draft Board") */
+  returnButtonLabel?: string;
+  /** Custom label for the reset button (default: "Return to Draft Setup") */
+  resetButtonLabel?: string;
 }
 
-export const DraftComplete = ({ draftState, division, onReset, onExecuteTrade, onUpdateTeam, onReturnToDraftBoard }: DraftCompleteProps) => {
+export const DraftComplete = ({
+  draftState,
+  division,
+  onReset,
+  onExecuteTrade,
+  onUpdateTeam,
+  onReturnToDraftBoard,
+  returnButtonLabel = 'Back to Draft Board',
+  resetButtonLabel = 'Return to Draft Setup',
+}: DraftCompleteProps) => {
   const [copiedRosters, setCopiedRosters] = useState(false);
   const [copiedRecord, setCopiedRecord] = useState(false);
   const [showTradeModal, setShowTradeModal] = useState(false);
@@ -193,17 +206,15 @@ export const DraftComplete = ({ draftState, division, onReset, onExecuteTrade, o
               <button
                 onClick={onReturnToDraftBoard}
                 className="px-4 py-2 bg-white text-gray-700 hover:bg-gray-100 rounded-lg font-medium"
-                title="Return to Draft Board to draft remaining players"
               >
-                Back to Draft Board
+                {returnButtonLabel}
               </button>
             )}
             <button
               onClick={onReset}
               className="px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg font-medium"
-              title="Return to Draft Setup - this will delete all draft picks"
             >
-              Return to Draft Setup
+              {resetButtonLabel}
             </button>
           </div>
         </div>
