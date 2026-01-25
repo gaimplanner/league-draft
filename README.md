@@ -20,9 +20,12 @@ A production-ready draft management system for Little League baseball divisions.
 **League Generated Teams (Team Builder)** - Automatic balanced team creation
 - For younger divisions that don't use live drafts
 - Honors friend requests and coach preferences
-- Multiple algorithms: Requests-First, Skill-Tiered, Balance-First
+- **Algorithm Comparison**: Run all 3 algorithms, compare results side-by-side
+  - Skill Priority: Best players distributed first
+  - Request Priority: Maximize request satisfaction
+  - Balance Priority: Recalculated draft order
 - Request confirmation workflow with confidence scoring
-- Trade suggestions for balance optimization
+- Sibling safeguards: siblings always stay together during moves/swaps
 
 ### Multi-Division Support
 - Create divisions with presets: **Majors** (ages 10-12), **AAA** (8-10), **AA** (7-10), or **Custom**
@@ -85,19 +88,25 @@ For younger divisions that don't use live drafts:
 
 - **Excel Import**: Registration Data tab with coach/teammate requests, plus evaluation tabs
 - **Request Confirmation**: Review auto-resolved requests with confidence scores
-- **Three Algorithm Modes**:
-  - **Requests-First**: Prioritizes honoring friend requests, then balances via trades
-  - **Skill-Tiered Draft**: Simulated draft rounds for balanced distribution
-  - **Balance-First**: Traditional approach prioritizing team balance
-- **Trade Suggestions**: Apply suggested trades to improve balance
+- **Algorithm Comparison Panel**: Run all 3 algorithms, compare side-by-side
+  - **Skill Priority**: Best players distributed first, requests honored when balance allows
+  - **Request Priority**: Maximizes request satisfaction, suggests trades for balance
+  - **Balance Priority**: Recalculated draft order with requests as tiebreakers
+  - Shows Top 6 Avg, Spread, and Happiness % for each algorithm
+  - Recommends best result (lowest spread + highest happiness)
+- **Sibling Safeguards**: Siblings always placed together
+  - Swap blocking: Cannot swap player away from sibling
+  - Auto-move: Moving a player moves all siblings on that team
 - **Happiness Indicators**: Visual status showing request fulfillment (🟢 all, 🟡 some, 🔴 none, ⚪ no requests)
 - **Player Detail Drawer**:
   - Algorithm decision reasoning (WHY player was placed)
+  - Sibling info section (shows siblings and their team)
   - Team-by-team analysis comparing request satisfaction
-  - Requested player context (score, other friends)
   - Inline moves with sticky confirm footer
-- **Team Score Display**: Total, Top 8, and Avg scores with delta from mean
+- **Team Score Display**: Top 6 and Top 6 Avg with delta % from mean
 - **Live Happiness Updates**: Scores recalculate on every manual move/swap
+- **Finalize Flow**: Finalize teams with ability to edit afterward
+- **Export**: Rosters grouped by team alphabetically, Team column first
 
 ### Post-Draft Features
 
@@ -232,9 +241,11 @@ For Team Builder mode, include a `Registration Data` tab with:
 2. IMPORT EXCEL → Upload file with Registration Data + eval tabs
 3. RESOLVE NAMES → Match registration to evaluation data
 4. CONFIRM REQUESTS → Review auto-resolved friend/coach requests
-5. GENERATE TEAMS → Run assignment algorithm
-6. REVIEW & ADJUST → Apply trade suggestions, make manual swaps
-7. EXPORT → Rosters + happiness report
+5. CONFIRM COACH KIDS → Verify coach kids and siblings
+6. COMPARE ALGORITHMS → View 3 algorithms side-by-side, select best
+7. REVIEW & ADJUST → Make manual moves/swaps (siblings move together)
+8. FINALIZE → Save teams (can still edit afterward)
+9. EXPORT → Rosters + happiness report (grouped by team)
 ```
 
 ## Technical Stack

@@ -41,7 +41,7 @@ Has name, roster (drafted players), totalScore, draftPosition, coachKids array, 
 `upload` → `mapping` → `review` → `config` → `draft` → `complete`
 
 ### App Phases (Team Builder Mode)
-`setup` → `import` → `resolution` → `confirm-requests` → `configure` → `generate` → `results`
+`setup` → `import` → `resolution` → `confirm-requests` → `confirm-locks` → `results` → `complete`
 
 ### Backend (Django REST Framework)
 - **Multi-tenant architecture**: Organization is the tenant model
@@ -82,7 +82,8 @@ Has name, roster (drafted players), totalScore, draftPosition, coachKids array, 
 | `src/components/TeamBuilderFlow.tsx` | Main orchestration for Team Builder steps |
 | `src/components/teamBuilder/TeamBuilderResults.tsx` | Results display with happiness indicators and search |
 | `src/components/teamBuilder/PlayerDetailDrawer.tsx` | Player request analysis and inline team moves |
-| `src/utils/teamBuilderAlgorithm.ts` | Assignment algorithms (balance-first, requests-first, skill-tiered) |
+| `src/utils/teamBuilderAlgorithm.ts` | Assignment algorithms, runAllAlgorithms(), calculateTop6Stats() |
+| `src/components/teamBuilder/AlgorithmComparisonPanel.tsx` | Side-by-side algorithm comparison with tabbed UI |
 | `src/utils/teamBuilderParser.ts` | Request parsing, name matching, normalization, cluster building |
 | `server/draft/models.py` | Django models: Organization, User, OrganizationMembership, Division, Team, Player, DraftState |
 | `server/draft/views/` | View functions for auth, divisions, teams, players, draft operations |
@@ -136,10 +137,13 @@ App
         ├── EvaluationImport (Excel with Registration Data tab)
         ├── NameMatchResolver (resolve unmatched player names)
         ├── RequestConfirmation (review/confirm request matches)
+        ├── CoachKidConfirmation (confirm coach kids and siblings)
+        ├── AlgorithmComparisonPanel (compare 3 algorithms side-by-side)
         ├── TeamBuilderResults (view assignments with happiness)
-        │   ├── PlayerDetailDrawer (request analysis, inline moves)
+        │   ├── PlayerDetailDrawer (request analysis, inline moves, sibling info)
         │   └── TradeSuggestions (apply balance trades)
-        └── Export (rosters + happiness report)
+        ├── DraftComplete (finalized view with edit capability)
+        └── Export (rosters + happiness report grouped by team)
 ```
 
 ## Data Flow
@@ -159,9 +163,11 @@ App
 2. Players linked by First Name + Last Name matching
 3. Requests parsed and resolved to actual players/coaches
 4. Request Confirmation: User reviews/edits auto-resolved requests
-5. Algorithm assigns players to teams (requests-first, balance-first, or skill-tiered)
-6. Trade Suggestions: User can apply suggested trades for balance
-7. Results show happiness indicators and allow manual swaps via TradeModal
+5. Coach Kid/Sibling Confirmation: User confirms detected relationships
+6. Algorithm Comparison: All 3 algorithms run, user selects preferred result
+7. Results: View assignments with happiness, make manual moves/swaps (siblings auto-move together)
+8. Finalize: Save teams, can still edit after finalizing
+9. Export: Rosters + happiness report (grouped by team, sorted by score)
 
 ### Simulation
 Uses same logic as real draft but on cloned data. Returns SimulationResult with teams and players.
@@ -170,26 +176,29 @@ Uses same logic as real draft but on cloned data. Returns SimulationResult with 
 
 The Team Builder is for younger divisions (AA, etc.) where teams are auto-assigned rather than drafted.
 
-### Algorithm Modes
+### Algorithm Comparison Panel
 
-**Requests-First (Recommended)**
-Prioritizes request satisfaction over balance:
-1. **Locked Placements**: Coach kids, assistant coach kids, siblings
-2. **Cluster Placement**: Two-way request clusters placed together on same team
-3. **Request-Based Placement**: Remaining players placed to maximize request satisfaction
-4. **Balance via Trading**: Suggested trades to improve balance without breaking satisfied requests
+After importing data and confirming requests, users see a side-by-side comparison of three algorithms:
 
-**Skill-Tiered Draft**
-Uses simulated draft rounds for balanced distribution:
-1. **Locked Placements**: Coach kids, assistant coach kids, siblings
-2. **Draft Simulation**: Players drafted in skill-tier rounds, honoring requests when possible
-3. **Request Optimization**: Within each tier, prioritize two-way > one-way > coach requests
+| Tab | Algorithm | Optimization Priority |
+|-----|-----------|----------------------|
+| **Skill Priority** | `runTeamBuilderAlgorithm()` | Best players distributed first, requests if balance allows |
+| **Request Priority** | `runRequestsFirstAlgorithm()` | Maximize request satisfaction, suggest trades for balance |
+| **Balance Priority** | `runSkillTieredDraft()` | Recalculated draft order, requests as tiebreakers |
 
-**Balance-First (Original)**
-1. **Locked Placements**: Coach kids, assistant coach kids, siblings
-2. **Top Talent Distribution**: Spread top N players by score for balance
-3. **Request-Based Placement**: Honor two-way friends > one-way friends > coach requests > school clustering
-4. **Balance-Based**: Remaining players assigned to lowest-scoring teams
+Each tab shows:
+- **Top 6 Avg**: Average score of top 6 players per team
+- **Spread**: Difference between highest and lowest team Top 6 scores
+- **Happiness %**: Weighted happiness (all=1.0, some=0.5, none=0.0)
+- **Recommended badge**: Lowest spread + highest happiness
+
+### Sibling Safeguards
+
+Siblings must remain on the same team during algorithm assignment and manual edits:
+- **Algorithm**: Siblings placed together automatically
+- **Swap blocking**: Cannot swap a player away from their sibling(s)
+- **Auto-move**: Moving a player also moves all siblings on that team
+- **UI indicators**: Sibling info section in PlayerDetailDrawer
 
 ### Request Resolution & Confirmation
 - **Coach requests**: Match to coach names (exact or fuzzy)
@@ -236,10 +245,11 @@ The player detail drawer (`src/components/teamBuilder/PlayerDetailDrawer.tsx`) p
 - Updates division-wide happiness percentage and stats
 
 ### Team Score Display
-Team headers show three score metrics calculated from actual roster data:
-- **Total**: Sum of all player scores
-- **Top 8**: Sum of top 8 players by score
-- **Avg**: Average score per player with delta % from mean
+Team headers show score metrics using Top 6 (appropriate for smaller divisions):
+- **Top 6**: Sum of top 6 players by score
+- **Top 6 Avg**: Average of top 6 with delta % from division mean
+
+Players are ranked by score (not pick order) throughout the UI.
 
 ## Backend Development
 
@@ -431,29 +441,34 @@ The application underwent a comprehensive stabilization effort. All phases compl
 - ML-based fuzzy name matching
 - Request gaming detection
 - Grade-based clustering algorithm improvements
-- Algorithm Teaching Tool (Phases 2-5): Correction capture, pattern analysis, learned preferences
 
 ## Session Continuation Notes
 
-### Current Work: Team Builder Algorithm Teaching Tool
+### Current Work: Simplified Team Builder (January 2025)
 
-**Completed (January 2025):**
-- Phase 1: Decision Inspector - Fully implemented in PlayerDetailDrawer
-- Happiness recalculation on manual moves/swaps
-- UX improvements: sticky confirm footer, direct-to-confirm for suggested moves
-- Team score display: Total, Top 8, Avg with delta %
+**Completed:**
+- Simplified Team Builder to "run all algorithms, compare results" approach
+- Algorithm Comparison Panel with 3 tabs (Skill Priority, Request Priority, Balance Priority)
+- Removed complex modes: manual draft, weight sliders, algorithm teaching tool
+- Top 6 metrics throughout (appropriate for smaller divisions like AA)
+- Weighted happiness formula: all=1.0, some=0.5, none=0.0
+- Sibling safeguards: auto-move siblings together, block swaps that separate siblings
+- Score-based ranking (not pick order) throughout UI
+- Finalize flow: shows DraftComplete, can edit after finalizing
+- Export improvements: grouped by team alphabetically, Team column first
 
-**In Progress:**
-- Algorithm Teaching Tool Phases 2-5 (see `docs/ALGORITHM_TEACHING_TOOL.md`)
-- User's proposed algorithm flow:
-  1. Assign coach kids to parent's team
-  2. Place kids requested BY coach kids
-  3. Place players who requested specific coaches
-  4. Friend-chain placement (complex logic needed)
-  5. Review & optimization phase
+**Deleted Files:**
+- `src/components/teamBuilder/WeightSlider.tsx`
+- `src/components/teamBuilder/ManualDraftBoard.tsx`
+- `src/components/teamBuilder/ManualDraftPlayerList.tsx`
+- `src/components/teamBuilder/CorrectionPrompt.tsx`
+- `src/components/teamBuilder/CorrectionSummary.tsx`
+- `src/hooks/useManualTeamBuilderDraft.ts`
+- `src/utils/fitScoreCalculator.ts`
+- `src/utils/correctionAnalysis.ts`
 
-**Key Files for Continuation:**
-- `src/components/teamBuilder/PlayerDetailDrawer.tsx` - Decision reasoning UI
-- `src/components/teamBuilder/TeamBuilderResults.tsx` - Results display with team scores
-- `src/utils/teamBuilderAlgorithm.ts` - Algorithm logic and happiness recalculation
-- `docs/ALGORITHM_TEACHING_TOOL.md` - Teaching tool design doc
+**Key Files:**
+- `src/components/teamBuilder/AlgorithmComparisonPanel.tsx` - Side-by-side algorithm comparison
+- `src/components/teamBuilder/PlayerDetailDrawer.tsx` - Decision reasoning + sibling info
+- `src/components/teamBuilder/TeamBuilderResults.tsx` - Results with Top 6 metrics
+- `src/utils/teamBuilderAlgorithm.ts` - runAllAlgorithms(), calculateTop6Stats()
