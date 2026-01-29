@@ -54,6 +54,14 @@ from .team_builder import (
     team_builder_apply,
     team_builder_update_requests,
 )
+from .evaluation_templates import (
+    evaluation_templates_list_create,
+    evaluation_template_detail,
+)
+from .seasons import (
+    seasons_list_create,
+    season_detail,
+)
 
 __all__ = [
     # Auth
@@ -101,4 +109,10 @@ __all__ = [
     "team_builder_run",
     "team_builder_apply",
     "team_builder_update_requests",
+    # Evaluation Templates
+    "evaluation_templates_list_create",
+    "evaluation_template_detail",
+    # Seasons
+    "seasons_list_create",
+    "season_detail",
 ]

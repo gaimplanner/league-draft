@@ -52,6 +52,12 @@ from .views import (
     team_builder_run,
     team_builder_apply,
     team_builder_update_requests,
+    # Evaluation Templates
+    evaluation_templates_list_create,
+    evaluation_template_detail,
+    # Seasons
+    seasons_list_create,
+    season_detail,
 )
 
 urlpatterns = [
@@ -116,4 +122,12 @@ urlpatterns = [
     path("api/team-builder/<uuid:division_id>/run/", team_builder_run, name="team-builder-run"),
     path("api/team-builder/<uuid:division_id>/apply/", team_builder_apply, name="team-builder-apply"),
     path("api/team-builder/<uuid:division_id>/update-requests/", team_builder_update_requests, name="team-builder-update-requests"),
+
+    # Evaluation Templates
+    path("api/evaluation-templates/", evaluation_templates_list_create, name="evaluation-templates-list-create"),
+    path("api/evaluation-templates/<uuid:pk>/", evaluation_template_detail, name="evaluation-template-detail"),
+
+    # Seasons
+    path("api/seasons/", seasons_list_create, name="seasons-list-create"),
+    path("api/seasons/<uuid:pk>/", season_detail, name="season-detail"),
 ]
