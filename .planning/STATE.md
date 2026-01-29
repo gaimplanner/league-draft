@@ -10,28 +10,28 @@ See: .planning/PROJECT.md (updated 2026-01-29)
 ## Current Position
 
 Phase: 1 of 5 (Evaluation Templates)
-Plan: 1 of 3 in current phase
+Plan: 2 of 3 in current phase
 Status: In progress
-Last activity: 2026-01-29 -- Completed 01-01-PLAN.md (Backend models, validators, views, URL routing)
+Last activity: 2026-01-29 -- Completed 01-02-PLAN.md (Frontend types, API client, hooks, zod schema, TemplateList)
 
-Progress: [█░░░░░░░░░] 7%
+Progress: [██░░░░░░░░] 14%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 1
+- Total plans completed: 2
 - Average duration: 4min
-- Total execution time: 0.07 hours
+- Total execution time: 0.13 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01-evaluation-templates | 1/3 | 4min | 4min |
+| 01-evaluation-templates | 2/3 | 8min | 4min |
 
 **Recent Trend:**
-- Last 5 plans: 4min
-- Trend: first plan, no trend yet
+- Last 5 plans: 4min, 4min
+- Trend: consistent
 
 *Updated after each plan completion*
 
@@ -50,6 +50,8 @@ Recent decisions affecting current work:
 - [01-01]: Soft delete for templates (is_active=False) to preserve parent_template references in child versions
 - [01-01]: Hard delete for seasons (lightweight, no child references)
 - [01-01]: Locked template DELETE returns 400 with guidance to create new version instead
+- [01-02]: Zod v4 API is identical to v3 (import { z } from 'zod' and z.object() work as expected)
+- [01-02]: Copy-on-write awareness in useEvaluationTemplates hook replaces old template in state on version change
 
 ### Pending Todos
 
@@ -62,6 +64,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-01-29T23:48:55Z
-Stopped at: Completed 01-01-PLAN.md (Backend models, validators, views, URL routing)
+Last session: 2026-01-29T23:57:15Z
+Stopped at: Completed 01-02-PLAN.md (Frontend types, API client, hooks, zod schema, TemplateList)
 Resume file: .planning/.continue-here.md
