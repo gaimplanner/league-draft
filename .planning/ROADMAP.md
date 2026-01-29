@@ -30,12 +30,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Admin can set default blend weights on a template (e.g., 40% coach rating, 60% tryout)
   4. When an admin modifies a template that has been used for scoring, a new version is created (original version preserved) so historical scores remain valid
   5. Templates are scoped to the league -- each league sees only its own templates and cannot access another league's configuration
-**Plans**: TBD (estimated 3 plans: backend models + API, frontend template editor, template versioning)
+**Plans**: 3 plans
 
 Plans:
-- [ ] 01-01: Backend evaluation models and template API
-- [ ] 01-02: Frontend template editor UI
-- [ ] 01-03: Template versioning and season management
+- [ ] 01-01-PLAN.md -- Backend models (EvaluationTemplate, Season), migration, validators, transformers, CRUD views with versioning, URL routing
+- [ ] 01-02-PLAN.md -- Frontend foundation: install react-hook-form/zod, TypeScript types, API client methods, data hooks, zod schema, TemplateList component
+- [ ] 01-03-PLAN.md -- Template editor UI: dynamic station/field/category forms, blend weight slider, presets, season manager, app integration
 
 ### Phase 2: Coach Ratings
 **Goal**: Coaches can submit structured end-of-season ratings for players on their roster using the league's evaluation template, and admins can track which coaches have completed their ratings.
@@ -107,7 +107,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|---------------|--------|-----------|
-| 1. Evaluation Templates | 0/3 | Not started | - |
+| 1. Evaluation Templates | 0/3 | Planned | - |
 | 2. Coach Ratings | 0/2 | Not started | - |
 | 3. Tryout Day Scoring | 0/3 | Not started | - |
 | 4. Composite Scoring | 0/2 | Not started | - |
