@@ -10,28 +10,28 @@ See: .planning/PROJECT.md (updated 2026-01-29)
 ## Current Position
 
 Phase: 1 of 5 (Evaluation Templates)
-Plan: 0 of 3 in current phase
-Status: Ready to plan
-Last activity: 2026-01-29 -- Roadmap created, requirements mapped to 5 phases
+Plan: 1 of 3 in current phase
+Status: In progress
+Last activity: 2026-01-29 -- Completed 01-01-PLAN.md (Backend models, validators, views, URL routing)
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [█░░░░░░░░░] 7%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 0
-- Average duration: -
-- Total execution time: 0 hours
+- Total plans completed: 1
+- Average duration: 4min
+- Total execution time: 0.07 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| - | - | - | - |
+| 01-evaluation-templates | 1/3 | 4min | 4min |
 
 **Recent Trend:**
-- Last 5 plans: -
-- Trend: -
+- Last 5 plans: 4min
+- Trend: first plan, no trend yet
 
 *Updated after each plan completion*
 
@@ -47,10 +47,13 @@ Recent decisions affecting current work:
 - [Roadmap]: Template versioning required from Phase 1 data model (cannot retrofit later)
 - [Roadmap]: Relational score records per station (not flat Player fields) to avoid concurrent write conflicts
 - [Roadmap]: Coach ratings before tryout scoring (simpler, validates template system, provides DNE baseline)
+- [01-01]: Soft delete for templates (is_active=False) to preserve parent_template references in child versions
+- [01-01]: Hard delete for seasons (lightweight, no child references)
+- [01-01]: Locked template DELETE returns 400 with guidance to create new version instead
 
 ### Pending Todos
 
-None yet.
+- Run `docker compose exec api python manage.py migrate` when Docker is available to apply migration 0007_evaluation_templates
 
 ### Blockers/Concerns
 
@@ -59,6 +62,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-01-29
-Stopped at: Roadmap and state files created. Ready to plan Phase 1.
-Resume file: None
+Last session: 2026-01-29T23:48:55Z
+Stopped at: Completed 01-01-PLAN.md (Backend models, validators, views, URL routing)
+Resume file: .planning/.continue-here.md
