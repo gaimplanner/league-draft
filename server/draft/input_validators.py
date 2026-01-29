@@ -885,6 +885,358 @@ def validate_member_role_data(data: Dict[str, Any]) -> Tuple[Optional[Dict], Opt
 # -----------------------------------------------------------------------------
 
 
+# -----------------------------------------------------------------------------
+# Evaluation Template Validators
+# -----------------------------------------------------------------------------
+
+
+def _validate_score_field(field: Any) -> Optional[List[str]]:
+    """Validate a single score field within a station."""
+    errors = []
+    if not isinstance(field, dict):
+        return ["Score field must be an object"]
+
+    field_id = field.get("id")
+    if not field_id or not isinstance(field_id, str):
+        errors.append("Score field must have a string 'id'")
+
+    name = field.get("name")
+    if not name or not isinstance(name, str) or not name.strip():
+        errors.append("Score field must have a non-empty string 'name'")
+
+    field_type = field.get("type")
+    valid_types = ("scale", "time", "count")
+    if field_type not in valid_types:
+        errors.append(f"Score field 'type' must be one of: {', '.join(valid_types)}")
+
+    field_min = field.get("min")
+    field_max = field.get("max")
+    if not isinstance(field_min, (int, float)):
+        errors.append("Score field must have a numeric 'min'")
+    if not isinstance(field_max, (int, float)):
+        errors.append("Score field must have a numeric 'max'")
+    if isinstance(field_min, (int, float)) and isinstance(field_max, (int, float)):
+        if field_max <= field_min:
+            errors.append("Score field 'max' must be greater than 'min'")
+
+    # Optional fields
+    description = field.get("description")
+    if description is not None and not isinstance(description, str):
+        errors.append("Score field 'description' must be a string")
+
+    anchors = field.get("anchors")
+    if anchors is not None and not isinstance(anchors, dict):
+        errors.append("Score field 'anchors' must be a dict of string->string")
+
+    unit = field.get("unit")
+    if unit is not None and not isinstance(unit, str):
+        errors.append("Score field 'unit' must be a string")
+
+    lower_is_better = field.get("lowerIsBetter")
+    if lower_is_better is not None and not isinstance(lower_is_better, bool):
+        errors.append("Score field 'lowerIsBetter' must be a boolean")
+
+    return errors if errors else None
+
+
+def _validate_station(station: Any) -> Optional[List[str]]:
+    """Validate a single station object."""
+    errors = []
+    if not isinstance(station, dict):
+        return ["Station must be an object"]
+
+    station_id = station.get("id")
+    if not station_id or not isinstance(station_id, str):
+        errors.append("Station must have a string 'id'")
+
+    name = station.get("name")
+    if not name or not isinstance(name, str) or not name.strip():
+        errors.append("Station must have a non-empty string 'name'")
+
+    order = station.get("order")
+    if not isinstance(order, int):
+        errors.append("Station must have an integer 'order'")
+
+    fields = station.get("fields")
+    if not isinstance(fields, list) or len(fields) < 1:
+        errors.append("Station must have at least one field")
+    elif isinstance(fields, list):
+        for j, field in enumerate(fields):
+            field_errors = _validate_score_field(field)
+            if field_errors:
+                for err in field_errors:
+                    errors.append(f"fields[{j}]: {err}")
+
+    return errors if errors else None
+
+
+def _validate_coach_category(category: Any) -> Optional[List[str]]:
+    """Validate a single coach category object."""
+    errors = []
+    if not isinstance(category, dict):
+        return ["Coach category must be an object"]
+
+    cat_id = category.get("id")
+    if not cat_id or not isinstance(cat_id, str):
+        errors.append("Coach category must have a string 'id'")
+
+    name = category.get("name")
+    if not name or not isinstance(name, str) or not name.strip():
+        errors.append("Coach category must have a non-empty string 'name'")
+
+    cat_type = category.get("type")
+    valid_types = ("physical", "soft")
+    if cat_type not in valid_types:
+        errors.append(f"Coach category 'type' must be one of: {', '.join(valid_types)}")
+
+    cat_min = category.get("min", 1)
+    cat_max = category.get("max", 5)
+    if not isinstance(cat_min, (int, float)):
+        errors.append("Coach category 'min' must be a number")
+    if not isinstance(cat_max, (int, float)):
+        errors.append("Coach category 'max' must be a number")
+
+    anchors = category.get("anchors")
+    if anchors is not None and not isinstance(anchors, dict):
+        errors.append("Coach category 'anchors' must be a dict of string->string")
+
+    return errors if errors else None
+
+
+def validate_template_create_data(data: Dict[str, Any]) -> Tuple[Optional[Dict], Optional[Dict]]:
+    """
+    Validate template creation data.
+
+    Returns:
+        (cleaned_data, None) on success
+        (None, errors) on failure
+    """
+    errors = {}
+
+    # Name (required)
+    name = data.get("name", "")
+    if not name or not str(name).strip():
+        errors["name"] = ["Name is required"]
+    elif len(str(name)) > 200:
+        errors["name"] = ["Name must be 200 characters or less"]
+
+    # Description (optional)
+    description = data.get("description", "")
+    if description and not isinstance(description, str):
+        errors["description"] = ["Description must be a string"]
+
+    # Stations (must be list)
+    stations = data.get("stations", [])
+    if not isinstance(stations, list):
+        errors["stations"] = ["Stations must be a list"]
+    else:
+        for i, station in enumerate(stations):
+            station_errors = _validate_station(station)
+            if station_errors:
+                errors[f"stations[{i}]"] = station_errors
+
+    # Coach categories (must be list)
+    coach_categories = data.get("coach_categories", [])
+    if not isinstance(coach_categories, list):
+        errors["coach_categories"] = ["Coach categories must be a list"]
+    else:
+        for i, category in enumerate(coach_categories):
+            cat_errors = _validate_coach_category(category)
+            if cat_errors:
+                errors[f"coach_categories[{i}]"] = cat_errors
+
+    # Blend weights
+    blend_weights = data.get("blend_weights", {})
+    if blend_weights:
+        if not isinstance(blend_weights, dict):
+            errors["blend_weights"] = ["Blend weights must be an object"]
+        else:
+            coach_w = blend_weights.get("coachRating")
+            tryout_w = blend_weights.get("tryoutScore")
+            if not isinstance(coach_w, (int, float)) or not isinstance(tryout_w, (int, float)):
+                errors["blend_weights"] = ["Blend weights must include numeric 'coachRating' and 'tryoutScore'"]
+            elif int(coach_w) + int(tryout_w) != 100:
+                errors["blend_weights"] = ["Blend weights must sum to 100"]
+
+    if errors:
+        return None, errors
+
+    return {
+        "name": str(name).strip(),
+        "description": str(description).strip() if description else "",
+        "stations": stations,
+        "coach_categories": coach_categories,
+        "blend_weights": blend_weights or {"coachRating": 40, "tryoutScore": 60},
+    }, None
+
+
+def validate_template_update_data(data: Dict[str, Any]) -> Tuple[Optional[Dict], Optional[Dict]]:
+    """
+    Validate template update data (partial update - all fields optional).
+
+    Returns:
+        (cleaned_data, None) on success
+        (None, errors) on failure
+    """
+    cleaned = {}
+    errors = {}
+
+    if "name" in data:
+        name = data["name"]
+        if not name or not str(name).strip():
+            errors["name"] = ["Name cannot be empty"]
+        elif len(str(name)) > 200:
+            errors["name"] = ["Name must be 200 characters or less"]
+        else:
+            cleaned["name"] = str(name).strip()
+
+    if "description" in data:
+        description = data["description"]
+        if not isinstance(description, str):
+            errors["description"] = ["Description must be a string"]
+        else:
+            cleaned["description"] = description.strip()
+
+    if "stations" in data:
+        stations = data["stations"]
+        if not isinstance(stations, list):
+            errors["stations"] = ["Stations must be a list"]
+        else:
+            for i, station in enumerate(stations):
+                station_errors = _validate_station(station)
+                if station_errors:
+                    errors[f"stations[{i}]"] = station_errors
+            if not errors:
+                cleaned["stations"] = stations
+
+    if "coach_categories" in data:
+        coach_categories = data["coach_categories"]
+        if not isinstance(coach_categories, list):
+            errors["coach_categories"] = ["Coach categories must be a list"]
+        else:
+            for i, category in enumerate(coach_categories):
+                cat_errors = _validate_coach_category(category)
+                if cat_errors:
+                    errors[f"coach_categories[{i}]"] = cat_errors
+            if not errors:
+                cleaned["coach_categories"] = coach_categories
+
+    if "blend_weights" in data:
+        blend_weights = data["blend_weights"]
+        if not isinstance(blend_weights, dict):
+            errors["blend_weights"] = ["Blend weights must be an object"]
+        else:
+            coach_w = blend_weights.get("coachRating")
+            tryout_w = blend_weights.get("tryoutScore")
+            if not isinstance(coach_w, (int, float)) or not isinstance(tryout_w, (int, float)):
+                errors["blend_weights"] = ["Blend weights must include numeric 'coachRating' and 'tryoutScore'"]
+            elif int(coach_w) + int(tryout_w) != 100:
+                errors["blend_weights"] = ["Blend weights must sum to 100"]
+            else:
+                cleaned["blend_weights"] = blend_weights
+
+    if errors:
+        return None, errors
+
+    return cleaned, None
+
+
+def validate_season_create_data(data: Dict[str, Any]) -> Tuple[Optional[Dict], Optional[Dict]]:
+    """
+    Validate season creation data.
+
+    Returns:
+        (cleaned_data, None) on success
+        (None, errors) on failure
+    """
+    errors = {}
+
+    # Name (required)
+    name = data.get("name", "")
+    if not name or not str(name).strip():
+        errors["name"] = ["Name is required"]
+    elif len(str(name)) > 100:
+        errors["name"] = ["Name must be 100 characters or less"]
+
+    # Year (required)
+    year = data.get("year")
+    if year is None:
+        errors["year"] = ["Year is required"]
+    else:
+        try:
+            year = int(year)
+            if year < 2020 or year > 2100:
+                errors["year"] = ["Year must be between 2020 and 2100"]
+        except (ValueError, TypeError):
+            errors["year"] = ["Year must be an integer"]
+
+    # Template ID (required)
+    template_id = data.get("template_id")
+    if not template_id:
+        errors["template_id"] = ["Template ID is required"]
+    else:
+        parsed_id, id_error = validate_uuid_field(template_id, "template_id")
+        if id_error:
+            errors["template_id"] = [id_error]
+
+    if errors:
+        return None, errors
+
+    return {
+        "name": str(name).strip(),
+        "year": int(year),
+        "template_id": parsed_id,
+    }, None
+
+
+def validate_season_update_data(data: Dict[str, Any]) -> Tuple[Optional[Dict], Optional[Dict]]:
+    """
+    Validate season update data (partial update - all fields optional).
+
+    Returns:
+        (cleaned_data, None) on success
+        (None, errors) on failure
+    """
+    cleaned = {}
+    errors = {}
+
+    if "name" in data:
+        name = data["name"]
+        if not name or not str(name).strip():
+            errors["name"] = ["Name cannot be empty"]
+        elif len(str(name)) > 100:
+            errors["name"] = ["Name must be 100 characters or less"]
+        else:
+            cleaned["name"] = str(name).strip()
+
+    if "year" in data:
+        year = data["year"]
+        try:
+            year = int(year)
+            if year < 2020 or year > 2100:
+                errors["year"] = ["Year must be between 2020 and 2100"]
+            else:
+                cleaned["year"] = year
+        except (ValueError, TypeError):
+            errors["year"] = ["Year must be an integer"]
+
+    if "template_id" in data:
+        template_id = data["template_id"]
+        parsed_id, id_error = validate_uuid_field(template_id, "template_id")
+        if id_error:
+            errors["template_id"] = [id_error]
+        else:
+            cleaned["template_id"] = parsed_id
+
+    if "is_active" in data:
+        cleaned["is_active"] = bool(data["is_active"])
+
+    if errors:
+        return None, errors
+
+    return cleaned, None
+
+
 def validate_team_builder_config(data: Dict[str, Any]) -> Tuple[Optional[Dict], Optional[Dict]]:
     """
     Validate team builder configuration.

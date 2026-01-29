@@ -564,6 +564,106 @@ class DraftPick(models.Model):
         return f"Round {self.round}, Pick {self.pick}"
 
 
+# -----------------------------------------------------------------------------
+# Evaluation Template Model
+# -----------------------------------------------------------------------------
+
+
+class EvaluationTemplate(models.Model):
+    """Configurable evaluation template with stations, coach categories, and blend weights.
+
+    Supports versioning via copy-on-write: when a locked template is edited,
+    a new version (new row) is created with parent_template pointing to the
+    original.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="evaluation_templates",
+    )
+    name = models.CharField(max_length=200)
+    description = models.TextField(blank=True, default="")
+    version = models.IntegerField(default=1)
+    parent_template = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="child_versions",
+    )
+
+    # Template content stored as JSON
+    stations = models.JSONField(default=list)
+    coach_categories = models.JSONField(default=list)
+    blend_weights = models.JSONField(default=dict)
+
+    is_active = models.BooleanField(default=True)
+    is_locked = models.BooleanField(default=False)
+
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "evaluation_templates"
+        ordering = ["-updated_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "name", "version"],
+                name="unique_template_version",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.name} v{self.version}"
+
+
+# -----------------------------------------------------------------------------
+# Season Model
+# -----------------------------------------------------------------------------
+
+
+class Season(models.Model):
+    """Season linked to an evaluation template."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="seasons",
+    )
+    name = models.CharField(max_length=100)
+    year = models.IntegerField()
+    template = models.ForeignKey(
+        EvaluationTemplate,
+        on_delete=models.PROTECT,
+        related_name="seasons",
+    )
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "seasons"
+        ordering = ["-year", "-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "name"],
+                name="unique_season_name_per_org",
+            )
+        ]
+
+    def __str__(self):
+        return self.name
+
+
 class Trade(models.Model):
     """Post-draft trades."""
 

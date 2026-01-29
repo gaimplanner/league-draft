@@ -290,6 +290,40 @@ def transform_organization(organization) -> dict:
 transform_league = transform_organization
 
 
+def transform_evaluation_template(template) -> dict:
+    """Transform an EvaluationTemplate to dict."""
+    return {
+        "id": str(template.id),
+        "organization_id": str(template.organization_id),
+        "name": template.name,
+        "description": template.description,
+        "version": template.version,
+        "parent_template_id": str(template.parent_template_id) if template.parent_template_id else None,
+        "stations": template.stations,
+        "coach_categories": template.coach_categories,
+        "blend_weights": template.blend_weights,
+        "is_active": template.is_active,
+        "is_locked": template.is_locked,
+        "created_by_id": str(template.created_by_id) if template.created_by_id else None,
+        "created_at": template.created_at.isoformat(),
+        "updated_at": template.updated_at.isoformat(),
+    }
+
+
+def transform_season(season) -> dict:
+    """Transform a Season to dict."""
+    return {
+        "id": str(season.id),
+        "organization_id": str(season.organization_id),
+        "name": season.name,
+        "year": season.year,
+        "template_id": str(season.template_id),
+        "is_active": season.is_active,
+        "created_at": season.created_at.isoformat(),
+        "updated_at": season.updated_at.isoformat(),
+    }
+
+
 def transform_team_builder_result(result) -> dict:
     """Transform TeamBuilderResult to dict for JSON response."""
     return {
