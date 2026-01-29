@@ -27,6 +27,10 @@ import type {
   JoinLinkStatus,
   JoinLinkInfo,
   AcceptInvitationResult,
+  EvaluationTemplate,
+  CreateTemplateData,
+  Season,
+  CreateSeasonData,
 } from '../types';
 
 // Legacy type aliases
@@ -435,6 +439,72 @@ function transformDivisionSummaryFromApi(data: Record<string, unknown>): Divisio
     ownerId: (data.owner_id as string | null) ?? undefined,
     isPersonal: data.is_personal as boolean ?? true,
   };
+}
+
+// -----------------------------------------------------------------------------
+// Evaluation Template Transformations
+// -----------------------------------------------------------------------------
+
+/**
+ * Transform evaluation template data from API (snake_case) to frontend (camelCase)
+ */
+function transformTemplateFromApi(data: Record<string, unknown>): EvaluationTemplate {
+  return {
+    id: data.id as string,
+    organizationId: data.organization_id as string,
+    name: data.name as string,
+    description: (data.description as string) || '',
+    version: data.version as number,
+    parentTemplateId: (data.parent_template_id as string | null) ?? null,
+    stations: (data.stations as EvaluationTemplate['stations']) || [],
+    coachCategories: (data.coach_categories as EvaluationTemplate['coachCategories']) || [],
+    blendWeights: (data.blend_weights as EvaluationTemplate['blendWeights']) || { coachRating: 40, tryoutScore: 60 },
+    isActive: data.is_active as boolean,
+    isLocked: data.is_locked as boolean,
+    createdById: (data.created_by_id as string | null) ?? null,
+    createdAt: data.created_at as string,
+    updatedAt: data.updated_at as string,
+  };
+}
+
+/**
+ * Transform template data from frontend (camelCase) to API (snake_case)
+ */
+function transformTemplateToApi(data: Partial<CreateTemplateData>): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  if (data.name !== undefined) result.name = data.name;
+  if (data.description !== undefined) result.description = data.description;
+  if (data.stations !== undefined) result.stations = data.stations;
+  if (data.coachCategories !== undefined) result.coach_categories = data.coachCategories;
+  if (data.blendWeights !== undefined) result.blend_weights = data.blendWeights;
+  return result;
+}
+
+/**
+ * Transform season data from API (snake_case) to frontend (camelCase)
+ */
+function transformSeasonFromApi(data: Record<string, unknown>): Season {
+  return {
+    id: data.id as string,
+    organizationId: data.organization_id as string,
+    name: data.name as string,
+    year: data.year as number,
+    templateId: data.template_id as string,
+    isActive: data.is_active as boolean,
+    createdAt: data.created_at as string,
+    updatedAt: data.updated_at as string,
+  };
+}
+
+/**
+ * Transform season data from frontend (camelCase) to API (snake_case)
+ */
+function transformSeasonToApi(data: Partial<CreateSeasonData>): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  if (data.name !== undefined) result.name = data.name;
+  if (data.year !== undefined) result.year = data.year;
+  if (data.templateId !== undefined) result.template_id = data.templateId;
+  return result;
 }
 
 // -----------------------------------------------------------------------------
@@ -1190,6 +1260,88 @@ export const api = {
       leagueName: orgName,
       leagueSlug: orgSlug,
     };
+  },
+
+  // ---------------------------------------------------------------------------
+  // Evaluation Templates
+  // ---------------------------------------------------------------------------
+
+  async listEvaluationTemplates(): Promise<EvaluationTemplate[]> {
+    const response = await fetch(`${API_BASE_URL}/evaluation-templates/`, getDefaultOptions());
+    const data = await handleResponse<Record<string, unknown>[]>(response);
+    return data.map(transformTemplateFromApi);
+  },
+
+  async getEvaluationTemplate(id: string): Promise<EvaluationTemplate> {
+    const response = await fetch(`${API_BASE_URL}/evaluation-templates/${id}/`, getDefaultOptions());
+    const data = await handleResponse<Record<string, unknown>>(response);
+    return transformTemplateFromApi(data);
+  },
+
+  async createEvaluationTemplate(templateData: CreateTemplateData): Promise<EvaluationTemplate> {
+    const response = await fetchWithCSRFRetry(`${API_BASE_URL}/evaluation-templates/`, {
+      ...getDefaultOptions('POST'),
+      method: 'POST',
+      body: JSON.stringify(transformTemplateToApi(templateData)),
+    });
+    const data = await handleResponse<Record<string, unknown>>(response);
+    return transformTemplateFromApi(data);
+  },
+
+  async updateEvaluationTemplate(id: string, templateData: Partial<CreateTemplateData>): Promise<EvaluationTemplate> {
+    const response = await fetchWithCSRFRetry(`${API_BASE_URL}/evaluation-templates/${id}/`, {
+      ...getDefaultOptions('PATCH'),
+      method: 'PATCH',
+      body: JSON.stringify(transformTemplateToApi(templateData)),
+    });
+    const data = await handleResponse<Record<string, unknown>>(response);
+    return transformTemplateFromApi(data);
+  },
+
+  async deleteEvaluationTemplate(id: string): Promise<void> {
+    const response = await fetchWithCSRFRetry(`${API_BASE_URL}/evaluation-templates/${id}/`, {
+      ...getDefaultOptions('DELETE'),
+      method: 'DELETE',
+    });
+    await handleResponse<void>(response);
+  },
+
+  // ---------------------------------------------------------------------------
+  // Seasons
+  // ---------------------------------------------------------------------------
+
+  async listSeasons(): Promise<Season[]> {
+    const response = await fetch(`${API_BASE_URL}/seasons/`, getDefaultOptions());
+    const data = await handleResponse<Record<string, unknown>[]>(response);
+    return data.map(transformSeasonFromApi);
+  },
+
+  async createSeason(seasonData: CreateSeasonData): Promise<Season> {
+    const response = await fetchWithCSRFRetry(`${API_BASE_URL}/seasons/`, {
+      ...getDefaultOptions('POST'),
+      method: 'POST',
+      body: JSON.stringify(transformSeasonToApi(seasonData)),
+    });
+    const data = await handleResponse<Record<string, unknown>>(response);
+    return transformSeasonFromApi(data);
+  },
+
+  async updateSeason(id: string, seasonData: Partial<CreateSeasonData>): Promise<Season> {
+    const response = await fetchWithCSRFRetry(`${API_BASE_URL}/seasons/${id}/`, {
+      ...getDefaultOptions('PATCH'),
+      method: 'PATCH',
+      body: JSON.stringify(transformSeasonToApi(seasonData)),
+    });
+    const data = await handleResponse<Record<string, unknown>>(response);
+    return transformSeasonFromApi(data);
+  },
+
+  async deleteSeason(id: string): Promise<void> {
+    const response = await fetchWithCSRFRetry(`${API_BASE_URL}/seasons/${id}/`, {
+      ...getDefaultOptions('DELETE'),
+      method: 'DELETE',
+    });
+    await handleResponse<void>(response);
   },
 };
 
