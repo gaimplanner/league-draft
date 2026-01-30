@@ -727,6 +727,46 @@ export interface CreateSeasonData {
   templateId: string;
 }
 
+// Coach Ratings
+export type RatingStatus = 'draft' | 'submitted';
+
+export interface CoachRating {
+  id: string;
+  seasonId: string;
+  coachId: string;
+  playerFirstName: string;
+  playerLastName: string;
+  playerId: string | null;
+  scores: Record<string, number>;
+  status: RatingStatus;
+  createdAt: string;
+  updatedAt: string;
+  submittedAt: string | null;
+}
+
+export interface CoachRatingProgress {
+  coachId: string;
+  coachEmail: string;
+  coachFirstName: string;
+  coachLastName: string;
+  totalRatings: number;
+  submittedRatings: number;
+  draftRatings: number;
+}
+
+export interface CreateCoachRatingData {
+  playerFirstName: string;
+  playerLastName: string;
+  playerId?: string;
+  scores: Record<string, number>;
+}
+
+export interface UpdateCoachRatingData {
+  scores?: Record<string, number>;
+  playerFirstName?: string;
+  playerLastName?: string;
+}
+
 // Helper to create initial division state
 export function createInitialDivision(
   id: string,

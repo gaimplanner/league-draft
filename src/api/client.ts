@@ -38,6 +38,11 @@ import type {
   CreateTemplateData,
   Season,
   CreateSeasonData,
+  CoachRating,
+  CoachRatingProgress,
+  CreateCoachRatingData,
+  UpdateCoachRatingData,
+  RatingStatus,
 } from '../types';
 
 // Legacy type aliases
@@ -529,6 +534,44 @@ function transformSeasonToApi(data: Partial<CreateSeasonData>): Record<string, u
   if (data.year !== undefined) result.year = data.year;
   if (data.templateId !== undefined) result.template_id = data.templateId;
   return result;
+}
+
+// -----------------------------------------------------------------------------
+// Coach Rating Transformations
+// -----------------------------------------------------------------------------
+
+/**
+ * Transform coach rating data from API (snake_case) to frontend (camelCase)
+ */
+function transformCoachRatingFromApi(data: Record<string, unknown>): CoachRating {
+  return {
+    id: data.id as string,
+    seasonId: data.season_id as string,
+    coachId: data.coach_id as string,
+    playerFirstName: data.player_first_name as string,
+    playerLastName: data.player_last_name as string,
+    playerId: (data.player_id as string | null) ?? null,
+    scores: (data.scores as Record<string, number>) || {},
+    status: data.status as RatingStatus,
+    createdAt: data.created_at as string,
+    updatedAt: data.updated_at as string,
+    submittedAt: (data.submitted_at as string | null) ?? null,
+  };
+}
+
+/**
+ * Transform coach rating progress data from API (snake_case) to frontend (camelCase)
+ */
+function transformCoachRatingProgressFromApi(data: Record<string, unknown>): CoachRatingProgress {
+  return {
+    coachId: data.coach_id as string,
+    coachEmail: data.coach_email as string,
+    coachFirstName: data.coach_first_name as string,
+    coachLastName: data.coach_last_name as string,
+    totalRatings: data.total_ratings as number,
+    submittedRatings: data.submitted_ratings as number,
+    draftRatings: data.draft_ratings as number,
+  };
 }
 
 // -----------------------------------------------------------------------------
@@ -1532,6 +1575,96 @@ export const api = {
       method: 'DELETE',
     });
     await handleResponse<void>(response);
+  },
+
+  // ---------------------------------------------------------------------------
+  // Coach Ratings
+  // ---------------------------------------------------------------------------
+
+  async listCoachRatings(seasonId: string): Promise<CoachRating[]> {
+    const response = await fetch(
+      `${API_BASE_URL}/seasons/${seasonId}/coach-ratings/`,
+      getDefaultOptions()
+    );
+    const data = await handleResponse<Record<string, unknown>[]>(response);
+    return data.map(transformCoachRatingFromApi);
+  },
+
+  async createCoachRating(seasonId: string, ratingData: CreateCoachRatingData): Promise<CoachRating> {
+    const response = await fetchWithCSRFRetry(
+      `${API_BASE_URL}/seasons/${seasonId}/coach-ratings/`,
+      {
+        ...getDefaultOptions('POST'),
+        method: 'POST',
+        body: JSON.stringify({
+          player_first_name: ratingData.playerFirstName,
+          player_last_name: ratingData.playerLastName,
+          player_id: ratingData.playerId,
+          scores: ratingData.scores,
+        }),
+      }
+    );
+    const data = await handleResponse<Record<string, unknown>>(response);
+    return transformCoachRatingFromApi(data);
+  },
+
+  async getCoachRating(ratingId: string): Promise<CoachRating> {
+    const response = await fetch(
+      `${API_BASE_URL}/coach-ratings/${ratingId}/`,
+      getDefaultOptions()
+    );
+    const data = await handleResponse<Record<string, unknown>>(response);
+    return transformCoachRatingFromApi(data);
+  },
+
+  async updateCoachRating(ratingId: string, updates: UpdateCoachRatingData): Promise<CoachRating> {
+    const body: Record<string, unknown> = {};
+    if (updates.scores !== undefined) body.scores = updates.scores;
+    if (updates.playerFirstName !== undefined) body.player_first_name = updates.playerFirstName;
+    if (updates.playerLastName !== undefined) body.player_last_name = updates.playerLastName;
+
+    const response = await fetchWithCSRFRetry(
+      `${API_BASE_URL}/coach-ratings/${ratingId}/`,
+      {
+        ...getDefaultOptions('PATCH'),
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      }
+    );
+    const data = await handleResponse<Record<string, unknown>>(response);
+    return transformCoachRatingFromApi(data);
+  },
+
+  async deleteCoachRating(ratingId: string): Promise<void> {
+    const response = await fetchWithCSRFRetry(
+      `${API_BASE_URL}/coach-ratings/${ratingId}/`,
+      {
+        ...getDefaultOptions('DELETE'),
+        method: 'DELETE',
+      }
+    );
+    await handleResponse(response);
+  },
+
+  async submitCoachRating(ratingId: string): Promise<CoachRating> {
+    const response = await fetchWithCSRFRetry(
+      `${API_BASE_URL}/coach-ratings/${ratingId}/submit/`,
+      {
+        ...getDefaultOptions('POST'),
+        method: 'POST',
+      }
+    );
+    const data = await handleResponse<Record<string, unknown>>(response);
+    return transformCoachRatingFromApi(data);
+  },
+
+  async getCoachRatingsProgress(seasonId: string): Promise<CoachRatingProgress[]> {
+    const response = await fetch(
+      `${API_BASE_URL}/seasons/${seasonId}/coach-ratings/progress/`,
+      getDefaultOptions()
+    );
+    const data = await handleResponse<Record<string, unknown>[]>(response);
+    return data.map(transformCoachRatingProgressFromApi);
   },
 };
 
