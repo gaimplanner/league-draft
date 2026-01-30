@@ -63,12 +63,12 @@ Plans:
   4. An admin can bulk-enter an entire station's scores from paper sheets via a spreadsheet-style grid interface as a fallback to mobile scoring
   5. An admin can view a tryout progress dashboard showing which groups have completed which stations, which players are missing scores, and overall scoring completion
   6. Every score record captures the identity of the scorer who entered it
-**Plans**: TBD (estimated 3-4 plans: tryout event + group setup, mobile station scoring UI, bulk entry, progress dashboard)
+**Plans**: 3 plans
 
 Plans:
-- [ ] 03-01: Tryout event and player group backend
-- [ ] 03-02: Mobile station scoring UI
-- [ ] 03-03: Bulk score entry and progress dashboard
+- [ ] 03-01-PLAN.md -- Backend: TryoutGroup/GroupPlayer/StationScore models, migration, validators, transformers, CRUD views (groups, scores, bulk import, progress), URL routing
+- [ ] 03-02-PLAN.md -- Frontend: TypeScript types, API client, scoring hook, BibNumpad, PlayerScoreCard, MobileStationScoring, GroupManagement, App.tsx integration
+- [ ] 03-03-PLAN.md -- Frontend: react-datasheet-grid bulk entry with Excel/Sheets paste, TryoutProgressDashboard with pull-to-refresh, TryoutScoringPage orchestrator with tabbed navigation
 
 ### Phase 4: Composite Scoring
 **Goal**: The system calculates a fair, weighted composite score that blends coach ratings and tryout evaluations -- normalizing across different score types, handling players with partial or missing data, and showing admins the full breakdown of how each player's score was derived.
