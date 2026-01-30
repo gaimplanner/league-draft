@@ -505,3 +505,91 @@ def transform_tryout_progress(progress_data) -> dict:
         "total_players": progress_data["total_players"],
         "complete": progress_data["complete"],
     }
+
+
+def transform_composite_result(result: dict) -> dict:
+    """Transform composite score result to dict.
+
+    Converts UUIDs to strings and ensures proper formatting for API response.
+    """
+    # Round float values to 2 decimal places
+    def round_value(val):
+        if val is None:
+            return None
+        if isinstance(val, float):
+            return round(val, 2)
+        return val
+
+    return {
+        "player_key": result["player_key"],
+        "first_name": result["first_name"],
+        "last_name": result["last_name"],
+        "bib_number": result.get("bib_number"),
+        "group_player_id": result.get("group_player_id"),
+        "tier": result["tier"],
+        "composite_score": round_value(result.get("composite_score")),
+        "coach_aggregate": round_value(result.get("coach_aggregate")),
+        "tryout_aggregate": round_value(result.get("tryout_aggregate")),
+        "is_partial_tryout": result.get("is_partial_tryout", False),
+        "rank": result.get("rank"),
+    }
+
+
+def transform_composite_detail(detail: dict) -> dict:
+    """Transform composite score detail (full breakdown) to dict.
+
+    Includes coach rating details and tryout score details with nested structure.
+    """
+    def round_value(val):
+        if val is None:
+            return None
+        if isinstance(val, float):
+            return round(val, 2)
+        return val
+
+    # Round all nested scores
+    coach_detail = detail.get("coach_detail")
+    if coach_detail:
+        coach_detail = {
+            "raw_scores": coach_detail.get("raw_scores", {}),
+            "normalized_scores": {
+                k: round_value(v) for k, v in coach_detail.get("normalized_scores", {}).items()
+            },
+            "aggregate": round_value(coach_detail.get("aggregate")),
+            "coach_name": coach_detail.get("coach_name"),
+            "status": coach_detail.get("status"),
+        }
+
+    tryout_detail = detail.get("tryout_detail")
+    if tryout_detail:
+        stations = {}
+        for station_id, station_data in tryout_detail.get("stations", {}).items():
+            stations[station_id] = {
+                "raw_scores": station_data.get("raw_scores", {}),
+                "normalized_scores": {
+                    k: round_value(v) for k, v in station_data.get("normalized_scores", {}).items()
+                },
+                "aggregate": round_value(station_data.get("aggregate")),
+            }
+        tryout_detail = {
+            "stations": stations,
+            "aggregate": round_value(tryout_detail.get("aggregate")),
+            "stations_scored": tryout_detail.get("stations_scored", 0),
+            "stations_total": tryout_detail.get("stations_total", 0),
+        }
+
+    return {
+        "player_key": detail["player_key"],
+        "first_name": detail["first_name"],
+        "last_name": detail["last_name"],
+        "bib_number": detail.get("bib_number"),
+        "group_player_id": detail.get("group_player_id"),
+        "tier": detail["tier"],
+        "composite_score": round_value(detail.get("composite_score")),
+        "coach_aggregate": round_value(detail.get("coach_aggregate")),
+        "tryout_aggregate": round_value(detail.get("tryout_aggregate")),
+        "is_partial_tryout": detail.get("is_partial_tryout", False),
+        "rank": detail.get("rank"),
+        "coach_detail": coach_detail,
+        "tryout_detail": tryout_detail,
+    }

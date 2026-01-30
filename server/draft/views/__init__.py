@@ -85,6 +85,12 @@ from .tryout_scoring import (
     tryout_bulk_scores,
     tryout_progress,
 )
+from .composite import (
+    composite_scores_calculate,
+    composite_scores_list,
+    composite_score_detail,
+    composite_score_promote,
+)
 
 __all__ = [
     # Auth
@@ -158,4 +164,9 @@ __all__ = [
     "tryout_station_score_detail",
     "tryout_bulk_scores",
     "tryout_progress",
+    # Composite Scoring
+    "composite_scores_calculate",
+    "composite_scores_list",
+    "composite_score_detail",
+    "composite_score_promote",
 ]

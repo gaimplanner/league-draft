@@ -78,6 +78,11 @@ from .views import (
     tryout_station_score_detail,
     tryout_bulk_scores,
     tryout_progress,
+    # Composite Scoring
+    composite_scores_calculate,
+    composite_scores_list,
+    composite_score_detail,
+    composite_score_promote,
 )
 
 urlpatterns = [
@@ -187,4 +192,15 @@ urlpatterns = [
          tryout_bulk_scores, name="tryout-bulk-scores"),
     path("api/seasons/<uuid:season_id>/tryout-progress/",
          tryout_progress, name="tryout-progress"),
+
+    # Composite Scoring
+    # Note: Specific paths (calculate/, promote/) must come BEFORE the generic <str:player_key> path
+    path("api/seasons/<uuid:season_id>/composite-scores/calculate/",
+         composite_scores_calculate, name="composite-scores-calculate"),
+    path("api/seasons/<uuid:season_id>/composite-scores/promote/",
+         composite_score_promote, name="composite-score-promote"),
+    path("api/seasons/<uuid:season_id>/composite-scores/",
+         composite_scores_list, name="composite-scores-list"),
+    path("api/seasons/<uuid:season_id>/composite-scores/<str:player_key>/",
+         composite_score_detail, name="composite-score-detail"),
 ]

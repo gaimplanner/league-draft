@@ -1844,3 +1844,96 @@ def validate_bulk_scores_data(data: Dict[str, Any]) -> Tuple[Optional[Dict], Opt
         "station_id": str(station_id).strip(),
         "scores": scores,
     }, None
+
+
+def validate_composite_weights(data: Dict[str, Any]) -> Tuple[Optional[Dict], Optional[Dict]]:
+    """
+    Validate composite score weight configuration.
+
+    Returns:
+        (cleaned_data, None) on success
+        (None, errors) on failure
+    """
+    errors = {}
+    cleaned = {}
+
+    # Required: coach_rating and tryout_score
+    coach_rating = data.get("coach_rating")
+    tryout_score = data.get("tryout_score")
+
+    if coach_rating is None:
+        errors["coach_rating"] = ["Coach rating weight is required"]
+    elif not isinstance(coach_rating, int) or coach_rating < 0 or coach_rating > 100:
+        errors["coach_rating"] = ["Coach rating weight must be an integer between 0 and 100"]
+    else:
+        cleaned["coach_rating"] = coach_rating
+
+    if tryout_score is None:
+        errors["tryout_score"] = ["Tryout score weight is required"]
+    elif not isinstance(tryout_score, int) or tryout_score < 0 or tryout_score > 100:
+        errors["tryout_score"] = ["Tryout score weight must be an integer between 0 and 100"]
+    else:
+        cleaned["tryout_score"] = tryout_score
+
+    # Validate sum to 100
+    if "coach_rating" in cleaned and "tryout_score" in cleaned:
+        if cleaned["coach_rating"] + cleaned["tryout_score"] != 100:
+            errors["_weights"] = ["Coach rating and tryout score weights must sum to 100"]
+
+    # Optional: station_weights
+    if "station_weights" in data:
+        station_weights = data["station_weights"]
+        if not isinstance(station_weights, dict):
+            errors["station_weights"] = ["Station weights must be an object"]
+        else:
+            cleaned_station_weights = {}
+            total_weight = 0
+            for station_id, weight in station_weights.items():
+                if not isinstance(weight, int) or weight < 0 or weight > 100:
+                    errors[f"station_weights.{station_id}"] = ["Weight must be an integer between 0 and 100"]
+                else:
+                    cleaned_station_weights[station_id] = weight
+                    total_weight += weight
+
+            if cleaned_station_weights and total_weight != 100:
+                errors["_station_weights"] = ["Station weights must sum to 100"]
+
+            if not errors:
+                cleaned["station_weights"] = cleaned_station_weights
+
+    if errors:
+        return None, errors
+
+    return cleaned, None
+
+
+def validate_promote_data(data: Dict[str, Any]) -> Tuple[Optional[Dict], Optional[Dict]]:
+    """
+    Validate player tier promotion data.
+
+    Returns:
+        (cleaned_data, None) on success
+        (None, errors) on failure
+    """
+    errors = {}
+    cleaned = {}
+
+    player_key = data.get("player_key", "").strip()
+    if not player_key:
+        errors["player_key"] = ["Player key is required"]
+    else:
+        cleaned["player_key"] = player_key
+
+    target_tier = data.get("target_tier", "").strip()
+    valid_tiers = ["full", "coach_only", "tryout_only"]
+    if not target_tier:
+        errors["target_tier"] = ["Target tier is required"]
+    elif target_tier not in valid_tiers:
+        errors["target_tier"] = [f"Target tier must be one of: {', '.join(valid_tiers)}"]
+    else:
+        cleaned["target_tier"] = target_tier
+
+    if errors:
+        return None, errors
+
+    return cleaned, None

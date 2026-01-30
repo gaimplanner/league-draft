@@ -785,6 +785,7 @@ class Season(models.Model):
         on_delete=models.PROTECT,
         related_name="seasons",
     )
+    composite_tier_overrides = models.JSONField(default=dict, blank=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
