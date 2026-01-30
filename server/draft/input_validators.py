@@ -1311,3 +1311,70 @@ def validate_team_builder_run(data: Dict[str, Any]) -> Tuple[Optional[Dict], Opt
         result["config"] = config_result
 
     return result, None
+
+
+# -----------------------------------------------------------------------------
+# Coach Rating Validators
+# -----------------------------------------------------------------------------
+
+
+def validate_coach_rating_data(data: Dict[str, Any]) -> Tuple[Optional[Dict], Optional[Dict]]:
+    """Validate coach rating creation/update data.
+
+    Returns (cleaned_data, None) on success, (None, errors) on failure.
+    """
+    errors = {}
+
+    player_first_name = data.get("player_first_name", "")
+    if not player_first_name or not str(player_first_name).strip():
+        errors["player_first_name"] = ["Player first name is required"]
+
+    player_last_name = data.get("player_last_name", "")
+    if not player_last_name or not str(player_last_name).strip():
+        errors["player_last_name"] = ["Player last name is required"]
+
+    scores = data.get("scores", {})
+    if not isinstance(scores, dict):
+        errors["scores"] = ["Scores must be an object"]
+    else:
+        for cat_id, score in scores.items():
+            if not isinstance(score, (int, float)):
+                errors[f"scores.{cat_id}"] = ["Score must be a number"]
+
+    player_id = data.get("player_id")
+    if player_id is not None:
+        try:
+            uuid_module.UUID(str(player_id))
+        except (ValueError, AttributeError):
+            errors["player_id"] = ["Invalid player ID"]
+
+    if errors:
+        return None, errors
+
+    cleaned = {
+        "player_first_name": str(player_first_name).strip(),
+        "player_last_name": str(player_last_name).strip(),
+        "scores": scores,
+    }
+    if player_id is not None:
+        cleaned["player_id"] = str(player_id)
+
+    return cleaned, None
+
+
+def validate_rating_scores_complete(scores: dict, template_coach_categories: list) -> Tuple[bool, List[str]]:
+    """Validate that all template coach category IDs have scores for submission.
+
+    Args:
+        scores: The rating's scores dict (category_id -> numeric value)
+        template_coach_categories: List of coach category dicts from the template
+
+    Returns:
+        (is_complete, missing_category_names) - True if all categories have scores
+    """
+    missing = []
+    for cat in template_coach_categories:
+        cat_id = cat.get("id", "")
+        if cat_id not in scores or scores[cat_id] is None:
+            missing.append(cat.get("name", cat_id))
+    return len(missing) == 0, missing

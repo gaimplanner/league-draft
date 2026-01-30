@@ -376,3 +376,33 @@ def transform_team_builder_result(result) -> dict:
         },
         "warnings": result.warnings,
     }
+
+
+def transform_coach_rating(rating) -> dict:
+    """Transform a CoachRating to dict."""
+    return {
+        "id": str(rating.id),
+        "season_id": str(rating.season_id),
+        "coach_id": str(rating.coach_id),
+        "player_first_name": rating.player_first_name,
+        "player_last_name": rating.player_last_name,
+        "player_id": str(rating.player_id) if rating.player_id else None,
+        "scores": rating.scores,
+        "status": rating.status,
+        "created_at": rating.created_at.isoformat(),
+        "updated_at": rating.updated_at.isoformat(),
+        "submitted_at": rating.submitted_at.isoformat() if rating.submitted_at else None,
+    }
+
+
+def transform_rating_progress(coach_data) -> dict:
+    """Transform aggregated coach rating progress to dict."""
+    return {
+        "coach_id": str(coach_data["coach_id"]),
+        "coach_email": coach_data["coach_email"],
+        "coach_first_name": coach_data["coach_first_name"],
+        "coach_last_name": coach_data["coach_last_name"],
+        "total_ratings": coach_data["total_ratings"],
+        "submitted_ratings": coach_data["submitted_ratings"],
+        "draft_ratings": coach_data["draft_ratings"],
+    }

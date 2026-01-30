@@ -664,6 +664,64 @@ class Season(models.Model):
         return self.name
 
 
+# -----------------------------------------------------------------------------
+# Coach Rating Model
+# -----------------------------------------------------------------------------
+
+
+class CoachRating(models.Model):
+    """A coach's rating of a player for a season.
+
+    Scores stored as JSONField keyed by coach category ID from the season's template.
+    Supports draft (partial scores) and submitted (all scores complete) statuses.
+    """
+
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("submitted", "Submitted"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    season = models.ForeignKey(
+        Season,
+        on_delete=models.CASCADE,
+        related_name="coach_ratings",
+    )
+    coach = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="coach_ratings",
+    )
+    # Player identity (name-based, since ratings happen pre-draft before Player model is populated)
+    player_first_name = models.CharField(max_length=100)
+    player_last_name = models.CharField(max_length=100)
+    # Optional link to Player model (for later cross-referencing in Phase 5)
+    player_id = models.UUIDField(null=True, blank=True)
+
+    # Scores keyed by coach category ID from template
+    # e.g. {"uuid-fielding": 4, "uuid-baseball-iq": 3, "uuid-hustle": 5}
+    scores = models.JSONField(default=dict)
+
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft")
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    submitted_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "coach_ratings"
+        ordering = ["player_last_name", "player_first_name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["season", "coach", "player_first_name", "player_last_name"],
+                name="unique_coach_rating_per_player_season",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.coach.email} -> {self.player_first_name} {self.player_last_name}"
+
+
 class Trade(models.Model):
     """Post-draft trades."""
 
