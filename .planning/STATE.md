@@ -5,33 +5,33 @@
 See: .planning/PROJECT.md (updated 2026-01-29)
 
 **Core value:** Every player has a fair, data-driven composite score at draft time -- whether they attended tryouts or not -- built from configurable evaluations that persist across seasons.
-**Current focus:** Phase 2 - Coach Ratings (plan 1 of 2 complete)
+**Current focus:** Phase 2 complete — ready for Phase 3 (Tryout Day Scoring)
 
 ## Current Position
 
 Phase: 2 of 5 (Coach Ratings)
-Plan: 1 of 2 in current phase
-Status: In progress
-Last activity: 2026-01-30 -- Completed 02-01-PLAN.md (Coach rating backend API)
+Plan: 2 of 2 in current phase
+Status: Phase complete
+Last activity: 2026-01-30 -- Completed 02-02-PLAN.md (Coach rating frontend UI)
 
-Progress: [████░░░░░░░░] 31%
+Progress: [█████░░░░░░░] 38%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 4
-- Average duration: 7min
-- Total execution time: 0.45 hours
+- Total plans completed: 5
+- Average duration: 10min
+- Total execution time: 0.83 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-evaluation-templates | 3/3 | 23min | 8min |
-| 02-coach-ratings | 1/2 | 4min | 4min |
+| 02-coach-ratings | 2/2 | 27min | 14min |
 
 **Recent Trend:**
-- Last 5 plans: 4min, 4min, 15min, 4min
+- Last 5 plans: 23min, 4min, 4min, 15min, 4min
 - Trend: stable
 
 *Updated after each plan completion*
@@ -60,10 +60,13 @@ Recent decisions affecting current work:
 - [02-01]: Case-insensitive duplicate check on player name per coach per season (iexact lookup)
 - [02-01]: Template auto-locks on first rating creation for a season
 - [02-01]: Score range validation on submit checks min/max from template coach categories
+- [02-02]: Dynamic Zod schema builder generates form validation from template categories at runtime
+- [02-02]: Coach roster is implicit -- set of CoachRating records per coach per season
+- [02-02]: Partial unique constraint on templates -- only active templates enforce name+version uniqueness
 
 ### Pending Todos
 
-- Run `docker compose exec api python manage.py migrate` when Docker is available to apply migrations 0007_evaluation_templates and 0008_coach_ratings
+- None
 
 ### Blockers/Concerns
 
@@ -72,6 +75,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-01-30T01:00:31Z
-Stopped at: Completed 02-01-PLAN.md (Coach rating backend API)
+Last session: 2026-01-30T03:01:43Z
+Stopped at: Completed 02-02-PLAN.md (Coach rating frontend UI) — Phase 2 complete
 Resume file: None

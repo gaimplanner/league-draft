@@ -13,7 +13,7 @@ This roadmap delivers an in-app evaluation system that replaces the spreadsheet-
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Evaluation Templates** - Admin-configurable evaluation structure with stations, categories, scoring scales, and versioning
-- [ ] **Phase 2: Coach Ratings** - End-of-season coach rating submission with template-driven forms and progress tracking
+- [x] **Phase 2: Coach Ratings** - End-of-season coach rating submission with template-driven forms and progress tracking
 - [ ] **Phase 3: Tryout Day Scoring** - Mobile-first station scoring with bib lookup, groups, bulk fallback, and progress monitoring
 - [ ] **Phase 4: Composite Scoring** - Weighted blending of coach ratings and tryout scores with normalization and DNE handling
 - [ ] **Phase 5: Draft Integration** - Composite scores feed into the existing draft flow with admin approval gate
@@ -49,8 +49,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 02-01-PLAN.md -- Backend: CoachRating model, migration, validators, transformers, CRUD views with draft/submit workflow, admin progress endpoint, URL routing
-- [ ] 02-02-PLAN.md -- Frontend: TypeScript types, API client, hooks, Zod schema, rating form with template-driven categories, coach roster list, admin dashboard, App.tsx integration
+- [x] 02-01-PLAN.md -- Backend: CoachRating model, migration, validators, transformers, CRUD views with draft/submit workflow, admin progress endpoint, URL routing
+- [x] 02-02-PLAN.md -- Frontend: TypeScript types, API client, hooks, Zod schema, rating form with template-driven categories, coach roster list, admin dashboard, App.tsx integration
 
 ### Phase 3: Tryout Day Scoring
 **Goal**: Volunteers can score players at tryout stations in real-time via mobile browser, with bib-based player lookup, group rotation management, and a bulk-entry fallback for paper-based scoring -- all with scorer identity tracked for accountability.
@@ -108,7 +108,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | Phase | Plans Complete | Status | Completed |
 |-------|---------------|--------|-----------|
 | 1. Evaluation Templates | 3/3 | Complete | 2026-01-30 |
-| 2. Coach Ratings | 0/2 | Not started | - |
+| 2. Coach Ratings | 2/2 | Complete | 2026-01-30 |
 | 3. Tryout Day Scoring | 0/3 | Not started | - |
 | 4. Composite Scoring | 0/2 | Not started | - |
 | 5. Draft Integration | 0/2 | Not started | - |
