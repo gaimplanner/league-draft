@@ -62,6 +62,12 @@ from .seasons import (
     seasons_list_create,
     season_detail,
 )
+from .coach_ratings import (
+    coach_ratings_list_create,
+    coach_rating_detail,
+    coach_rating_submit,
+    coach_ratings_progress,
+)
 
 __all__ = [
     # Auth
@@ -115,4 +121,9 @@ __all__ = [
     # Seasons
     "seasons_list_create",
     "season_detail",
+    # Coach Ratings
+    "coach_ratings_list_create",
+    "coach_rating_detail",
+    "coach_rating_submit",
+    "coach_ratings_progress",
 ]

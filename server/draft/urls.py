@@ -58,6 +58,11 @@ from .views import (
     # Seasons
     seasons_list_create,
     season_detail,
+    # Coach Ratings
+    coach_ratings_list_create,
+    coach_rating_detail,
+    coach_rating_submit,
+    coach_ratings_progress,
 )
 
 urlpatterns = [
@@ -130,4 +135,14 @@ urlpatterns = [
     # Seasons
     path("api/seasons/", seasons_list_create, name="seasons-list-create"),
     path("api/seasons/<uuid:pk>/", season_detail, name="season-detail"),
+
+    # Coach Ratings
+    path("api/seasons/<uuid:season_id>/coach-ratings/",
+         coach_ratings_list_create, name="coach-ratings-list-create"),
+    path("api/coach-ratings/<uuid:pk>/",
+         coach_rating_detail, name="coach-rating-detail"),
+    path("api/coach-ratings/<uuid:pk>/submit/",
+         coach_rating_submit, name="coach-rating-submit"),
+    path("api/seasons/<uuid:season_id>/coach-ratings/progress/",
+         coach_ratings_progress, name="coach-ratings-progress"),
 ]
