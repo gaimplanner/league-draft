@@ -12,6 +12,7 @@ interface DivisionSelectorProps {
   onOpenSettings?: () => void;
   onOpenTemplates?: () => void;
   onOpenCoachRatings?: () => void;
+  onOpenTryoutScoring?: () => void;
 }
 
 function getPhaseLabel(phase: AppPhase): string {
@@ -56,6 +57,7 @@ export const DivisionSelector = ({
   onOpenSettings,
   onOpenTemplates,
   onOpenCoachRatings,
+  onOpenTryoutScoring,
 }: DivisionSelectorProps) => {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
@@ -107,6 +109,15 @@ export const DivisionSelector = ({
               >
                 <Star className="w-4 h-4" />
                 Coach Ratings
+              </button>
+            )}
+            {onOpenTryoutScoring && (
+              <button
+                onClick={onOpenTryoutScoring}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-md transition-colors"
+              >
+                <ClipboardList className="w-4 h-4" />
+                Tryout Scoring
               </button>
             )}
             {onOpenSettings && (
