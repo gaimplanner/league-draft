@@ -755,6 +755,7 @@ class EvaluationTemplate(models.Model):
         constraints = [
             models.UniqueConstraint(
                 fields=["organization", "name", "version"],
+                condition=models.Q(is_active=True),
                 name="unique_template_version",
             )
         ]
