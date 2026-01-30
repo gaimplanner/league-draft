@@ -9,19 +9,19 @@ See: .planning/PROJECT.md (updated 2026-01-29)
 
 ## Current Position
 
-Phase: 2 of 5 (Coach Ratings)
-Plan: 2 of 2 in current phase
-Status: Phase complete
-Last activity: 2026-01-30 -- Completed 02-02-PLAN.md (Coach rating frontend UI)
+Phase: 3 of 5 (Tryout Day Scoring)
+Plan: 1 of 3 in current phase
+Status: In progress
+Last activity: 2026-01-30 -- Completed 03-01-PLAN.md (Tryout scoring backend API)
 
-Progress: [█████░░░░░░░] 38%
+Progress: [█████░░░░░░░] 46%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 5
-- Average duration: 10min
-- Total execution time: 0.83 hours
+- Total plans completed: 6
+- Average duration: 9min
+- Total execution time: 0.90 hours
 
 **By Phase:**
 
@@ -29,9 +29,10 @@ Progress: [█████░░░░░░░] 38%
 |-------|-------|-------|----------|
 | 01-evaluation-templates | 3/3 | 23min | 8min |
 | 02-coach-ratings | 2/2 | 27min | 14min |
+| 03-tryout-day-scoring | 1/3 | 4min | 4min |
 
 **Recent Trend:**
-- Last 5 plans: 23min, 4min, 4min, 15min, 4min
+- Last 5 plans: 4min, 4min, 15min, 4min, 4min
 - Trend: stable
 
 *Updated after each plan completion*
@@ -63,6 +64,9 @@ Recent decisions affecting current work:
 - [02-02]: Dynamic Zod schema builder generates form validation from template categories at runtime
 - [02-02]: Coach roster is implicit -- set of CoachRating records per coach per season
 - [02-02]: Partial unique constraint on templates -- only active templates enforce name+version uniqueness
+- [03-01]: Bib numbers unique per season (not per group) to prevent confusion if players move between groups
+- [03-01]: Upsert pattern for station scores (update_or_create) prevents duplicate errors from mobile UI
+- [03-01]: Bulk score import wrapped in transaction.atomic() for all-or-nothing semantics
 
 ### Pending Todos
 
@@ -75,6 +79,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-01-30T03:01:43Z
-Stopped at: Completed 02-02-PLAN.md (Coach rating frontend UI) — Phase 2 complete
+Last session: 2026-01-30T21:05:52Z
+Stopped at: Completed 03-01-PLAN.md (Tryout scoring backend API) — Phase 3 in progress
 Resume file: None
