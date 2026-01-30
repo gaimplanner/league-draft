@@ -23,6 +23,7 @@ import { ResetPasswordPage } from './components/ResetPasswordPage';
 import { ProfilePage } from './components/profile';
 import { JoinPage } from './components/JoinPage';
 import { EvaluationAdmin } from './components/evaluation/EvaluationAdmin';
+import { CoachRatingPage } from './components/coachRatings/CoachRatingPage';
 import { api, isApiMode } from './api';
 import {
   Player,
@@ -39,7 +40,7 @@ import {
 import { parseCSVWithMapping, CoachAssignment } from './utils/csvParser';
 import { savePlayersToApi, saveTeamsToApi } from './api';
 
-type AppMode = 'selector' | 'creator' | 'draft' | 'settings' | 'join' | 'templates';
+type AppMode = 'selector' | 'creator' | 'draft' | 'settings' | 'join' | 'templates' | 'coach-ratings';
 type AuthPage = 'login' | 'register' | 'forgot-password' | 'reset-password';
 
 function App() {
@@ -861,6 +862,13 @@ function App() {
     );
   }
 
+  // Render coach ratings page
+  if (mode === 'coach-ratings') {
+    return (
+      <CoachRatingPage onBack={() => setMode('selector')} />
+    );
+  }
+
   // Render division selector or creator
   if (mode === 'selector') {
     return (
@@ -873,6 +881,7 @@ function App() {
         onLogout={isApiMode() ? logout : undefined}
         onOpenSettings={isApiMode() && user ? () => setMode('settings') : undefined}
         onOpenTemplates={isApiMode() && user ? () => setMode('templates') : undefined}
+        onOpenCoachRatings={isApiMode() && user ? () => setMode('coach-ratings') : undefined}
       />
     );
   }
