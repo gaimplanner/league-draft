@@ -7,12 +7,12 @@
 
 ### Evaluation Templates
 
-- [ ] **TMPL-01**: League admin can create evaluation templates with configurable stations, categories, and scoring scales
-- [ ] **TMPL-02**: Templates support subjective score entry (1-5 rating scales with descriptive anchors per level)
-- [ ] **TMPL-03**: Templates support objective score entry (times, counts) with appropriate input validation
-- [ ] **TMPL-04**: Templates are versioned so historical scores remain valid when the template is modified
-- [ ] **TMPL-05**: Templates are scoped to the league/organization (each league configures independently)
-- [ ] **TMPL-06**: Template categories include both tryout station types (infield, base running, fly balls, pitching, hitting) and coach review types (physical skills + soft skills)
+- [x] **TMPL-01**: League admin can create evaluation templates with configurable stations, categories, and scoring scales
+- [x] **TMPL-02**: Templates support subjective score entry (1-5 rating scales with descriptive anchors per level)
+- [x] **TMPL-03**: Templates support objective score entry (times, counts) with appropriate input validation
+- [x] **TMPL-04**: Templates are versioned so historical scores remain valid when the template is modified
+- [x] **TMPL-05**: Templates are scoped to the league/organization (each league configures independently)
+- [x] **TMPL-06**: Template categories include both tryout station types (infield, base running, fly balls, pitching, hitting) and coach review types (physical skills + soft skills)
 
 ### Coach Ratings
 
@@ -83,12 +83,12 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| TMPL-01 | Phase 1 | Pending |
-| TMPL-02 | Phase 1 | Pending |
-| TMPL-03 | Phase 1 | Pending |
-| TMPL-04 | Phase 1 | Pending |
-| TMPL-05 | Phase 1 | Pending |
-| TMPL-06 | Phase 1 | Pending |
+| TMPL-01 | Phase 1 | Complete |
+| TMPL-02 | Phase 1 | Complete |
+| TMPL-03 | Phase 1 | Complete |
+| TMPL-04 | Phase 1 | Complete |
+| TMPL-05 | Phase 1 | Complete |
+| TMPL-06 | Phase 1 | Complete |
 | COACH-01 | Phase 2 | Pending |
 | COACH-02 | Phase 2 | Pending |
 | COACH-03 | Phase 2 | Pending |
