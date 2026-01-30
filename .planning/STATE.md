@@ -5,33 +5,34 @@
 See: .planning/PROJECT.md (updated 2026-01-29)
 
 **Core value:** Every player has a fair, data-driven composite score at draft time -- whether they attended tryouts or not -- built from configurable evaluations that persist across seasons.
-**Current focus:** Phase 1 complete. Next: Phase 2 - Coach Ratings
+**Current focus:** Phase 2 - Coach Ratings (plan 1 of 2 complete)
 
 ## Current Position
 
-Phase: 1 of 5 (Evaluation Templates) -- COMPLETE
-Plan: 3 of 3 in current phase
-Status: Phase complete
-Last activity: 2026-01-30 -- Completed 01-03-PLAN.md (Template editor UI, season manager, app integration)
+Phase: 2 of 5 (Coach Ratings)
+Plan: 1 of 2 in current phase
+Status: In progress
+Last activity: 2026-01-30 -- Completed 02-01-PLAN.md (Coach rating backend API)
 
-Progress: [███░░░░░░░░░] 25%
+Progress: [████░░░░░░░░] 31%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 3
-- Average duration: 8min
-- Total execution time: 0.38 hours
+- Total plans completed: 4
+- Average duration: 7min
+- Total execution time: 0.45 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-evaluation-templates | 3/3 | 23min | 8min |
+| 02-coach-ratings | 1/2 | 4min | 4min |
 
 **Recent Trend:**
-- Last 5 plans: 4min, 4min, 15min
-- Trend: stable (plan 3 longer due to more components and checkpoint)
+- Last 5 plans: 4min, 4min, 15min, 4min
+- Trend: stable
 
 *Updated after each plan completion*
 
@@ -55,10 +56,14 @@ Recent decisions affecting current work:
 - [01-03]: Zod schema description field uses .default('') instead of .optional().default('') for react-hook-form compatibility
 - [01-03]: zodResolver requires Resolver<TemplateFormData> type cast due to ZodEffects input/output type mismatch
 - [01-03]: Evaluation Setup navigation placed in DivisionSelector for admin discoverability
+- [02-01]: Name-based player identity in CoachRating (player_first_name/player_last_name) -- ratings happen pre-draft before Player records exist
+- [02-01]: Case-insensitive duplicate check on player name per coach per season (iexact lookup)
+- [02-01]: Template auto-locks on first rating creation for a season
+- [02-01]: Score range validation on submit checks min/max from template coach categories
 
 ### Pending Todos
 
-- Run `docker compose exec api python manage.py migrate` when Docker is available to apply migration 0007_evaluation_templates
+- Run `docker compose exec api python manage.py migrate` when Docker is available to apply migrations 0007_evaluation_templates and 0008_coach_ratings
 
 ### Blockers/Concerns
 
@@ -67,6 +72,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-01-30T00:17:51Z
-Stopped at: Completed 01-03-PLAN.md (Template editor UI, season manager, app integration) -- Phase 1 complete
+Last session: 2026-01-30T01:00:31Z
+Stopped at: Completed 02-01-PLAN.md (Coach rating backend API)
 Resume file: None
