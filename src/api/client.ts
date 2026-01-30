@@ -640,6 +640,68 @@ function transformTryoutProgressFromApi(data: Record<string, unknown>): TryoutPr
   };
 }
 
+// Composite Scoring transformers
+
+function transformCompositeResultFromApi(data: Record<string, unknown>): import('../types').CompositePlayerResult {
+  return {
+    playerKey: data.player_key as string,
+    firstName: data.first_name as string,
+    lastName: data.last_name as string,
+    bibNumber: data.bib_number as number | null,
+    tier: data.tier as import('../types').CompositeDataTier,
+    tierOverride: data.tier_override as boolean,
+    compositeScore: data.composite_score as number,
+    coachAggregate: data.coach_aggregate as number | null,
+    tryoutAggregate: data.tryout_aggregate as number | null,
+    rank: data.rank as number,
+    isPartialTryout: data.is_partial_tryout as boolean,
+    dataSources: data.data_sources as string[],
+  };
+}
+
+function transformCompositeDetailFromApi(data: Record<string, unknown>): import('../types').CompositePlayerDetail {
+  const result = transformCompositeResultFromApi(data);
+
+  const coachDetail = data.coach_detail ? {
+    rawScores: (data.coach_detail as Record<string, unknown>).raw_scores as Record<string, number>,
+    normalizedScores: (data.coach_detail as Record<string, unknown>).normalized_scores as Record<string, number>,
+    aggregate: (data.coach_detail as Record<string, unknown>).aggregate as number,
+  } : null;
+
+  const tryoutDetail = data.tryout_detail ? {
+    stations: Object.fromEntries(
+      Object.entries((data.tryout_detail as Record<string, unknown>).stations as Record<string, unknown>).map(([stationId, stationData]) => {
+        const sd = stationData as Record<string, unknown>;
+        return [stationId, {
+          rawScores: sd.raw_scores as Record<string, number>,
+          normalizedScores: sd.normalized_scores as Record<string, number>,
+          aggregate: sd.aggregate as number,
+        }];
+      })
+    ),
+    aggregate: (data.tryout_detail as Record<string, unknown>).aggregate as number,
+    stationsScored: (data.tryout_detail as Record<string, unknown>).stations_scored as number,
+    stationsTotal: (data.tryout_detail as Record<string, unknown>).stations_total as number,
+  } : null;
+
+  return {
+    ...result,
+    coachDetail,
+    tryoutDetail,
+  };
+}
+
+function transformCompositeWeightsToApi(weights: import('../types').CompositeWeights): Record<string, unknown> {
+  const result: Record<string, unknown> = {
+    coach_rating: weights.coachRating,
+    tryout_score: weights.tryoutScore,
+  };
+  if (weights.stationWeights) {
+    result.station_weights = weights.stationWeights;
+  }
+  return result;
+}
+
 // -----------------------------------------------------------------------------
 // API Error Handling
 // -----------------------------------------------------------------------------
@@ -1897,6 +1959,113 @@ export const api = {
     );
     const data = await handleResponse<Record<string, unknown>[]>(response);
     return data.map(transformTryoutProgressFromApi);
+  },
+
+  // ---------------------------------------------------------------------------
+  // Composite Scoring
+  // ---------------------------------------------------------------------------
+
+  async calculateCompositeScores(
+    seasonId: string,
+    weights: import('../types').CompositeWeights
+  ): Promise<import('../types').CompositeScoresResponse> {
+    const response = await fetchWithCSRFRetry(
+      `${API_BASE_URL}/seasons/${seasonId}/composite-scores/calculate/`,
+      {
+        ...getDefaultOptions('POST'),
+        method: 'POST',
+        body: JSON.stringify(transformCompositeWeightsToApi(weights)),
+      }
+    );
+    const data = await handleResponse<Record<string, unknown>>(response);
+    return {
+      players: ((data.players as Record<string, unknown>[]) || []).map(transformCompositeResultFromApi),
+      weights: {
+        coachRating: (data.weights as Record<string, unknown>).coach_rating as number,
+        tryoutScore: (data.weights as Record<string, unknown>).tryout_score as number,
+        stationWeights: (data.weights as Record<string, unknown>).station_weights as Record<string, number> | undefined,
+      },
+      seasonId: data.season_id as string,
+      totalPlayers: data.total_players as number,
+      tierCounts: {
+        full: (data.tier_counts as Record<string, unknown>).full as number,
+        coachOnly: (data.tier_counts as Record<string, unknown>).coach_only as number,
+        tryoutOnly: (data.tier_counts as Record<string, unknown>).tryout_only as number,
+      },
+    };
+  },
+
+  async listCompositeScores(
+    seasonId: string,
+    weights?: import('../types').CompositeWeights
+  ): Promise<import('../types').CompositeScoresResponse> {
+    let url = `${API_BASE_URL}/seasons/${seasonId}/composite-scores/`;
+    if (weights) {
+      const params = new URLSearchParams({
+        coach_rating: String(weights.coachRating),
+        tryout_score: String(weights.tryoutScore),
+      });
+      if (weights.stationWeights) {
+        params.append('station_weights', JSON.stringify(weights.stationWeights));
+      }
+      url += `?${params}`;
+    }
+    const response = await fetchWithTimeout(url, getDefaultOptions());
+    const data = await handleResponse<Record<string, unknown>>(response);
+    return {
+      players: ((data.players as Record<string, unknown>[]) || []).map(transformCompositeResultFromApi),
+      weights: {
+        coachRating: (data.weights as Record<string, unknown>).coach_rating as number,
+        tryoutScore: (data.weights as Record<string, unknown>).tryout_score as number,
+        stationWeights: (data.weights as Record<string, unknown>).station_weights as Record<string, number> | undefined,
+      },
+      seasonId: data.season_id as string,
+      totalPlayers: data.total_players as number,
+      tierCounts: {
+        full: (data.tier_counts as Record<string, unknown>).full as number,
+        coachOnly: (data.tier_counts as Record<string, unknown>).coach_only as number,
+        tryoutOnly: (data.tier_counts as Record<string, unknown>).tryout_only as number,
+      },
+    };
+  },
+
+  async getCompositePlayerDetail(
+    seasonId: string,
+    playerKey: string,
+    weights?: import('../types').CompositeWeights
+  ): Promise<import('../types').CompositePlayerDetail> {
+    let url = `${API_BASE_URL}/seasons/${seasonId}/composite-scores/${playerKey}/`;
+    if (weights) {
+      const params = new URLSearchParams({
+        coach_rating: String(weights.coachRating),
+        tryout_score: String(weights.tryoutScore),
+      });
+      if (weights.stationWeights) {
+        params.append('station_weights', JSON.stringify(weights.stationWeights));
+      }
+      url += `?${params}`;
+    }
+    const response = await fetchWithTimeout(url, getDefaultOptions());
+    const data = await handleResponse<Record<string, unknown>>(response);
+    return transformCompositeDetailFromApi(data);
+  },
+
+  async promoteCompositePlayer(
+    seasonId: string,
+    playerKey: string,
+    targetTier: import('../types').CompositeDataTier
+  ): Promise<void> {
+    await fetchWithCSRFRetry(
+      `${API_BASE_URL}/seasons/${seasonId}/composite-scores/promote/`,
+      {
+        ...getDefaultOptions('POST'),
+        method: 'POST',
+        body: JSON.stringify({
+          player_key: playerKey,
+          target_tier: targetTier,
+        }),
+      }
+    );
   },
 };
 

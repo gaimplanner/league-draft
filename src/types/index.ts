@@ -841,6 +841,69 @@ export interface BulkStationScoreData {
   scores: { playerId: string; scores: Record<string, number> }[];
 }
 
+// -----------------------------------------------------------------------------
+// Composite Scoring Types
+// -----------------------------------------------------------------------------
+
+export interface CompositeWeights {
+  coachRating: number;   // 0-100, must sum to 100 with tryoutScore
+  tryoutScore: number;   // 0-100
+  stationWeights?: Record<string, number>; // station_id -> weight (sum to 100)
+}
+
+export interface CompositeCoachDetail {
+  rawScores: Record<string, number>;       // category_id -> raw value
+  normalizedScores: Record<string, number>; // category_id -> 0-100
+  aggregate: number;                        // weighted average 0-100
+}
+
+export interface CompositeStationDetail {
+  rawScores: Record<string, number>;       // field_id -> raw value
+  normalizedScores: Record<string, number>; // field_id -> 0-100
+  aggregate: number;                        // average 0-100
+}
+
+export interface CompositeTryoutDetail {
+  stations: Record<string, CompositeStationDetail>; // station_id -> detail
+  aggregate: number;
+  stationsScored: number;
+  stationsTotal: number;
+}
+
+export type CompositeDataTier = 'full' | 'coach_only' | 'tryout_only';
+
+export interface CompositePlayerResult {
+  playerKey: string;
+  firstName: string;
+  lastName: string;
+  bibNumber: number | null;
+  tier: CompositeDataTier;
+  tierOverride: boolean;          // true if admin promoted/demoted
+  compositeScore: number;
+  coachAggregate: number | null;
+  tryoutAggregate: number | null;
+  rank: number;                   // rank within tier
+  isPartialTryout: boolean;       // has some but not all station scores
+  dataSources: string[];          // ["coach", "tryout"] etc.
+}
+
+export interface CompositePlayerDetail extends CompositePlayerResult {
+  coachDetail: CompositeCoachDetail | null;
+  tryoutDetail: CompositeTryoutDetail | null;
+}
+
+export interface CompositeScoresResponse {
+  players: CompositePlayerResult[];
+  weights: CompositeWeights;
+  seasonId: string;
+  totalPlayers: number;
+  tierCounts: {
+    full: number;
+    coachOnly: number;
+    tryoutOnly: number;
+  };
+}
+
 // Helper to create initial division state
 export function createInitialDivision(
   id: string,
