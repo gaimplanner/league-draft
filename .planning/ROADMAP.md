@@ -81,11 +81,11 @@ Plans:
   3. Different score types (1-5 subjective scales, timed runs, catch counts) are normalized to comparable values before blending so that no single score type dominates rankings disproportionately to its configured weight
   4. Players who missed tryouts receive a composite score based on their coach rating alone (not penalized with zeros for missing tryout data), and their partial-data status is clearly indicated
   5. An admin can view any player's evaluation history showing the coach rating breakdown, individual tryout station scores, and how they combined into the final composite
-**Plans**: TBD (estimated 2-3 plans: composite calculator service, admin weight config + history UI)
+**Plans**: 2 plans
 
 Plans:
-- [ ] 04-01: Composite calculation service and normalization
-- [ ] 04-02: Weight configuration and evaluation history UI
+- [ ] 04-01-PLAN.md -- Backend: CompositeScoreService (normalization, aggregation, blending, tier classification), API endpoints (calculate, list, detail, promote), validators, transformers, Season migration, URL routing
+- [ ] 04-02-PLAN.md -- Frontend: TypeScript types, API client, useCompositeScores hook, CompositeScorePage with WeightConfigPanel (linked sliders + station weights), RankingsList (three-tier table, rank deltas, promote/demote), PlayerEvaluationBreakdown (inline coach + tryout detail), App.tsx integration
 
 ### Phase 5: Draft Integration
 **Goal**: Composite scores flow into the existing draft system as the primary scoring source, with admin review and approval before scores enter draft configuration, while the existing CSV/Excel import path continues to work as an alternative.
@@ -111,7 +111,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | 1. Evaluation Templates | 3/3 | Complete | 2026-01-30 |
 | 2. Coach Ratings | 2/2 | Complete | 2026-01-30 |
 | 3. Tryout Day Scoring | 4/4 | Complete | 2026-01-30 |
-| 4. Composite Scoring | 0/2 | Not started | - |
+| 4. Composite Scoring | 0/2 | Planned | - |
 | 5. Draft Integration | 0/2 | Not started | - |
 
 ---
