@@ -6,7 +6,7 @@ export const scoreFieldSchema = z.object({
   type: z.enum(['scale', 'time', 'count']),
   min: z.number(),
   max: z.number(),
-  description: z.string().optional().default(''),
+  description: z.string().default(''),
   unit: z.string().optional(),
   lowerIsBetter: z.boolean().optional(),
   anchors: z.record(z.string(), z.string()).optional(),
@@ -40,7 +40,7 @@ export const blendWeightsSchema = z.object({
 
 export const templateFormSchema = z.object({
   name: z.string().min(1, 'Template name is required').max(200, 'Name must be 200 characters or less'),
-  description: z.string().optional().default(''),
+  description: z.string().default(''),
   stations: z.array(stationSchema).min(1, 'At least one station is required'),
   coachCategories: z.array(coachCategorySchema),
   blendWeights: blendWeightsSchema,
