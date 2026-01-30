@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Evaluation Templates** - Admin-configurable evaluation structure with stations, categories, scoring scales, and versioning
 - [x] **Phase 2: Coach Ratings** - End-of-season coach rating submission with template-driven forms and progress tracking
-- [ ] **Phase 3: Tryout Day Scoring** - Mobile-first station scoring with bib lookup, groups, bulk fallback, and progress monitoring
+- [x] **Phase 3: Tryout Day Scoring** - Mobile-first station scoring with bib lookup, groups, bulk fallback, and progress monitoring
 - [ ] **Phase 4: Composite Scoring** - Weighted blending of coach ratings and tryout scores with normalization and DNE handling
 - [ ] **Phase 5: Draft Integration** - Composite scores feed into the existing draft flow with admin approval gate
 
@@ -69,7 +69,7 @@ Plans:
 - [x] 03-01-PLAN.md -- Backend: TryoutGroup/GroupPlayer/StationScore models, migration, validators, transformers, CRUD views (groups, scores, bulk import, progress), URL routing
 - [x] 03-02-PLAN.md -- Frontend: TypeScript types, API client, scoring hook, BibNumpad, PlayerScoreCard, MobileStationScoring, GroupManagement, App.tsx integration
 - [x] 03-03-PLAN.md -- Frontend: react-datasheet-grid bulk entry with Excel/Sheets paste, TryoutProgressDashboard with pull-to-refresh, TryoutScoringPage orchestrator with tabbed navigation
-- [ ] 03-04-PLAN.md -- Gap closure: Player-level drill-down modal in TryoutProgressDashboard (click cell to see scored/missing players)
+- [x] 03-04-PLAN.md -- Gap closure: Player-level drill-down modal in TryoutProgressDashboard (click cell to see scored/missing players)
 
 ### Phase 4: Composite Scoring
 **Goal**: The system calculates a fair, weighted composite score that blends coach ratings and tryout evaluations -- normalizing across different score types, handling players with partial or missing data, and showing admins the full breakdown of how each player's score was derived.
@@ -110,7 +110,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 |-------|---------------|--------|-----------|
 | 1. Evaluation Templates | 3/3 | Complete | 2026-01-30 |
 | 2. Coach Ratings | 2/2 | Complete | 2026-01-30 |
-| 3. Tryout Day Scoring | 3/4 | Gap closure pending | - |
+| 3. Tryout Day Scoring | 4/4 | Complete | 2026-01-30 |
 | 4. Composite Scoring | 0/2 | Not started | - |
 | 5. Draft Integration | 0/2 | Not started | - |
 

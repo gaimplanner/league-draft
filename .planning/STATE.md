@@ -5,7 +5,7 @@
 See: .planning/PROJECT.md (updated 2026-01-29)
 
 **Core value:** Every player has a fair, data-driven composite score at draft time -- whether they attended tryouts or not -- built from configurable evaluations that persist across seasons.
-**Current focus:** Phase 2 complete — ready for Phase 3 (Tryout Day Scoring)
+**Current focus:** Phase 3 complete — ready for Phase 4 (Composite Scoring)
 
 ## Current Position
 

@@ -16,20 +16,20 @@
 
 ### Coach Ratings
 
-- [ ] **COACH-01**: Coaches can submit end-of-season ratings for players on their roster
-- [ ] **COACH-02**: Coach rating form uses the league's configured evaluation template categories
-- [ ] **COACH-03**: Coach ratings include soft-skill categories (baseball IQ, hustle, coachability) alongside physical skill ratings
-- [ ] **COACH-04**: Admin can view coach rating submission progress (which coaches have submitted, which are pending)
+- [x] **COACH-01**: Coaches can submit end-of-season ratings for players on their roster
+- [x] **COACH-02**: Coach rating form uses the league's configured evaluation template categories
+- [x] **COACH-03**: Coach ratings include soft-skill categories (baseball IQ, hustle, coachability) alongside physical skill ratings
+- [x] **COACH-04**: Admin can view coach rating submission progress (which coaches have submitted, which are pending)
 
 ### Tryout Day Scoring
 
-- [ ] **TRYOUT-01**: Volunteers can score players at tryout stations via mobile browser in real-time
-- [ ] **TRYOUT-02**: Station scoring UI is mobile-first (large touch targets, one player at a time, numeric input optimized for phone)
-- [ ] **TRYOUT-03**: Players are identified by bib number with fast lookup (numpad entry)
-- [ ] **TRYOUT-04**: Admin can bulk-enter station scores from paper sheets as a fallback
-- [ ] **TRYOUT-05**: Players are organized into groups (15-20) that rotate through stations
-- [ ] **TRYOUT-06**: Admin can view tryout progress (which groups have completed which stations, who is missing scores)
-- [ ] **TRYOUT-07**: Each score record captures the scorer identity for accountability
+- [x] **TRYOUT-01**: Volunteers can score players at tryout stations via mobile browser in real-time
+- [x] **TRYOUT-02**: Station scoring UI is mobile-first (large touch targets, one player at a time, numeric input optimized for phone)
+- [x] **TRYOUT-03**: Players are identified by bib number with fast lookup (numpad entry)
+- [x] **TRYOUT-04**: Admin can bulk-enter station scores from paper sheets as a fallback
+- [x] **TRYOUT-05**: Players are organized into groups (15-20) that rotate through stations
+- [x] **TRYOUT-06**: Admin can view tryout progress (which groups have completed which stations, who is missing scores)
+- [x] **TRYOUT-07**: Each score record captures the scorer identity for accountability
 
 ### Composite Scoring
 
@@ -89,17 +89,17 @@
 | TMPL-04 | Phase 1 | Complete |
 | TMPL-05 | Phase 1 | Complete |
 | TMPL-06 | Phase 1 | Complete |
-| COACH-01 | Phase 2 | Pending |
-| COACH-02 | Phase 2 | Pending |
-| COACH-03 | Phase 2 | Pending |
-| COACH-04 | Phase 2 | Pending |
-| TRYOUT-01 | Phase 3 | Pending |
-| TRYOUT-02 | Phase 3 | Pending |
-| TRYOUT-03 | Phase 3 | Pending |
-| TRYOUT-04 | Phase 3 | Pending |
-| TRYOUT-05 | Phase 3 | Pending |
-| TRYOUT-06 | Phase 3 | Pending |
-| TRYOUT-07 | Phase 3 | Pending |
+| COACH-01 | Phase 2 | Complete |
+| COACH-02 | Phase 2 | Complete |
+| COACH-03 | Phase 2 | Complete |
+| COACH-04 | Phase 2 | Complete |
+| TRYOUT-01 | Phase 3 | Complete |
+| TRYOUT-02 | Phase 3 | Complete |
+| TRYOUT-03 | Phase 3 | Complete |
+| TRYOUT-04 | Phase 3 | Complete |
+| TRYOUT-05 | Phase 3 | Complete |
+| TRYOUT-06 | Phase 3 | Complete |
+| TRYOUT-07 | Phase 3 | Complete |
 | COMP-01 | Phase 4 | Pending |
 | COMP-02 | Phase 4 | Pending |
 | COMP-03 | Phase 4 | Pending |
@@ -116,4 +116,4 @@
 
 ---
 *Requirements defined: 2026-01-29*
-*Last updated: 2026-01-29 after initial definition*
+*Last updated: 2026-01-30 after Phase 3 completion*
