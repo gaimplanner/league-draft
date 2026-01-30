@@ -767,6 +767,80 @@ export interface UpdateCoachRatingData {
   playerLastName?: string;
 }
 
+// -----------------------------------------------------------------------------
+// Tryout Scoring Types
+// -----------------------------------------------------------------------------
+
+export interface TryoutGroup {
+  id: string;
+  seasonId: string;
+  name: string;
+  rotationOrder: number;
+  playerCount: number;
+  players: GroupPlayer[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GroupPlayer {
+  id: string;
+  groupId: string;
+  seasonId: string;
+  firstName: string;
+  lastName: string;
+  bibNumber: number;
+  createdAt: string;
+}
+
+export interface StationScore {
+  id: string;
+  seasonId: string;
+  groupId: string;
+  playerId: string;
+  stationId: string;
+  scores: Record<string, number>;
+  scoredById: string;
+  scoredByEmail: string;
+  scoredAt: string;
+  updatedAt: string;
+}
+
+export interface TryoutProgress {
+  groupId: string;
+  groupName: string;
+  stationId: string;
+  stationName: string;
+  scoredCount: number;
+  totalPlayers: number;
+  complete: boolean;
+}
+
+export interface CreateTryoutGroupData {
+  name: string;
+  rotationOrder?: number;
+}
+
+export interface GenerateGroupsData {
+  players: { firstName: string; lastName: string }[];
+  groupSize?: number;
+}
+
+export interface AddGroupPlayerData {
+  firstName: string;
+  lastName: string;
+}
+
+export interface CreateStationScoreData {
+  playerId: string;
+  stationId: string;
+  scores: Record<string, number>;
+}
+
+export interface BulkStationScoreData {
+  stationId: string;
+  scores: { playerId: string; scores: Record<string, number> }[];
+}
+
 // Helper to create initial division state
 export function createInitialDivision(
   id: string,

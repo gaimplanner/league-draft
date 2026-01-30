@@ -43,6 +43,15 @@ import type {
   CreateCoachRatingData,
   UpdateCoachRatingData,
   RatingStatus,
+  TryoutGroup,
+  GroupPlayer,
+  StationScore,
+  TryoutProgress,
+  CreateTryoutGroupData,
+  GenerateGroupsData,
+  AddGroupPlayerData,
+  CreateStationScoreData,
+  BulkStationScoreData,
 } from '../types';
 
 // Legacy type aliases
@@ -571,6 +580,63 @@ function transformCoachRatingProgressFromApi(data: Record<string, unknown>): Coa
     totalRatings: data.total_ratings as number,
     submittedRatings: data.submitted_ratings as number,
     draftRatings: data.draft_ratings as number,
+  };
+}
+
+// Transform tryout group from API (snake_case to camelCase)
+function transformTryoutGroupFromApi(data: Record<string, unknown>): TryoutGroup {
+  const players = (data.players as Record<string, unknown>[] | null) ?? [];
+  return {
+    id: data.id as string,
+    seasonId: data.season_id as string,
+    name: data.name as string,
+    rotationOrder: data.rotation_order as number,
+    playerCount: data.player_count as number,
+    players: players.map(transformGroupPlayerFromApi),
+    createdAt: data.created_at as string,
+    updatedAt: data.updated_at as string,
+  };
+}
+
+// Transform group player from API (snake_case to camelCase)
+function transformGroupPlayerFromApi(data: Record<string, unknown>): GroupPlayer {
+  return {
+    id: data.id as string,
+    groupId: data.group_id as string,
+    seasonId: data.season_id as string,
+    firstName: data.first_name as string,
+    lastName: data.last_name as string,
+    bibNumber: data.bib_number as number,
+    createdAt: data.created_at as string,
+  };
+}
+
+// Transform station score from API (snake_case to camelCase)
+function transformStationScoreFromApi(data: Record<string, unknown>): StationScore {
+  return {
+    id: data.id as string,
+    seasonId: data.season_id as string,
+    groupId: data.group_id as string,
+    playerId: data.player_id as string,
+    stationId: data.station_id as string,
+    scores: data.scores as Record<string, number>,
+    scoredById: data.scored_by_id as string,
+    scoredByEmail: data.scored_by_email as string,
+    scoredAt: data.scored_at as string,
+    updatedAt: data.updated_at as string,
+  };
+}
+
+// Transform tryout progress from API (snake_case to camelCase)
+function transformTryoutProgressFromApi(data: Record<string, unknown>): TryoutProgress {
+  return {
+    groupId: data.group_id as string,
+    groupName: data.group_name as string,
+    stationId: data.station_id as string,
+    stationName: data.station_name as string,
+    scoredCount: data.scored_count as number,
+    totalPlayers: data.total_players as number,
+    complete: data.complete as boolean,
   };
 }
 
@@ -1665,6 +1731,172 @@ export const api = {
     );
     const data = await handleResponse<Record<string, unknown>[]>(response);
     return data.map(transformCoachRatingProgressFromApi);
+  },
+
+  // Tryout Scoring endpoints
+
+  async listTryoutGroups(seasonId: string): Promise<TryoutGroup[]> {
+    const response = await fetchWithTimeout(
+      `${API_BASE_URL}/seasons/${seasonId}/tryout-groups/`,
+      getDefaultOptions()
+    );
+    const data = await handleResponse<Record<string, unknown>[]>(response);
+    return data.map(transformTryoutGroupFromApi);
+  },
+
+  async createTryoutGroup(seasonId: string, groupData: CreateTryoutGroupData): Promise<TryoutGroup> {
+    const response = await fetchWithCSRFRetry(
+      `${API_BASE_URL}/seasons/${seasonId}/tryout-groups/`,
+      {
+        ...getDefaultOptions('POST'),
+        method: 'POST',
+        body: JSON.stringify({
+          name: groupData.name,
+          rotation_order: groupData.rotationOrder,
+        }),
+      }
+    );
+    const data = await handleResponse<Record<string, unknown>>(response);
+    return transformTryoutGroupFromApi(data);
+  },
+
+  async getTryoutGroup(groupId: string): Promise<TryoutGroup> {
+    const response = await fetchWithTimeout(
+      `${API_BASE_URL}/tryout-groups/${groupId}/`,
+      getDefaultOptions()
+    );
+    const data = await handleResponse<Record<string, unknown>>(response);
+    return transformTryoutGroupFromApi(data);
+  },
+
+  async updateTryoutGroup(groupId: string, updates: Partial<CreateTryoutGroupData>): Promise<TryoutGroup> {
+    const payload: Record<string, unknown> = {};
+    if (updates.name !== undefined) payload.name = updates.name;
+    if (updates.rotationOrder !== undefined) payload.rotation_order = updates.rotationOrder;
+
+    const response = await fetchWithCSRFRetry(
+      `${API_BASE_URL}/tryout-groups/${groupId}/`,
+      {
+        ...getDefaultOptions('PATCH'),
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      }
+    );
+    const data = await handleResponse<Record<string, unknown>>(response);
+    return transformTryoutGroupFromApi(data);
+  },
+
+  async deleteTryoutGroup(groupId: string): Promise<void> {
+    await fetchWithCSRFRetry(
+      `${API_BASE_URL}/tryout-groups/${groupId}/`,
+      {
+        ...getDefaultOptions('DELETE'),
+        method: 'DELETE',
+      }
+    );
+  },
+
+  async generateTryoutGroups(seasonId: string, data: GenerateGroupsData): Promise<TryoutGroup[]> {
+    const response = await fetchWithCSRFRetry(
+      `${API_BASE_URL}/seasons/${seasonId}/tryout-groups/generate/`,
+      {
+        ...getDefaultOptions('POST'),
+        method: 'POST',
+        body: JSON.stringify({
+          players: data.players,
+          group_size: data.groupSize,
+        }),
+      }
+    );
+    const responseData = await handleResponse<Record<string, unknown>[]>(response);
+    return responseData.map(transformTryoutGroupFromApi);
+  },
+
+  async addGroupPlayer(groupId: string, playerData: AddGroupPlayerData): Promise<GroupPlayer> {
+    const response = await fetchWithCSRFRetry(
+      `${API_BASE_URL}/tryout-groups/${groupId}/players/`,
+      {
+        ...getDefaultOptions('POST'),
+        method: 'POST',
+        body: JSON.stringify({
+          first_name: playerData.firstName,
+          last_name: playerData.lastName,
+        }),
+      }
+    );
+    const data = await handleResponse<Record<string, unknown>>(response);
+    return transformGroupPlayerFromApi(data);
+  },
+
+  async listStationScores(
+    seasonId: string,
+    params?: { groupId?: string; stationId?: string }
+  ): Promise<StationScore[]> {
+    const queryParams = new URLSearchParams();
+    if (params?.groupId) queryParams.append('group_id', params.groupId);
+    if (params?.stationId) queryParams.append('station_id', params.stationId);
+    const queryString = queryParams.toString();
+    const url = queryString
+      ? `${API_BASE_URL}/seasons/${seasonId}/station-scores/?${queryString}`
+      : `${API_BASE_URL}/seasons/${seasonId}/station-scores/`;
+
+    const response = await fetchWithTimeout(url, getDefaultOptions());
+    const data = await handleResponse<Record<string, unknown>[]>(response);
+    return data.map(transformStationScoreFromApi);
+  },
+
+  async createStationScore(seasonId: string, scoreData: CreateStationScoreData): Promise<StationScore> {
+    const response = await fetchWithCSRFRetry(
+      `${API_BASE_URL}/seasons/${seasonId}/station-scores/`,
+      {
+        ...getDefaultOptions('POST'),
+        method: 'POST',
+        body: JSON.stringify({
+          player_id: scoreData.playerId,
+          station_id: scoreData.stationId,
+          scores: scoreData.scores,
+        }),
+      }
+    );
+    const data = await handleResponse<Record<string, unknown>>(response);
+    return transformStationScoreFromApi(data);
+  },
+
+  async getStationScore(scoreId: string): Promise<StationScore> {
+    const response = await fetchWithTimeout(
+      `${API_BASE_URL}/station-scores/${scoreId}/`,
+      getDefaultOptions()
+    );
+    const data = await handleResponse<Record<string, unknown>>(response);
+    return transformStationScoreFromApi(data);
+  },
+
+  async bulkCreateStationScores(seasonId: string, bulkData: BulkStationScoreData): Promise<{ created: number; updated: number }> {
+    const response = await fetchWithCSRFRetry(
+      `${API_BASE_URL}/seasons/${seasonId}/station-scores/bulk/`,
+      {
+        ...getDefaultOptions('POST'),
+        method: 'POST',
+        body: JSON.stringify({
+          station_id: bulkData.stationId,
+          scores: bulkData.scores.map(s => ({
+            player_id: s.playerId,
+            scores: s.scores,
+          })),
+        }),
+      }
+    );
+    const data = await handleResponse<{ created: number; updated: number }>(response);
+    return data;
+  },
+
+  async getTryoutProgress(seasonId: string): Promise<TryoutProgress[]> {
+    const response = await fetchWithTimeout(
+      `${API_BASE_URL}/seasons/${seasonId}/tryout-progress/`,
+      getDefaultOptions()
+    );
+    const data = await handleResponse<Record<string, unknown>[]>(response);
+    return data.map(transformTryoutProgressFromApi);
   },
 };
 
