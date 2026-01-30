@@ -63,12 +63,13 @@ Plans:
   4. An admin can bulk-enter an entire station's scores from paper sheets via a spreadsheet-style grid interface as a fallback to mobile scoring
   5. An admin can view a tryout progress dashboard showing which groups have completed which stations, which players are missing scores, and overall scoring completion
   6. Every score record captures the identity of the scorer who entered it
-**Plans**: 3 plans
+**Plans**: 4 plans (3 original + 1 gap closure)
 
 Plans:
-- [ ] 03-01-PLAN.md -- Backend: TryoutGroup/GroupPlayer/StationScore models, migration, validators, transformers, CRUD views (groups, scores, bulk import, progress), URL routing
-- [ ] 03-02-PLAN.md -- Frontend: TypeScript types, API client, scoring hook, BibNumpad, PlayerScoreCard, MobileStationScoring, GroupManagement, App.tsx integration
-- [ ] 03-03-PLAN.md -- Frontend: react-datasheet-grid bulk entry with Excel/Sheets paste, TryoutProgressDashboard with pull-to-refresh, TryoutScoringPage orchestrator with tabbed navigation
+- [x] 03-01-PLAN.md -- Backend: TryoutGroup/GroupPlayer/StationScore models, migration, validators, transformers, CRUD views (groups, scores, bulk import, progress), URL routing
+- [x] 03-02-PLAN.md -- Frontend: TypeScript types, API client, scoring hook, BibNumpad, PlayerScoreCard, MobileStationScoring, GroupManagement, App.tsx integration
+- [x] 03-03-PLAN.md -- Frontend: react-datasheet-grid bulk entry with Excel/Sheets paste, TryoutProgressDashboard with pull-to-refresh, TryoutScoringPage orchestrator with tabbed navigation
+- [ ] 03-04-PLAN.md -- Gap closure: Player-level drill-down modal in TryoutProgressDashboard (click cell to see scored/missing players)
 
 ### Phase 4: Composite Scoring
 **Goal**: The system calculates a fair, weighted composite score that blends coach ratings and tryout evaluations -- normalizing across different score types, handling players with partial or missing data, and showing admins the full breakdown of how each player's score was derived.
@@ -109,7 +110,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 |-------|---------------|--------|-----------|
 | 1. Evaluation Templates | 3/3 | Complete | 2026-01-30 |
 | 2. Coach Ratings | 2/2 | Complete | 2026-01-30 |
-| 3. Tryout Day Scoring | 0/3 | Not started | - |
+| 3. Tryout Day Scoring | 3/4 | Gap closure pending | - |
 | 4. Composite Scoring | 0/2 | Not started | - |
 | 5. Draft Integration | 0/2 | Not started | - |
 
