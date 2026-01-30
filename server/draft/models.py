@@ -883,3 +883,133 @@ class Trade(models.Model):
 
     def __str__(self):
         return f"Trade at {self.timestamp}"
+
+
+# -----------------------------------------------------------------------------
+# Tryout Day Scoring Models
+# -----------------------------------------------------------------------------
+
+
+class TryoutGroup(models.Model):
+    """Group of players rotating through stations together (~15-20 players)."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="tryout_groups",
+    )
+    season = models.ForeignKey(
+        Season,
+        on_delete=models.CASCADE,
+        related_name="tryout_groups",
+    )
+    name = models.CharField(max_length=100)  # e.g., "Group A", "Group 1"
+    rotation_order = models.IntegerField(default=0)  # Order in station rotation schedule
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "tryout_groups"
+        ordering = ["rotation_order", "name"]
+        indexes = [
+            models.Index(fields=["organization", "season"], name="tryout_group_org_season_idx"),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["season", "name"],
+                name="unique_group_name_per_season",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.season.name})"
+
+
+class GroupPlayer(models.Model):
+    """Player in a tryout group with assigned bib number."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    group = models.ForeignKey(
+        TryoutGroup,
+        on_delete=models.CASCADE,
+        related_name="players",
+    )
+    season = models.ForeignKey(
+        Season,
+        on_delete=models.CASCADE,
+        related_name="season_players",
+    )
+    first_name = models.CharField(max_length=100)
+    last_name = models.CharField(max_length=100)
+    bib_number = models.IntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "group_players"
+        ordering = ["bib_number"]
+        indexes = [
+            models.Index(fields=["group"], name="group_player_group_idx"),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["season", "bib_number"],
+                name="unique_bib_per_season",
+            ),
+            models.UniqueConstraint(
+                fields=["group", "first_name", "last_name"],
+                name="unique_player_per_group",
+            ),
+        ]
+
+    def __str__(self):
+        return f"#{self.bib_number} {self.first_name} {self.last_name}"
+
+
+class StationScore(models.Model):
+    """A player's scores for one station, entered by a scorer."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    season = models.ForeignKey(
+        Season,
+        on_delete=models.CASCADE,
+        related_name="station_scores",
+    )
+    group = models.ForeignKey(
+        TryoutGroup,
+        on_delete=models.CASCADE,
+        related_name="scores",
+    )
+    player = models.ForeignKey(
+        GroupPlayer,
+        on_delete=models.CASCADE,
+        related_name="scores",
+    )
+    station_id = models.CharField(max_length=100)  # Template station UUID string
+    # Scores keyed by score field ID from template
+    # e.g., {"uuid-field-1": 4, "uuid-field-2": 8.5}
+    scores = models.JSONField(default=dict)
+    scored_by = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="tryout_scores",
+    )
+    scored_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "station_scores"
+        ordering = ["-scored_at"]
+        indexes = [
+            models.Index(fields=["season", "group"], name="station_score_season_group_idx"),
+            models.Index(fields=["player"], name="station_score_player_idx"),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["season", "player", "station_id"],
+                name="unique_player_station_score",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.player} - Station {self.station_id}"
