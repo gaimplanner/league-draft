@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Play, Eye, Trash2, Calendar, Users, AlertCircle, LogOut, User, Settings, ClipboardList, Star } from 'lucide-react';
+import { Plus, Play, Eye, Trash2, Calendar, Users, AlertCircle, LogOut, User, Settings, ClipboardList, Star, TrendingUp } from 'lucide-react';
 import { DivisionSummary, AppPhase, User as UserType } from '../types';
 
 interface DivisionSelectorProps {
@@ -13,6 +13,7 @@ interface DivisionSelectorProps {
   onOpenTemplates?: () => void;
   onOpenCoachRatings?: () => void;
   onOpenTryoutScoring?: () => void;
+  onOpenCompositeScores?: () => void;
 }
 
 function getPhaseLabel(phase: AppPhase): string {
@@ -58,6 +59,7 @@ export const DivisionSelector = ({
   onOpenTemplates,
   onOpenCoachRatings,
   onOpenTryoutScoring,
+  onOpenCompositeScores,
 }: DivisionSelectorProps) => {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
@@ -118,6 +120,15 @@ export const DivisionSelector = ({
               >
                 <ClipboardList className="w-4 h-4" />
                 Tryout Scoring
+              </button>
+            )}
+            {onOpenCompositeScores && (
+              <button
+                onClick={onOpenCompositeScores}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-md transition-colors"
+              >
+                <TrendingUp className="w-4 h-4" />
+                Composite Scores
               </button>
             )}
             {onOpenSettings && (

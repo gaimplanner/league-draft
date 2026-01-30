@@ -25,6 +25,7 @@ import { JoinPage } from './components/JoinPage';
 import { EvaluationAdmin } from './components/evaluation/EvaluationAdmin';
 import { CoachRatingPage } from './components/coachRatings/CoachRatingPage';
 import { TryoutScoringPage } from './components/tryoutScoring/TryoutScoringPage';
+import { CompositeScorePage } from './components/composite/CompositeScorePage';
 import { api, isApiMode } from './api';
 import {
   Player,
@@ -41,7 +42,7 @@ import {
 import { parseCSVWithMapping, CoachAssignment } from './utils/csvParser';
 import { savePlayersToApi, saveTeamsToApi } from './api';
 
-type AppMode = 'selector' | 'creator' | 'draft' | 'settings' | 'join' | 'templates' | 'coach-ratings' | 'tryout-scoring';
+type AppMode = 'selector' | 'creator' | 'draft' | 'settings' | 'join' | 'templates' | 'coach-ratings' | 'tryout-scoring' | 'composite-scores';
 type AuthPage = 'login' | 'register' | 'forgot-password' | 'reset-password';
 
 function App() {
@@ -877,6 +878,13 @@ function App() {
     );
   }
 
+  // Render composite scores page
+  if (mode === 'composite-scores') {
+    return (
+      <CompositeScorePage onBack={() => setMode('selector')} />
+    );
+  }
+
   // Render division selector or creator
   if (mode === 'selector') {
     return (
@@ -891,6 +899,7 @@ function App() {
         onOpenTemplates={isApiMode() && user ? () => setMode('templates') : undefined}
         onOpenCoachRatings={isApiMode() && user ? () => setMode('coach-ratings') : undefined}
         onOpenTryoutScoring={isApiMode() && user ? () => setMode('tryout-scoring') : undefined}
+        onOpenCompositeScores={isApiMode() && user ? () => setMode('composite-scores') : undefined}
       />
     );
   }
