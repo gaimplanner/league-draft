@@ -69,6 +69,15 @@ from .views import (
     coach_rating_detail,
     coach_rating_submit,
     coach_ratings_progress,
+    # Tryout Scoring
+    tryout_groups_list_create,
+    tryout_group_detail,
+    tryout_group_generate,
+    tryout_group_add_player,
+    tryout_station_scores,
+    tryout_station_score_detail,
+    tryout_bulk_scores,
+    tryout_progress,
 )
 
 urlpatterns = [
@@ -160,4 +169,22 @@ urlpatterns = [
          coach_rating_submit, name="coach-rating-submit"),
     path("api/seasons/<uuid:season_id>/coach-ratings/progress/",
          coach_ratings_progress, name="coach-ratings-progress"),
+
+    # Tryout Scoring
+    path("api/seasons/<uuid:season_id>/tryout-groups/",
+         tryout_groups_list_create, name="tryout-groups-list-create"),
+    path("api/seasons/<uuid:season_id>/tryout-groups/generate/",
+         tryout_group_generate, name="tryout-group-generate"),
+    path("api/tryout-groups/<uuid:pk>/",
+         tryout_group_detail, name="tryout-group-detail"),
+    path("api/tryout-groups/<uuid:pk>/players/",
+         tryout_group_add_player, name="tryout-group-add-player"),
+    path("api/seasons/<uuid:season_id>/station-scores/",
+         tryout_station_scores, name="tryout-station-scores"),
+    path("api/station-scores/<uuid:pk>/",
+         tryout_station_score_detail, name="tryout-station-score-detail"),
+    path("api/seasons/<uuid:season_id>/station-scores/bulk/",
+         tryout_bulk_scores, name="tryout-bulk-scores"),
+    path("api/seasons/<uuid:season_id>/tryout-progress/",
+         tryout_progress, name="tryout-progress"),
 ]

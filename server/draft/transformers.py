@@ -447,3 +447,61 @@ def transform_rating_progress(coach_data) -> dict:
         "submitted_ratings": coach_data["submitted_ratings"],
         "draft_ratings": coach_data["draft_ratings"],
     }
+
+
+def transform_tryout_group(group, include_players: bool = False) -> dict:
+    """Transform a TryoutGroup to dict."""
+    result = {
+        "id": str(group.id),
+        "season_id": str(group.season_id),
+        "name": group.name,
+        "rotation_order": group.rotation_order,
+        "player_count": group.players.count(),
+        "created_at": group.created_at.isoformat(),
+        "updated_at": group.updated_at.isoformat(),
+    }
+    if include_players:
+        result["players"] = [transform_group_player(p) for p in group.players.all()]
+    return result
+
+
+def transform_group_player(player) -> dict:
+    """Transform a GroupPlayer to dict."""
+    return {
+        "id": str(player.id),
+        "group_id": str(player.group_id),
+        "season_id": str(player.season_id),
+        "first_name": player.first_name,
+        "last_name": player.last_name,
+        "bib_number": player.bib_number,
+        "created_at": player.created_at.isoformat(),
+    }
+
+
+def transform_station_score(score) -> dict:
+    """Transform a StationScore to dict."""
+    return {
+        "id": str(score.id),
+        "season_id": str(score.season_id),
+        "group_id": str(score.group_id),
+        "player_id": str(score.player_id),
+        "station_id": score.station_id,
+        "scores": score.scores,
+        "scored_by_id": str(score.scored_by_id),
+        "scored_by_email": score.scored_by.email,
+        "scored_at": score.scored_at.isoformat(),
+        "updated_at": score.updated_at.isoformat(),
+    }
+
+
+def transform_tryout_progress(progress_data) -> dict:
+    """Transform tryout progress data to dict."""
+    return {
+        "group_id": progress_data["group_id"],
+        "group_name": progress_data["group_name"],
+        "station_id": progress_data["station_id"],
+        "station_name": progress_data["station_name"],
+        "scored_count": progress_data["scored_count"],
+        "total_players": progress_data["total_players"],
+        "complete": progress_data["complete"],
+    }

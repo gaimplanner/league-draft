@@ -1676,3 +1676,171 @@ def validate_rating_scores_complete(scores: dict, template_coach_categories: lis
         if cat_id not in scores or scores[cat_id] is None:
             missing.append(cat.get("name", cat_id))
     return len(missing) == 0, missing
+
+
+# -----------------------------------------------------------------------------
+# Tryout Scoring Validators
+# -----------------------------------------------------------------------------
+
+
+def validate_tryout_group_data(data: Dict[str, Any]) -> Tuple[Optional[Dict], Optional[Dict]]:
+    """Validate tryout group creation/update data.
+
+    Returns (cleaned_data, None) on success, (None, errors) on failure.
+    """
+    errors = {}
+    cleaned = {}
+
+    if "name" in data:
+        name = data["name"]
+        if not name or not str(name).strip():
+            errors["name"] = ["Group name is required"]
+        elif len(str(name)) > 100:
+            errors["name"] = ["Group name must be 100 characters or less"]
+        else:
+            cleaned["name"] = str(name).strip()
+
+    if "rotation_order" in data:
+        rotation_order = data["rotation_order"]
+        try:
+            rotation_order = int(rotation_order)
+            if rotation_order < 0:
+                errors["rotation_order"] = ["Rotation order must be non-negative"]
+            else:
+                cleaned["rotation_order"] = rotation_order
+        except (ValueError, TypeError):
+            errors["rotation_order"] = ["Rotation order must be an integer"]
+
+    if errors:
+        return None, errors
+
+    return cleaned, None
+
+
+def validate_group_player_data(data: Dict[str, Any]) -> Tuple[Optional[Dict], Optional[Dict]]:
+    """Validate group player data.
+
+    Returns (cleaned_data, None) on success, (None, errors) on failure.
+    """
+    errors = {}
+
+    first_name = data.get("first_name", "")
+    if not first_name or not str(first_name).strip():
+        errors["first_name"] = ["Player first name is required"]
+    elif len(str(first_name)) > 100:
+        errors["first_name"] = ["First name must be 100 characters or less"]
+
+    last_name = data.get("last_name", "")
+    if not last_name or not str(last_name).strip():
+        errors["last_name"] = ["Player last name is required"]
+    elif len(str(last_name)) > 100:
+        errors["last_name"] = ["Last name must be 100 characters or less"]
+
+    bib_number = data.get("bib_number")
+    if bib_number is not None:
+        try:
+            bib_number = int(bib_number)
+            if bib_number <= 0:
+                errors["bib_number"] = ["Bib number must be positive"]
+        except (ValueError, TypeError):
+            errors["bib_number"] = ["Bib number must be an integer"]
+
+    if errors:
+        return None, errors
+
+    cleaned = {
+        "first_name": str(first_name).strip(),
+        "last_name": str(last_name).strip(),
+    }
+    if bib_number is not None:
+        cleaned["bib_number"] = int(bib_number)
+
+    return cleaned, None
+
+
+def validate_station_score_data(data: Dict[str, Any]) -> Tuple[Optional[Dict], Optional[Dict]]:
+    """Validate station score data.
+
+    Returns (cleaned_data, None) on success, (None, errors) on failure.
+    """
+    errors = {}
+
+    station_id = data.get("station_id", "")
+    if not station_id or not str(station_id).strip():
+        errors["station_id"] = ["Station ID is required"]
+
+    scores = data.get("scores", {})
+    if not isinstance(scores, dict):
+        errors["scores"] = ["Scores must be an object"]
+    else:
+        for field_id, score in scores.items():
+            if not isinstance(score, (int, float)):
+                errors[f"scores.{field_id}"] = ["Score must be a number"]
+
+    player_id = data.get("player_id")
+    if player_id:
+        try:
+            uuid_module.UUID(str(player_id))
+        except (ValueError, AttributeError):
+            errors["player_id"] = ["Invalid player ID"]
+
+    if errors:
+        return None, errors
+
+    cleaned = {
+        "station_id": str(station_id).strip(),
+        "scores": scores,
+    }
+    if player_id:
+        cleaned["player_id"] = str(player_id)
+
+    return cleaned, None
+
+
+def validate_bulk_scores_data(data: Dict[str, Any]) -> Tuple[Optional[Dict], Optional[Dict]]:
+    """Validate bulk station scores data.
+
+    Returns (cleaned_data, None) on success, (None, errors) on failure.
+    """
+    errors = {}
+
+    station_id = data.get("station_id", "")
+    if not station_id or not str(station_id).strip():
+        errors["station_id"] = ["Station ID is required"]
+
+    scores = data.get("scores", [])
+    if not isinstance(scores, list):
+        errors["scores"] = ["Scores must be a list"]
+    elif not scores:
+        errors["scores"] = ["At least one score entry is required"]
+    else:
+        # Validate each score entry
+        for i, entry in enumerate(scores):
+            if not isinstance(entry, dict):
+                errors[f"scores[{i}]"] = ["Entry must be an object"]
+                continue
+
+            player_id = entry.get("player_id")
+            if not player_id:
+                errors[f"scores[{i}].player_id"] = ["Player ID is required"]
+            else:
+                try:
+                    uuid_module.UUID(str(player_id))
+                except (ValueError, AttributeError):
+                    errors[f"scores[{i}].player_id"] = ["Invalid player ID"]
+
+            entry_scores = entry.get("scores", {})
+            if not isinstance(entry_scores, dict):
+                errors[f"scores[{i}].scores"] = ["Scores must be an object"]
+            else:
+                for field_id, score in entry_scores.items():
+                    if not isinstance(score, (int, float)):
+                        errors[f"scores[{i}].scores.{field_id}"] = ["Score must be a number"]
+
+    if errors:
+        return None, errors
+
+    return {
+        "station_id": str(station_id).strip(),
+        "scores": scores,
+    }, None

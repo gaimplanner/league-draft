@@ -75,6 +75,16 @@ from .coach_ratings import (
     coach_rating_submit,
     coach_ratings_progress,
 )
+from .tryout_scoring import (
+    tryout_groups_list_create,
+    tryout_group_detail,
+    tryout_group_generate,
+    tryout_group_add_player,
+    tryout_station_scores,
+    tryout_station_score_detail,
+    tryout_bulk_scores,
+    tryout_progress,
+)
 
 __all__ = [
     # Auth
@@ -139,4 +149,13 @@ __all__ = [
     "coach_rating_detail",
     "coach_rating_submit",
     "coach_ratings_progress",
+    # Tryout Scoring
+    "tryout_groups_list_create",
+    "tryout_group_detail",
+    "tryout_group_generate",
+    "tryout_group_add_player",
+    "tryout_station_scores",
+    "tryout_station_score_detail",
+    "tryout_bulk_scores",
+    "tryout_progress",
 ]
