@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-01-29)
 ## Current Position
 
 Phase: 4 of 5 (Composite Scoring)
-Plan: 1 of 4 in current phase
+Plan: 2 of 4 in current phase
 Status: In progress
-Last activity: 2026-01-30 -- Completed 04-01-PLAN.md (Backend composite score service)
+Last activity: 2026-01-30 -- Completed 04-02-PLAN.md (Composite scoring UI)
 
-Progress: [█████████░░░] 77%
+Progress: [█████████░░░] 84%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 10
-- Average duration: 10min
-- Total execution time: 1.76 hours
+- Total plans completed: 11
+- Average duration: 9min
+- Total execution time: 1.85 hours
 
 **By Phase:**
 
@@ -30,11 +30,11 @@ Progress: [█████████░░░] 77%
 | 01-evaluation-templates | 3/3 | 23min | 8min |
 | 02-coach-ratings | 2/2 | 27min | 14min |
 | 03-tryout-day-scoring | 4/4 | 51min | 13min |
-| 04-composite-scoring | 1/4 | 5min | 5min |
+| 04-composite-scoring | 2/4 | 10min | 5min |
 
 **Recent Trend:**
-- Last 5 plans: 4min, 35min, 9min, 3min, 5min
-- Trend: variable (complex UI plans take longer, backend services fast)
+- Last 5 plans: 35min, 9min, 3min, 5min, 5min
+- Trend: accelerating (backend + UI patterns established, quick execution)
 
 *Updated after each plan completion*
 
@@ -85,6 +85,11 @@ Recent decisions affecting current work:
 - [04-01]: Tier overrides stored in Season.composite_tier_overrides JSONField (simpler than new model)
 - [04-01]: Station-level weights optional (equal weight per station is default, advanced admins can override)
 - [04-01]: Coach-only and tryout-only composites use raw aggregates (NOT weighted) since weighting only makes sense when blending two sources
+- [04-02]: Debounced onChange (150ms) for live preview prevents excessive API calls during slider drag
+- [04-02]: Three-tier display (full/coach-only/tryout-only) prevents unfair rank comparisons between partial-data players
+- [04-02]: Rank delta arrows tracked via previousRanks Map in useCompositeScores hook
+- [04-02]: Station weights optional (collapsible advanced panel) — equal weights is default
+- [04-02]: Expandable player rows show inline evaluation breakdown (not modal) for quick comparison
 
 ### Pending Todos
 
@@ -97,6 +102,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-01-30T23:08:00Z
-Stopped at: Completed 04-01-PLAN.md (Backend composite score service)
+Last session: 2026-01-30T23:24:13Z
+Stopped at: Completed 04-02-PLAN.md (Composite scoring UI)
 Resume file: None
