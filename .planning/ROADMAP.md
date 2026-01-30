@@ -46,11 +46,11 @@ Plans:
   2. Coach ratings include soft-skill categories (baseball IQ, hustle, coachability) rendered from the template alongside physical skill categories
   3. A coach can save an in-progress rating and return later to complete it before final submission
   4. An admin can view a dashboard showing which coaches have submitted ratings and which are still pending, with submitted/total counts per coach
-**Plans**: TBD (estimated 2-3 plans: backend API + rating form, admin dashboard)
+**Plans**: 2 plans
 
 Plans:
-- [ ] 02-01: Coach rating backend API and form UI
-- [ ] 02-02: Rating progress dashboard and submission workflow
+- [ ] 02-01-PLAN.md -- Backend: CoachRating model, migration, validators, transformers, CRUD views with draft/submit workflow, admin progress endpoint, URL routing
+- [ ] 02-02-PLAN.md -- Frontend: TypeScript types, API client, hooks, Zod schema, rating form with template-driven categories, coach roster list, admin dashboard, App.tsx integration
 
 ### Phase 3: Tryout Day Scoring
 **Goal**: Volunteers can score players at tryout stations in real-time via mobile browser, with bib-based player lookup, group rotation management, and a bulk-entry fallback for paper-based scoring -- all with scorer identity tracked for accountability.
