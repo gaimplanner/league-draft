@@ -95,11 +95,11 @@ Plans:
   1. When creating a division for draft, the admin can select "Import from Evaluations" to pull composite scores from a season -- mapping composite breakdowns to the existing Player score fields used by the draft
   2. The existing CSV/Excel/Dual CSV import paths continue to work unchanged as alternative import methods alongside evaluation-based import
   3. Before evaluation scores flow into draft configuration, the admin reviews finalized rankings and explicitly approves them -- evaluation results do not auto-populate draft data without admin sign-off
-**Plans**: TBD (estimated 2 plans: evaluation import path, admin review + approval gate)
+**Plans**: 2 plans
 
 Plans:
-- [ ] 05-01: Evaluation-to-draft import pathway
-- [ ] 05-02: Admin review and approval workflow
+- [ ] 05-01-PLAN.md -- Backend export endpoint, frontend types/API client/mapper for composite-to-Player transformation
+- [ ] 05-02-PLAN.md -- Extend ImportTypeSelector, SeasonPlayerImport component (season select + preview + approve), App.tsx integration
 
 ## Progress
 
