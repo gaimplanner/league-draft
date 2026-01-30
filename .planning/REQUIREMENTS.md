@@ -33,11 +33,11 @@
 
 ### Composite Scoring
 
-- [ ] **COMP-01**: System calculates a weighted composite score blending coach ratings and tryout evaluations
-- [ ] **COMP-02**: League admin configures blending weights (how much coach rating vs tryout score contributes)
-- [ ] **COMP-03**: Score normalization converts different score types (1-5 scales, times, counts) to comparable values
-- [ ] **COMP-04**: Players who miss tryouts still receive a score based on coach rating alone (DNE handling)
-- [ ] **COMP-05**: Admin can view player evaluation history (coach rating baseline, tryout scores, composite breakdown)
+- [x] **COMP-01**: System calculates a weighted composite score blending coach ratings and tryout evaluations
+- [x] **COMP-02**: League admin configures blending weights (how much coach rating vs tryout score contributes)
+- [x] **COMP-03**: Score normalization converts different score types (1-5 scales, times, counts) to comparable values
+- [x] **COMP-04**: Players who miss tryouts still receive a score based on coach rating alone (DNE handling)
+- [x] **COMP-05**: Admin can view player evaluation history (coach rating baseline, tryout scores, composite breakdown)
 
 ### Draft Integration
 
@@ -100,11 +100,11 @@
 | TRYOUT-05 | Phase 3 | Complete |
 | TRYOUT-06 | Phase 3 | Complete |
 | TRYOUT-07 | Phase 3 | Complete |
-| COMP-01 | Phase 4 | Pending |
-| COMP-02 | Phase 4 | Pending |
-| COMP-03 | Phase 4 | Pending |
-| COMP-04 | Phase 4 | Pending |
-| COMP-05 | Phase 4 | Pending |
+| COMP-01 | Phase 4 | Complete |
+| COMP-02 | Phase 4 | Complete |
+| COMP-03 | Phase 4 | Complete |
+| COMP-04 | Phase 4 | Complete |
+| COMP-05 | Phase 4 | Complete |
 | DRAFT-01 | Phase 5 | Pending |
 | DRAFT-02 | Phase 5 | Pending |
 | DRAFT-03 | Phase 5 | Pending |
@@ -116,4 +116,4 @@
 
 ---
 *Requirements defined: 2026-01-29*
-*Last updated: 2026-01-30 after Phase 3 completion*
+*Last updated: 2026-01-31 after Phase 4 completion*

@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Evaluation Templates** - Admin-configurable evaluation structure with stations, categories, scoring scales, and versioning
 - [x] **Phase 2: Coach Ratings** - End-of-season coach rating submission with template-driven forms and progress tracking
 - [x] **Phase 3: Tryout Day Scoring** - Mobile-first station scoring with bib lookup, groups, bulk fallback, and progress monitoring
-- [ ] **Phase 4: Composite Scoring** - Weighted blending of coach ratings and tryout scores with normalization and DNE handling
+- [x] **Phase 4: Composite Scoring** - Weighted blending of coach ratings and tryout scores with normalization and DNE handling
 - [ ] **Phase 5: Draft Integration** - Composite scores feed into the existing draft flow with admin approval gate
 
 ## Phase Details
@@ -84,8 +84,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 04-01-PLAN.md -- Backend: CompositeScoreService (normalization, aggregation, blending, tier classification), API endpoints (calculate, list, detail, promote), validators, transformers, Season migration, URL routing
-- [ ] 04-02-PLAN.md -- Frontend: TypeScript types, API client, useCompositeScores hook, CompositeScorePage with WeightConfigPanel (linked sliders + station weights), RankingsList (three-tier table, rank deltas, promote/demote), PlayerEvaluationBreakdown (inline coach + tryout detail), App.tsx integration
+- [x] 04-01-PLAN.md -- Backend: CompositeScoreService (normalization, aggregation, blending, tier classification), API endpoints (calculate, list, detail, promote), validators, transformers, Season migration, URL routing
+- [x] 04-02-PLAN.md -- Frontend: TypeScript types, API client, useCompositeScores hook, CompositeScorePage with WeightConfigPanel (linked sliders + station weights), RankingsList (three-tier table, rank deltas, promote/demote), PlayerEvaluationBreakdown (inline coach + tryout detail), App.tsx integration
 
 ### Phase 5: Draft Integration
 **Goal**: Composite scores flow into the existing draft system as the primary scoring source, with admin review and approval before scores enter draft configuration, while the existing CSV/Excel import path continues to work as an alternative.
@@ -111,9 +111,9 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | 1. Evaluation Templates | 3/3 | Complete | 2026-01-30 |
 | 2. Coach Ratings | 2/2 | Complete | 2026-01-30 |
 | 3. Tryout Day Scoring | 4/4 | Complete | 2026-01-30 |
-| 4. Composite Scoring | 0/2 | Planned | - |
+| 4. Composite Scoring | 2/2 | Complete | 2026-01-30 |
 | 5. Draft Integration | 0/2 | Not started | - |
 
 ---
 *Roadmap created: 2026-01-29*
-*Last updated: 2026-01-30*
+*Last updated: 2026-01-31*
