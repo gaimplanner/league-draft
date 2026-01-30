@@ -12,7 +12,7 @@ This roadmap delivers an in-app evaluation system that replaces the spreadsheet-
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Evaluation Templates** - Admin-configurable evaluation structure with stations, categories, scoring scales, and versioning
+- [x] **Phase 1: Evaluation Templates** - Admin-configurable evaluation structure with stations, categories, scoring scales, and versioning
 - [ ] **Phase 2: Coach Ratings** - End-of-season coach rating submission with template-driven forms and progress tracking
 - [ ] **Phase 3: Tryout Day Scoring** - Mobile-first station scoring with bib lookup, groups, bulk fallback, and progress monitoring
 - [ ] **Phase 4: Composite Scoring** - Weighted blending of coach ratings and tryout scores with normalization and DNE handling
@@ -33,9 +33,9 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 3 plans
 
 Plans:
-- [ ] 01-01-PLAN.md -- Backend models (EvaluationTemplate, Season), migration, validators, transformers, CRUD views with versioning, URL routing
-- [ ] 01-02-PLAN.md -- Frontend foundation: install react-hook-form/zod, TypeScript types, API client methods, data hooks, zod schema, TemplateList component
-- [ ] 01-03-PLAN.md -- Template editor UI: dynamic station/field/category forms, blend weight slider, presets, season manager, app integration
+- [x] 01-01-PLAN.md -- Backend models (EvaluationTemplate, Season), migration, validators, transformers, CRUD views with versioning, URL routing
+- [x] 01-02-PLAN.md -- Frontend foundation: install react-hook-form/zod, TypeScript types, API client methods, data hooks, zod schema, TemplateList component
+- [x] 01-03-PLAN.md -- Template editor UI: dynamic station/field/category forms, blend weight slider, presets, season manager, app integration
 
 ### Phase 2: Coach Ratings
 **Goal**: Coaches can submit structured end-of-season ratings for players on their roster using the league's evaluation template, and admins can track which coaches have completed their ratings.
@@ -107,7 +107,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|---------------|--------|-----------|
-| 1. Evaluation Templates | 0/3 | Planned | - |
+| 1. Evaluation Templates | 3/3 | Complete | 2026-01-30 |
 | 2. Coach Ratings | 0/2 | Not started | - |
 | 3. Tryout Day Scoring | 0/3 | Not started | - |
 | 4. Composite Scoring | 0/2 | Not started | - |
@@ -115,4 +115,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 
 ---
 *Roadmap created: 2026-01-29*
-*Last updated: 2026-01-29*
+*Last updated: 2026-01-30*
