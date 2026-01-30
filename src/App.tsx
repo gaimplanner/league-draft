@@ -22,6 +22,7 @@ import { ForgotPasswordPage } from './components/ForgotPasswordPage';
 import { ResetPasswordPage } from './components/ResetPasswordPage';
 import { ProfilePage } from './components/profile';
 import { JoinPage } from './components/JoinPage';
+import { EvaluationAdmin } from './components/evaluation/EvaluationAdmin';
 import { api, isApiMode } from './api';
 import {
   Player,
@@ -38,7 +39,7 @@ import {
 import { parseCSVWithMapping, CoachAssignment } from './utils/csvParser';
 import { savePlayersToApi, saveTeamsToApi } from './api';
 
-type AppMode = 'selector' | 'creator' | 'draft' | 'settings' | 'join';
+type AppMode = 'selector' | 'creator' | 'draft' | 'settings' | 'join' | 'templates';
 type AuthPage = 'login' | 'register' | 'forgot-password' | 'reset-password';
 
 function App() {
@@ -853,6 +854,13 @@ function App() {
     );
   }
 
+  // Render evaluation admin page
+  if (mode === 'templates') {
+    return (
+      <EvaluationAdmin onBack={() => setMode('selector')} />
+    );
+  }
+
   // Render division selector or creator
   if (mode === 'selector') {
     return (
@@ -864,6 +872,7 @@ function App() {
         user={user}
         onLogout={isApiMode() ? logout : undefined}
         onOpenSettings={isApiMode() && user ? () => setMode('settings') : undefined}
+        onOpenTemplates={isApiMode() && user ? () => setMode('templates') : undefined}
       />
     );
   }

@@ -61,6 +61,20 @@ from .coaches import (
     coach_detail,
     coaches_bulk_create,
 )
+from .evaluation_templates import (
+    evaluation_templates_list_create,
+    evaluation_template_detail,
+)
+from .seasons import (
+    seasons_list_create,
+    season_detail,
+)
+from .coach_ratings import (
+    coach_ratings_list_create,
+    coach_rating_detail,
+    coach_rating_submit,
+    coach_ratings_progress,
+)
 
 __all__ = [
     # Auth
@@ -114,4 +128,15 @@ __all__ = [
     "coaches_list_create",
     "coach_detail",
     "coaches_bulk_create",
+    # Evaluation Templates
+    "evaluation_templates_list_create",
+    "evaluation_template_detail",
+    # Seasons
+    "seasons_list_create",
+    "season_detail",
+    # Coach Ratings
+    "coach_ratings_list_create",
+    "coach_rating_detail",
+    "coach_rating_submit",
+    "coach_ratings_progress",
 ]

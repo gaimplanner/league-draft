@@ -372,6 +372,7 @@ export type AppField =
   | 'isCoachKid'
   | 'coachTeam' // Team name for coach kid assignment (headCoach name)
   | 'sibling'
+  | 'school' // School name for clustering
   | 'managerTeam'
   | 'assistantTeam'
   | 'teamColumn' // "Manager, Assistant" format for auto team creation
@@ -642,6 +643,88 @@ export interface AlgorithmComparisonResult {
   stats: AlgorithmStats;
   isRecommended: boolean;      // True if this is the "best" result
   // The actual TeamBuilderResult is stored separately since it's large
+}
+
+// -----------------------------------------------------------------------------
+// Evaluation Template Types
+// -----------------------------------------------------------------------------
+
+export type ScoreFieldType = 'scale' | 'time' | 'count';
+export type CoachCategoryType = 'physical' | 'soft';
+
+export interface ScoreFieldDefinition {
+  id: string;
+  name: string;
+  type: ScoreFieldType;
+  min: number;
+  max: number;
+  description?: string;
+  unit?: string;
+  lowerIsBetter?: boolean;
+  anchors?: Record<string, string>;
+}
+
+export interface StationDefinition {
+  id: string;
+  name: string;
+  order: number;
+  fields: ScoreFieldDefinition[];
+}
+
+export interface CoachCategoryDefinition {
+  id: string;
+  name: string;
+  type: CoachCategoryType;
+  min: number;
+  max: number;
+  anchors?: Record<string, string>;
+}
+
+export interface BlendWeights {
+  coachRating: number;
+  tryoutScore: number;
+}
+
+export interface EvaluationTemplate {
+  id: string;
+  organizationId: string;
+  name: string;
+  description: string;
+  version: number;
+  parentTemplateId: string | null;
+  stations: StationDefinition[];
+  coachCategories: CoachCategoryDefinition[];
+  blendWeights: BlendWeights;
+  isActive: boolean;
+  isLocked: boolean;
+  createdById: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Season {
+  id: string;
+  organizationId: string;
+  name: string;
+  year: number;
+  templateId: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateTemplateData {
+  name: string;
+  description?: string;
+  stations: StationDefinition[];
+  coachCategories: CoachCategoryDefinition[];
+  blendWeights: BlendWeights;
+}
+
+export interface CreateSeasonData {
+  name: string;
+  year: number;
+  templateId: string;
 }
 
 // Helper to create initial division state

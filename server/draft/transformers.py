@@ -331,6 +331,40 @@ def transform_coach(coach) -> dict:
     }
 
 
+def transform_evaluation_template(template) -> dict:
+    """Transform an EvaluationTemplate to dict."""
+    return {
+        "id": str(template.id),
+        "organization_id": str(template.organization_id),
+        "name": template.name,
+        "description": template.description,
+        "version": template.version,
+        "parent_template_id": str(template.parent_template_id) if template.parent_template_id else None,
+        "stations": template.stations,
+        "coach_categories": template.coach_categories,
+        "blend_weights": template.blend_weights,
+        "is_active": template.is_active,
+        "is_locked": template.is_locked,
+        "created_by_id": str(template.created_by_id) if template.created_by_id else None,
+        "created_at": template.created_at.isoformat(),
+        "updated_at": template.updated_at.isoformat(),
+    }
+
+
+def transform_season(season) -> dict:
+    """Transform a Season to dict."""
+    return {
+        "id": str(season.id),
+        "organization_id": str(season.organization_id),
+        "name": season.name,
+        "year": season.year,
+        "template_id": str(season.template_id),
+        "is_active": season.is_active,
+        "created_at": season.created_at.isoformat(),
+        "updated_at": season.updated_at.isoformat(),
+    }
+
+
 def transform_team_builder_result(result) -> dict:
     """Transform TeamBuilderResult to dict for JSON response."""
     return {
@@ -382,4 +416,34 @@ def transform_team_builder_result(result) -> dict:
             "coachRequestsHonored": result.stats.coach_requests_honored,
         },
         "warnings": result.warnings,
+    }
+
+
+def transform_coach_rating(rating) -> dict:
+    """Transform a CoachRating to dict."""
+    return {
+        "id": str(rating.id),
+        "season_id": str(rating.season_id),
+        "coach_id": str(rating.coach_id),
+        "player_first_name": rating.player_first_name,
+        "player_last_name": rating.player_last_name,
+        "player_id": str(rating.player_id) if rating.player_id else None,
+        "scores": rating.scores,
+        "status": rating.status,
+        "created_at": rating.created_at.isoformat(),
+        "updated_at": rating.updated_at.isoformat(),
+        "submitted_at": rating.submitted_at.isoformat() if rating.submitted_at else None,
+    }
+
+
+def transform_rating_progress(coach_data) -> dict:
+    """Transform aggregated coach rating progress to dict."""
+    return {
+        "coach_id": str(coach_data["coach_id"]),
+        "coach_email": coach_data["coach_email"],
+        "coach_first_name": coach_data["coach_first_name"],
+        "coach_last_name": coach_data["coach_last_name"],
+        "total_ratings": coach_data["total_ratings"],
+        "submitted_ratings": coach_data["submitted_ratings"],
+        "draft_ratings": coach_data["draft_ratings"],
     }

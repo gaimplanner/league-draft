@@ -171,6 +171,7 @@ export const parseCSVWithMapping = (
     const isCoachKid = getMappedValue('isCoachKid').toUpperCase() === 'TRUE';
     const coachTeam = getMappedValue('coachTeam') || undefined; // Team name for coach kid assignment
     const sibling = getMappedValue('sibling') || undefined;
+    const school = getMappedValue('school') || undefined; // School name for clustering
 
     // Parse team assignments from CSV (for coach import)
     const managerTeam = getMappedValue('managerTeam');
@@ -262,6 +263,7 @@ export const parseCSVWithMapping = (
       isDNE,
       isCoachKid,
       sibling,
+      school,
       isDrafted: false,
     };
   });

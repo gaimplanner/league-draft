@@ -47,8 +47,11 @@ Has name, roster (drafted players), totalScore, draftPosition, coachKids array, 
 - **Multi-tenant architecture**: Organization is the tenant model
 - **OrganizationMembership**: Users can belong to multiple organizations with roles (admin/coach/viewer)
 - **TenantMiddleware**: Injects `request.organization` based on user's membership
+- **Evaluation System**: Configurable evaluation templates with stations, score fields, coach categories, and blend weights
+- **Seasons**: Time-bounded evaluation periods linked to templates
+- **Coach Ratings**: End-of-season coach ratings for players using template-defined categories
 - **Session-based auth**: Django sessions with CSRF protection
-- **Rate limiting**: AuthRateThrottle (5/min) and PasswordResetRateThrottle (3/hr)
+- **Rate limiting**: Custom throttling classes (AuthRateThrottle, PasswordResetRateThrottle)
 - **Session timeout**: 24-hour expiration (SESSION_COOKIE_AGE)
 - **Structured logging**: JSON logging with correlation IDs for request tracing
 
@@ -85,8 +88,8 @@ Has name, roster (drafted players), totalScore, draftPosition, coachKids array, 
 | `src/utils/teamBuilderAlgorithm.ts` | Assignment algorithms, runAllAlgorithms(), calculateTop6Stats() |
 | `src/components/teamBuilder/AlgorithmComparisonPanel.tsx` | Side-by-side algorithm comparison with tabbed UI |
 | `src/utils/teamBuilderParser.ts` | Request parsing, name matching, normalization, cluster building |
-| `server/draft/models.py` | Django models: Organization, User, OrganizationMembership, Division, Team, Player, DraftState |
-| `server/draft/views/` | View functions for auth, divisions, teams, players, draft operations |
+| `server/draft/models.py` | Django models: Organization, User, OrganizationMembership, Division, Team, Player, DraftState, EvaluationTemplate, Season, CoachRating |
+| `server/draft/views/` | View functions for auth, divisions, teams, players, draft, coaches, evaluation templates, seasons, coach ratings |
 | `server/draft/transformers.py` | Model to dict transformations (replaces serializers) |
 | `server/draft/services_draft.py` | Draft business logic with race condition prevention |
 | `server/draft/middleware.py` | TenantMiddleware for multi-tenancy |
@@ -381,6 +384,31 @@ Draft state uses functional updates: `setDraftState(prev => ({ ...prev, ... }))`
 5. Display in PlayerReview and DraftBoard
 
 Note: The importPipeline module auto-generates transforms from field definitions, so adding a field there handles API transformations automatically.
+
+## Evaluation System (In Development)
+
+The evaluation system adds structured player evaluation capabilities alongside the existing CSV/Excel import flow.
+
+### Key Concepts
+- **Evaluation Templates**: Configurable structures defining tryout stations, score fields, coach rating categories, and blend weights
+- **Seasons**: Time-bounded evaluation periods linked to a template
+- **Coach Ratings**: End-of-season ratings where coaches score players on physical and soft skill categories
+- **Blend Weights**: Admin-configurable weighting between coach ratings and tryout scores for composite scoring
+
+### Evaluation API Endpoints
+- GET/POST `/api/evaluation-templates/` - List/create templates
+- GET/PATCH/DELETE `/api/evaluation-templates/{id}/` - Template detail
+- GET/POST `/api/seasons/` - List/create seasons
+- GET/PATCH/DELETE `/api/seasons/{id}/` - Season detail
+- GET/POST `/api/seasons/{id}/coach-ratings/` - List/create ratings for a season
+- GET/PATCH/DELETE `/api/coach-ratings/{id}/` - Rating detail
+- POST `/api/coach-ratings/{id}/submit/` - Submit a rating
+- GET `/api/seasons/{id}/coach-ratings/progress/` - Rating progress per coach
+
+### Coach Registry API Endpoints
+- GET/POST `/api/coaches/` - List/create coaches
+- POST `/api/coaches/bulk/` - Bulk create from pasted text
+- GET/PATCH/DELETE `/api/coaches/{id}/` - Coach detail
 
 ## Branching
 

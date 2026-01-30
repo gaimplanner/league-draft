@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Play, Eye, Trash2, Calendar, Users, AlertCircle, LogOut, User, Settings } from 'lucide-react';
+import { Plus, Play, Eye, Trash2, Calendar, Users, AlertCircle, LogOut, User, Settings, ClipboardList } from 'lucide-react';
 import { DivisionSummary, AppPhase, User as UserType } from '../types';
 
 interface DivisionSelectorProps {
@@ -10,6 +10,7 @@ interface DivisionSelectorProps {
   user?: UserType | null;
   onLogout?: () => void;
   onOpenSettings?: () => void;
+  onOpenTemplates?: () => void;
 }
 
 function getPhaseLabel(phase: AppPhase): string {
@@ -52,6 +53,7 @@ export const DivisionSelector = ({
   user,
   onLogout,
   onOpenSettings,
+  onOpenTemplates,
 }: DivisionSelectorProps) => {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
@@ -87,6 +89,15 @@ export const DivisionSelector = ({
                 </span>
               )}
             </div>
+            {onOpenTemplates && (
+              <button
+                onClick={onOpenTemplates}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-md transition-colors"
+              >
+                <ClipboardList className="w-4 h-4" />
+                Evaluation Setup
+              </button>
+            )}
             {onOpenSettings && (
               <button
                 onClick={onOpenSettings}
