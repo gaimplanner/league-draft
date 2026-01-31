@@ -9,19 +9,19 @@ See: .planning/PROJECT.md (updated 2026-01-29)
 
 ## Current Position
 
-Phase: 4 of 5 (Composite Scoring)
-Plan: 2 of 2 in current phase
-Status: Phase complete
-Last activity: 2026-01-30 -- Completed 04-02-PLAN.md (Composite scoring UI) — Phase 4 verified (5/5 must-haves)
+Phase: 5 of 5 (Draft Integration)
+Plan: 1 of 2 in current phase
+Status: In progress
+Last activity: 2026-01-31 -- Completed 05-01-PLAN.md (Composite-to-draft export pipeline)
 
-Progress: [██████████░░] 85%
+Progress: [██████████░░] 90%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 11
-- Average duration: 9min
-- Total execution time: 1.85 hours
+- Total plans completed: 12
+- Average duration: 8min
+- Total execution time: 1.93 hours
 
 **By Phase:**
 
@@ -31,9 +31,10 @@ Progress: [██████████░░] 85%
 | 02-coach-ratings | 2/2 | 27min | 14min |
 | 03-tryout-day-scoring | 4/4 | 51min | 13min |
 | 04-composite-scoring | 2/2 | 10min | 5min |
+| 05-draft-integration | 1/2 | 5min | 5min |
 
 **Recent Trend:**
-- Last 5 plans: 35min, 9min, 3min, 5min, 5min
+- Last 5 plans: 9min, 3min, 5min, 5min, 5min
 - Trend: accelerating (backend + UI patterns established, quick execution)
 
 *Updated after each plan completion*
@@ -90,6 +91,9 @@ Recent decisions affecting current work:
 - [04-02]: Rank delta arrows tracked via previousRanks Map in useCompositeScores hook
 - [04-02]: Station weights optional (collapsible advanced panel) — equal weights is default
 - [04-02]: Expandable player rows show inline evaluation breakdown (not modal) for quick comparison
+- [05-01]: Export flat ranking across all tiers (single sequence for draft import) instead of per-tier ranks
+- [05-01]: Temporary player IDs use pattern player-eval-{rank}-{timestamp}-{index} matching existing codebase pattern
+- [05-01]: Evaluation metadata fields (tier, coachAggregate, tryoutAggregate, isPartialTryout) included in API response for preview table, stripped by mapper before Player creation
 
 ### Pending Todos
 
@@ -102,6 +106,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-01-31T00:00:00Z
-Stopped at: Completed Phase 4 (Composite Scoring) — all plans executed, goal verified
+Last session: 2026-01-31T00:05:00Z
+Stopped at: Completed 05-01-PLAN.md (Composite-to-draft export pipeline)
 Resume file: None
