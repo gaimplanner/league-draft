@@ -851,12 +851,6 @@ class CoachRating(models.Model):
     class Meta:
         db_table = "coach_ratings"
         ordering = ["player_last_name", "player_first_name"]
-        constraints = [
-            models.UniqueConstraint(
-                fields=["season", "coach", "player_first_name", "player_last_name"],
-                name="unique_coach_rating_per_player_season",
-            )
-        ]
 
     def __str__(self):
         return f"{self.coach.email} -> {self.player_first_name} {self.player_last_name}"

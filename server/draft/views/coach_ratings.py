@@ -58,15 +58,28 @@ def coach_ratings_list_create(request, season_id):
         return json_response(errors, status=400)
 
     # Check for duplicate (same coach, same player name, same season)
-    if CoachRating.objects.filter(
+    existing = CoachRating.objects.filter(
         season=season,
         coach=request.user,
         player_first_name__iexact=cleaned["player_first_name"],
         player_last_name__iexact=cleaned["player_last_name"],
-    ).exists():
+    )
+    if existing.exists() and not data.get("force"):
+        existing_ratings = [
+            {
+                "id": str(r.id),
+                "status": r.status,
+                "created_at": r.created_at.isoformat(),
+            }
+            for r in existing
+        ]
         return json_response(
-            {"error": "A rating for this player already exists in this season"},
-            status=409,
+            {
+                "warning": "duplicate_player",
+                "message": f"A rating for {cleaned['player_first_name']} {cleaned['player_last_name']} already exists. Players can share names -- confirm to add anyway.",
+                "existing_ratings": existing_ratings,
+            },
+            status=200,
         )
 
     rating = CoachRating.objects.create(
