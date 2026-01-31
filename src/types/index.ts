@@ -759,6 +759,17 @@ export interface CreateCoachRatingData {
   playerLastName: string;
   playerId?: string;
   scores: Record<string, number>;
+  force?: boolean;  // Skip duplicate warning
+}
+
+export interface DuplicatePlayerWarning {
+  warning: 'duplicate_player';
+  message: string;
+  existingRatings: Array<{
+    id: string;
+    status: string;
+    createdAt: string;
+  }>;
 }
 
 export interface UpdateCoachRatingData {

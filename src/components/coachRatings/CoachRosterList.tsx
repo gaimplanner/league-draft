@@ -2,13 +2,13 @@ import { useState, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Plus, ChevronRight, CheckCircle, Edit3, Users } from 'lucide-react';
-import type { CoachRating } from '../../types';
+import type { CoachRating, DuplicatePlayerWarning } from '../../types';
 import { addPlayerSchema, type AddPlayerFormData } from '../../schemas/coachRating';
 
 interface CoachRosterListProps {
   ratings: CoachRating[];
   onSelectPlayer: (rating: CoachRating) => void;
-  onAddPlayer: (firstName: string, lastName: string) => Promise<void>;
+  onAddPlayer: (firstName: string, lastName: string, force?: boolean) => Promise<DuplicatePlayerWarning | null>;
   isLoading?: boolean;
 }
 
@@ -19,6 +19,11 @@ export function CoachRosterList({
   isLoading = false,
 }: CoachRosterListProps) {
   const [showAddForm, setShowAddForm] = useState(false);
+  const [duplicateWarning, setDuplicateWarning] = useState<{
+    firstName: string;
+    lastName: string;
+    message: string;
+  } | null>(null);
 
   const {
     register,
@@ -30,10 +35,28 @@ export function CoachRosterList({
   });
 
   const handleAdd = useCallback(async (data: AddPlayerFormData) => {
-    await onAddPlayer(data.playerFirstName, data.playerLastName);
+    const warning = await onAddPlayer(data.playerFirstName, data.playerLastName);
+    if (warning) {
+      // Show confirmation dialog instead of closing form
+      setDuplicateWarning({
+        firstName: data.playerFirstName,
+        lastName: data.playerLastName,
+        message: warning.message,
+      });
+      return; // Don't close form yet
+    }
+    // Success - close form
     reset();
     setShowAddForm(false);
   }, [onAddPlayer, reset]);
+
+  const handleConfirmDuplicate = useCallback(async () => {
+    if (!duplicateWarning) return;
+    await onAddPlayer(duplicateWarning.firstName, duplicateWarning.lastName, true);
+    setDuplicateWarning(null);
+    reset();
+    setShowAddForm(false);
+  }, [duplicateWarning, onAddPlayer, reset]);
 
   const draftCount = ratings.filter(r => r.status === 'draft').length;
   const submittedCount = ratings.filter(r => r.status === 'submitted').length;
@@ -105,12 +128,38 @@ export function CoachRosterList({
             </button>
             <button
               type="button"
-              onClick={() => { reset(); setShowAddForm(false); }}
+              onClick={() => { reset(); setShowAddForm(false); setDuplicateWarning(null); }}
               className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
             >
               Cancel
             </button>
           </form>
+
+          {/* Duplicate Warning Confirmation */}
+          {duplicateWarning && (
+            <div className="mt-3 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+              <p className="text-sm text-amber-800 dark:text-amber-200 mb-3">
+                {duplicateWarning.message}
+              </p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleConfirmDuplicate}
+                  disabled={isSubmitting}
+                  className="px-3 py-1.5 text-sm font-medium text-white bg-amber-600 rounded-lg hover:bg-amber-700 disabled:opacity-50 transition-colors"
+                >
+                  Add Anyway
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDuplicateWarning(null)}
+                  className="px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

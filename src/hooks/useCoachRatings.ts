@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import type { CoachRating, CoachRatingProgress, CreateCoachRatingData, UpdateCoachRatingData } from '../types';
+import type { CoachRating, CoachRatingProgress, CreateCoachRatingData, UpdateCoachRatingData, DuplicatePlayerWarning } from '../types';
 import { api } from '../api/client';
 
 export function useCoachRatings() {
@@ -25,11 +25,19 @@ export function useCoachRatings() {
   const createRating = useCallback(async (
     seasonId: string,
     data: CreateCoachRatingData
-  ): Promise<CoachRating | null> => {
+  ): Promise<CoachRating | DuplicatePlayerWarning | null> => {
     try {
       setIsLoading(true);
       setError(null);
-      const created = await api.createCoachRating(seasonId, data);
+      const result = await api.createCoachRating(seasonId, data);
+
+      // Check if it's a duplicate warning (not a created rating)
+      if ('warning' in result && result.warning === 'duplicate_player') {
+        return result as DuplicatePlayerWarning;
+      }
+
+      // It's a created rating
+      const created = result as CoachRating;
       setRatings(prev => [...prev, created]);
       return created;
     } catch (err) {

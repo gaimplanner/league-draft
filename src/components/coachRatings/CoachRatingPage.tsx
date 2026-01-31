@@ -4,7 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useSeasons } from '../../hooks/useSeasons';
 import { useCoachRatings } from '../../hooks/useCoachRatings';
 import { api } from '../../api/client';
-import type { CoachRating, CoachCategoryDefinition, Season } from '../../types';
+import type { CoachRating, CoachCategoryDefinition, Season, DuplicatePlayerWarning } from '../../types';
 import { CoachRosterList } from './CoachRosterList';
 import { PlayerRatingForm } from './PlayerRatingForm';
 import { AdminRatingDashboard } from './AdminRatingDashboard';
@@ -98,13 +98,25 @@ export function CoachRatingPage({ onBack }: CoachRatingPageProps) {
   }, []);
 
   // Handle adding a new player
-  const handleAddPlayer = useCallback(async (firstName: string, lastName: string) => {
-    if (!selectedSeasonId) return;
-    await createRating(selectedSeasonId, {
+  const handleAddPlayer = useCallback(async (
+    firstName: string,
+    lastName: string,
+    force?: boolean
+  ): Promise<DuplicatePlayerWarning | null> => {
+    if (!selectedSeasonId) return null;
+    const result = await createRating(selectedSeasonId, {
       playerFirstName: firstName,
       playerLastName: lastName,
       scores: {},
+      ...(force && { force: true }),
     });
+
+    // If it's a duplicate warning, pass it back to the caller
+    if (result && 'warning' in result) {
+      return result as DuplicatePlayerWarning;
+    }
+
+    return null; // Success or error (no warning to show)
   }, [selectedSeasonId, createRating]);
 
   // Handle saving draft scores

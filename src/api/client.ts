@@ -42,6 +42,7 @@ import type {
   CoachRatingProgress,
   CreateCoachRatingData,
   UpdateCoachRatingData,
+  DuplicatePlayerWarning,
   RatingStatus,
   TryoutGroup,
   GroupPlayer,
@@ -1770,7 +1771,7 @@ export const api = {
     return data.map(transformCoachRatingFromApi);
   },
 
-  async createCoachRating(seasonId: string, ratingData: CreateCoachRatingData): Promise<CoachRating> {
+  async createCoachRating(seasonId: string, ratingData: CreateCoachRatingData): Promise<CoachRating | DuplicatePlayerWarning> {
     const response = await fetchWithCSRFRetry(
       `${API_BASE_URL}/seasons/${seasonId}/coach-ratings/`,
       {
@@ -1781,10 +1782,26 @@ export const api = {
           player_last_name: ratingData.playerLastName,
           player_id: ratingData.playerId,
           scores: ratingData.scores,
+          ...(ratingData.force && { force: true }),
         }),
       }
     );
     const data = await handleResponse<Record<string, unknown>>(response);
+
+    // Check if this is a duplicate warning response
+    if (data.warning === 'duplicate_player') {
+      const existing = (data.existing_ratings as Array<Record<string, unknown>>) || [];
+      return {
+        warning: 'duplicate_player',
+        message: data.message as string,
+        existingRatings: existing.map(r => ({
+          id: r.id as string,
+          status: r.status as string,
+          createdAt: r.created_at as string,
+        })),
+      } as DuplicatePlayerWarning;
+    }
+
     return transformCoachRatingFromApi(data);
   },
 
