@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-01-29)
 
 **Core value:** Every player has a fair, data-driven composite score at draft time -- whether they attended tryouts or not -- built from configurable evaluations that persist across seasons.
-**Current focus:** Phase 4 complete — ready for Phase 5 (Draft Integration)
+**Current focus:** Phase 5 complete — Draft Integration finished
 
 ## Current Position
 
 Phase: 5 of 5 (Draft Integration)
-Plan: 1 of 2 in current phase
-Status: In progress
-Last activity: 2026-01-31 -- Completed 05-01-PLAN.md (Composite-to-draft export pipeline)
+Plan: 2 of 2 in current phase
+Status: Phase complete
+Last activity: 2026-01-31 -- Completed 05-02-PLAN.md (Evaluation import UI)
 
-Progress: [██████████░░] 90%
+Progress: [████████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 12
+- Total plans completed: 13
 - Average duration: 8min
-- Total execution time: 1.93 hours
+- Total execution time: 2 hours
 
 **By Phase:**
 
@@ -31,10 +31,10 @@ Progress: [██████████░░] 90%
 | 02-coach-ratings | 2/2 | 27min | 14min |
 | 03-tryout-day-scoring | 4/4 | 51min | 13min |
 | 04-composite-scoring | 2/2 | 10min | 5min |
-| 05-draft-integration | 1/2 | 5min | 5min |
+| 05-draft-integration | 2/2 | 9min | 4min |
 
 **Recent Trend:**
-- Last 5 plans: 9min, 3min, 5min, 5min, 5min
+- Last 5 plans: 3min, 5min, 5min, 5min, 4min
 - Trend: accelerating (backend + UI patterns established, quick execution)
 
 *Updated after each plan completion*
@@ -94,6 +94,9 @@ Recent decisions affecting current work:
 - [05-01]: Export flat ranking across all tiers (single sequence for draft import) instead of per-tier ranks
 - [05-01]: Temporary player IDs use pattern player-eval-{rank}-{timestamp}-{index} matching existing codebase pattern
 - [05-01]: Evaluation metadata fields (tier, coachAggregate, tryoutAggregate, isPartialTryout) included in API response for preview table, stripped by mapper before Player creation
+- [05-02]: Default 50/50 blend weights for initial composite export (can be made configurable later with weight sliders)
+- [05-02]: Season selection via card grid (consistent with DivisionSelector pattern)
+- [05-02]: Tier badge colors: green=Full, yellow=Coach Only, orange=Tryout Only
 
 ### Pending Todos
 
@@ -106,6 +109,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-01-31T00:05:00Z
-Stopped at: Completed 05-01-PLAN.md (Composite-to-draft export pipeline)
+Last session: 2026-01-31T00:12:05Z
+Stopped at: Completed 05-02-PLAN.md (Evaluation import UI) - Phase 5 complete
 Resume file: None
