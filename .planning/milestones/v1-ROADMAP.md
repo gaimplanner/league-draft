@@ -1,26 +1,17 @@
-# Roadmap: Little League Draft -- Evaluation System
+# Milestone v1: Evaluation System
+
+**Status:** SHIPPED 2026-01-30
+**Phases:** 1-5
+**Total Plans:** 14
 
 ## Overview
 
-This roadmap delivers an in-app evaluation system that replaces the spreadsheet-based player scoring workflow. The build follows the natural dependency chain: configurable templates define what gets evaluated, coach ratings provide baseline scores using those templates, tryout-day scoring captures real-time field evaluations, composite scoring blends both sources into draft-ready rankings, and draft integration closes the loop by feeding composites into the existing draft flow. Each phase delivers a complete, verifiable capability that unblocks the next.
+This milestone delivered an in-app evaluation system that replaces the spreadsheet-based player scoring workflow. The build follows the natural dependency chain: configurable templates define what gets evaluated, coach ratings provide baseline scores using those templates, tryout-day scoring captures real-time field evaluations, composite scoring blends both sources into draft-ready rankings, and draft integration closes the loop by feeding composites into the existing draft flow. Each phase delivers a complete, verifiable capability that unblocks the next.
 
 ## Phases
 
-**Phase Numbering:**
-- Integer phases (1, 2, 3): Planned milestone work
-- Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
-
-Decimal phases appear between their surrounding integers in numeric order.
-
-- [x] **Phase 1: Evaluation Templates** - Admin-configurable evaluation structure with stations, categories, scoring scales, and versioning
-- [x] **Phase 2: Coach Ratings** - End-of-season coach rating submission with template-driven forms and progress tracking
-- [x] **Phase 3: Tryout Day Scoring** - Mobile-first station scoring with bib lookup, groups, bulk fallback, and progress monitoring
-- [x] **Phase 4: Composite Scoring** - Weighted blending of coach ratings and tryout scores with normalization and DNE handling
-- [x] **Phase 5: Draft Integration** - Composite scores feed into the existing draft flow with admin approval gate
-
-## Phase Details
-
 ### Phase 1: Evaluation Templates
+
 **Goal**: League admins can create and manage evaluation templates that define exactly what gets evaluated, how it is scored, and how sources are weighted -- establishing the foundation every subsequent phase builds on.
 **Depends on**: Nothing (first phase)
 **Requirements**: TMPL-01, TMPL-02, TMPL-03, TMPL-04, TMPL-05, TMPL-06
@@ -38,6 +29,7 @@ Plans:
 - [x] 01-03-PLAN.md -- Template editor UI: dynamic station/field/category forms, blend weight slider, presets, season manager, app integration
 
 ### Phase 2: Coach Ratings
+
 **Goal**: Coaches can submit structured end-of-season ratings for players on their roster using the league's evaluation template, and admins can track which coaches have completed their ratings.
 **Depends on**: Phase 1 (templates define what coaches rate)
 **Requirements**: COACH-01, COACH-02, COACH-03, COACH-04
@@ -54,6 +46,7 @@ Plans:
 - [x] 02-03-PLAN.md -- Gap closure: Change duplicate player name from block (409) to warn-then-allow with confirmation dialog
 
 ### Phase 3: Tryout Day Scoring
+
 **Goal**: Volunteers can score players at tryout stations in real-time via mobile browser, with bib-based player lookup, group rotation management, and a bulk-entry fallback for paper-based scoring -- all with scorer identity tracked for accountability.
 **Depends on**: Phase 1 (templates define stations and score fields)
 **Requirements**: TRYOUT-01, TRYOUT-02, TRYOUT-03, TRYOUT-04, TRYOUT-05, TRYOUT-06, TRYOUT-07
@@ -73,6 +66,7 @@ Plans:
 - [x] 03-04-PLAN.md -- Gap closure: Player-level drill-down modal in TryoutProgressDashboard (click cell to see scored/missing players)
 
 ### Phase 4: Composite Scoring
+
 **Goal**: The system calculates a fair, weighted composite score that blends coach ratings and tryout evaluations -- normalizing across different score types, handling players with partial or missing data, and showing admins the full breakdown of how each player's score was derived.
 **Depends on**: Phase 2 (coach ratings as input), Phase 3 (tryout scores as input)
 **Requirements**: COMP-01, COMP-02, COMP-03, COMP-04, COMP-05
@@ -89,6 +83,7 @@ Plans:
 - [x] 04-02-PLAN.md -- Frontend: TypeScript types, API client, useCompositeScores hook, CompositeScorePage with WeightConfigPanel (linked sliders + station weights), RankingsList (three-tier table, rank deltas, promote/demote), PlayerEvaluationBreakdown (inline coach + tryout detail), App.tsx integration
 
 ### Phase 5: Draft Integration
+
 **Goal**: Composite scores flow into the existing draft system as the primary scoring source, with admin review and approval before scores enter draft configuration, while the existing CSV/Excel import path continues to work as an alternative.
 **Depends on**: Phase 4 (composite scores as the data source)
 **Requirements**: DRAFT-01, DRAFT-02, DRAFT-03
@@ -102,19 +97,30 @@ Plans:
 - [x] 05-01-PLAN.md -- Backend export endpoint, frontend types/API client/mapper for composite-to-Player transformation
 - [x] 05-02-PLAN.md -- Extend ImportTypeSelector, SeasonPlayerImport component (season select + preview + approve), App.tsx integration
 
-## Progress
+## Milestone Summary
 
-**Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
+**Key Decisions:**
+- Organization-scoped evaluation models (not Division-scoped) since players are evaluated before division assignment
+- JSONField for template definitions (flexible schema, matches existing codebase patterns)
+- Template versioning via copy-on-write from Phase 1 data model
+- Name-based player identity in CoachRating (ratings happen pre-draft before Player records exist)
+- Relational score records per station (not flat Player fields) to avoid concurrent write conflicts
+- Three-tier composite classification (full-data, coach-only, tryout-only) for fair comparisons
+- Percentile-based outlier exclusion (5th-95th) for time normalization
+- Flat ranking across all tiers for draft import (single sequence)
+- Upsert pattern for station scores prevents duplicate errors from mobile UI
 
-| Phase | Plans Complete | Status | Completed |
-|-------|---------------|--------|-----------|
-| 1. Evaluation Templates | 3/3 | Complete | 2026-01-30 |
-| 2. Coach Ratings | 3/3 | Complete | 2026-01-31 |
-| 3. Tryout Day Scoring | 4/4 | Complete | 2026-01-30 |
-| 4. Composite Scoring | 2/2 | Complete | 2026-01-30 |
-| 5. Draft Integration | 2/2 | Complete | 2026-01-31 |
+**Issues Resolved:**
+- Duplicate player name blocking changed to warn-then-allow with confirmation dialog (gap closure 02-03)
+- Progress dashboard drill-down added for player-level visibility (gap closure 03-04)
+- Zod v4 compatibility resolved (identical API to v3)
+- zodResolver type cast needed for ZodEffects input/output mismatch
+
+**Issues Deferred:**
+- None
+
+**Technical Debt Incurred:**
+- SeasonPlayerImport uses hardcoded 50/50 blend weights instead of reading season.template.blendWeights (defer to v2)
 
 ---
-*Roadmap created: 2026-01-29*
-*Last updated: 2026-01-31*
+*For current project status, see .planning/ROADMAP.md*

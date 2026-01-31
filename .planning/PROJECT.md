@@ -2,7 +2,7 @@
 
 ## What This Is
 
-A structured evaluation system for Little League baseball that replaces spreadsheet-based player scoring with an in-app workflow. League admins configure evaluation templates, coaches submit end-of-season player ratings, volunteers score players at tryout-day stations (via mobile or bulk entry), and the system produces a weighted composite score that feeds directly into the existing draft flow.
+A structured evaluation system for Little League baseball that replaces spreadsheet-based player scoring with an in-app workflow. League admins configure evaluation templates, coaches submit end-of-season player ratings, volunteers score players at tryout-day stations via mobile browser or bulk entry, and the system produces a weighted composite score that feeds directly into the existing draft flow — with admin review and approval before scores enter draft configuration.
 
 ## Core Value
 
@@ -20,58 +20,80 @@ Every player has a fair, data-driven composite score at draft time — whether t
 - ✓ Session-based auth with role-based league membership (admin/member) — existing
 - ✓ Team Builder for league-generated divisions — existing
 - ✓ Score normalization and weighted aggregation — existing
+- ✓ League admins can configure evaluation templates (stations, categories, scoring scales) — v1
+- ✓ Evaluation templates support both tryout stations (objective: times, counts) and coach review categories (subjective: 1-5 ratings) — v1
+- ✓ Coach review categories include physical skills plus soft skills (baseball IQ, hustle, coachability) — v1
+- ✓ Templates are versioned so historical scores remain valid — v1
+- ✓ Templates scoped to league/organization — v1
+- ✓ Coaches can submit end-of-season ratings for players on their roster — v1
+- ✓ Coach rating form uses template categories with draft/submit workflow — v1
+- ✓ Admin can view coach rating submission progress — v1
+- ✓ Volunteers can score players at tryout stations via mobile browser in real-time — v1
+- ✓ Mobile-first scoring UI with bib numpad lookup, auto-advance, 48px+ touch targets — v1
+- ✓ Admin can bulk-enter station scores from paper sheets via spreadsheet grid — v1
+- ✓ Players organized into groups with station rotation management — v1
+- ✓ Tryout progress dashboard with player-level drill-down — v1
+- ✓ Scorer identity tracked for accountability — v1
+- ✓ Weighted composite scoring blending coach ratings and tryout evaluations — v1
+- ✓ Admin-configurable blend weights with live preview — v1
+- ✓ Score normalization across different types (scales, times, counts) — v1
+- ✓ DNE handling: coach-rating-only scoring for missed tryouts — v1
+- ✓ Player evaluation history visible (coach rating + tryout + composite breakdown) — v1
+- ✓ Composite scores feed into draft flow as primary scoring source — v1
+- ✓ Existing CSV/Excel import unchanged as alternative — v1
+- ✓ Admin review and approval before evaluation scores enter draft — v1
 
 ### Active
 
-- [ ] League admins can configure evaluation templates (stations, categories, scoring scales)
-- [ ] Evaluation templates support both tryout stations (objective: times, counts) and coach review categories (subjective: 1-5 ratings)
-- [ ] Coach review categories include physical skills (fielding, hitting, running, pitching) plus soft skills (baseball IQ, hustle, coachability)
-- [ ] Coaches can submit end-of-season ratings for players on their roster
-- [ ] End-of-season ratings persist at the player/league level across seasons
-- [ ] Tryout-day evaluations: volunteers can score players at stations via mobile device in real-time
-- [ ] Tryout-day evaluations: admins can bulk-enter station scores as a fallback
-- [ ] Players are organized into groups (15-20) that rotate through stations
-- [ ] Tryout stations: Infield (3 ground balls), Base Running (timed 2x120ft), Fly Balls (3 catches), Pitching (3 pitches — velocity, accuracy, form), Hitting (5 pitches from machine)
-- [ ] League admins configure blending weights (how much coach rating vs tryout score contributes to composite)
-- [ ] Composite score is a weighted blend of end-of-season coach rating + tryout evaluation
-- [ ] Players who miss tryouts still have a score based on their coach rating alone
-- [ ] Composite scores feed into the existing draft flow (replacing/supplementing CSV import path)
-- [ ] Player evaluation history visible (coach rating baseline, tryout scores, composite)
+(None — define for next milestone via `/gsd:new-milestone`)
 
 ### Out of Scope
 
-- Anonymous/unauthenticated volunteer scoring via public link — all scorers need accounts (coaches + admins only)
-- Real-time live leaderboard during tryouts — scores are entered, not displayed competitively
-- Video capture or replay at stations — evaluations are numeric scores only
-- Parent/player-facing evaluation portal — evaluations are admin/coach-facing only
-- Automated pitch speed detection — velocity is manually entered by the scorer
+- Anonymous/unauthenticated volunteer scoring — all scorers need accounts for data integrity
+- Real-time leaderboard during tryouts — creates pressure, parent complaints
+- Parent/player-facing evaluation portal — opens door to disputes
+- Video capture at stations — storage/bandwidth, legal issues with minors
+- Automated pitch speed detection — hardware integration too fragile
+- Native mobile app — phone browser with mobile-first UX is sufficient
+- Free-text comments per player — unsearchable, unweightable, legal risk
+- Multi-evaluator consensus scoring — most leagues don't have enough volunteers
+- Offline mode — real-time is sufficient for tryout day (venue has connectivity)
 
 ## Context
 
-- Existing app has a mature import pipeline (CSV, Excel, Dual CSV) that produces scored players for the draft. The evaluation system provides a structured alternative to that import path.
-- Current pain point: evaluations happen on paper at tryout day, then a volunteer manually transcribes into a spreadsheet, which is then imported. Errors accumulate at each handoff.
-- End-of-season coach ratings have been attempted via multi-tab spreadsheets sent to coaches, but there's no way to reincorporate that data into the next season. Ratings effectively get lost.
-- The app already has score normalization (`scoreNormalization.ts`) and weighted aggregation (`scoreCalculation.ts`) — the composite blending can build on these patterns.
-- Players already have component scores and a total score. The evaluation system needs to feed into this same structure.
-- Bib numbers are assigned at registration and used to identify players at tryout stations.
+Shipped v1 Evaluation System with ~7,600 LOC TypeScript + Python across 42 code files.
+Tech stack: React/TypeScript frontend, Django/PostgreSQL backend.
+Frontend: react-hook-form + Zod v4 for form validation, react-datasheet-grid for bulk entry.
+Evaluation models are Organization-scoped (not Division-scoped) since players are evaluated before division assignment.
+Three-tier composite classification (full-data, coach-only, tryout-only) prevents unfair comparisons.
+
+Known tech debt: SeasonPlayerImport uses hardcoded 50/50 blend weights instead of reading template defaults.
+
+## Key Decisions
+
+| Decision | Rationale | Outcome |
+|----------|-----------|---------|
+| Configurable evaluation templates per league | Different leagues evaluate differently; one fixed structure won't work | ✓ Good |
+| Coach + admin accounts required for scoring | Simpler auth model, data integrity; volunteers coached through by admins | ✓ Good |
+| Weighted blend controlled by league admin | Different divisions/leagues may weight coach ratings vs tryouts differently | ✓ Good |
+| Mobile-first station scoring with bulk entry fallback | Ideal is real-time mobile entry, but paper-then-bulk-entry must remain viable | ✓ Good |
+| Organization-scoped evaluation models | Players are evaluated before division assignment | ✓ Good |
+| JSONField for template definitions | Flexible schema, matches existing codebase patterns | ✓ Good |
+| Copy-on-write template versioning | Cannot retrofit later; built from Phase 1 | ✓ Good |
+| Name-based player identity in CoachRating | Ratings happen pre-draft before Player records exist | ✓ Good |
+| Relational score records per station | Avoids concurrent write conflicts on flat Player fields | ✓ Good |
+| Three-tier composite classification | Fair comparisons between full-data, coach-only, tryout-only players | ✓ Good |
+| Percentile-based outlier exclusion for normalization | Prevents single outlier from compressing score distribution | ✓ Good |
+| Flat ranking across tiers for draft import | Single sequence simplifies draft integration | ✓ Good |
+| Upsert pattern for station scores | Prevents duplicate errors from mobile UI retries | ✓ Good |
 
 ## Constraints
 
 - **Tech stack**: React/TypeScript frontend, Django/PostgreSQL backend — must use existing stack
 - **Auth model**: Coaches and admins must have accounts; no anonymous/public scoring links
 - **Mobile UX**: Tryout-day station scoring must work well on phone browsers (not a native app)
-- **Backwards compatibility**: Existing CSV/Excel import must continue to work alongside the new evaluation system
+- **Backwards compatibility**: Existing CSV/Excel import must continue to work alongside evaluation system
 - **Multi-tenancy**: Evaluation templates and data are scoped to leagues (organizations)
 
-## Key Decisions
-
-| Decision | Rationale | Outcome |
-|----------|-----------|---------|
-| Configurable evaluation templates per league | Different leagues evaluate differently; one fixed structure won't work | — Pending |
-| Coach + admin accounts required for scoring | Simpler auth model, data integrity; volunteers at stations are coached through by admins | — Pending |
-| Weighted blend controlled by league admin | Different divisions/leagues may weight coach ratings vs tryouts differently | — Pending |
-| Mobile-first station scoring with bulk entry fallback | Ideal is real-time mobile entry, but paper-then-bulk-entry must remain viable | — Pending |
-| End-of-season ratings persist at player/league level | Enables cross-season continuity; coach rating becomes baseline for next year | — Pending |
-
 ---
-*Last updated: 2026-01-29 after initialization*
+*Last updated: 2026-01-30 after v1 milestone*
