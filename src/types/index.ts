@@ -904,6 +904,57 @@ export interface CompositeScoresResponse {
   };
 }
 
+// Evaluation-to-Draft Import Types
+export interface CompositeExportPlayerData {
+  bib: string;
+  firstName: string;
+  lastName: string;
+  name: string;
+  fieldScore: number;
+  throwScore: number;
+  hitPower: number;
+  hitForm: number;
+  hitContact: number;
+  pitchingStrength: number;
+  pitchingForm: number;
+  catchScore: number;
+  runningScore: number;
+  fieldingSubtotal: number;
+  hittingSubtotal: number;
+  pitchingSubtotal: number;
+  subjectiveTotal: number;
+  objectiveTotal: number;
+  officialAdjust: number;
+  totalScore: number;
+  rank: number;
+  projectedRound: number;
+  littleLeagueAge: number;
+  birthday: string;
+  isAllStar: boolean;
+  isDNE: boolean;
+  isCoachKid: boolean;
+  coachTeamId: string | null;
+  sibling: string;
+  siblingId: string | null;
+  isDrafted: boolean;
+  // Evaluation metadata (for preview, not persisted to Player model)
+  tier: CompositeDataTier;
+  coachAggregate: number | null;
+  tryoutAggregate: number | null;
+  isPartialTryout: boolean;
+}
+
+export interface CompositeExportResponse {
+  players: CompositeExportPlayerData[];
+  seasonName: string;
+  playerCount: number;
+  tierCounts: {
+    full: number;
+    coachOnly: number;
+    tryoutOnly: number;
+  };
+}
+
 // Helper to create initial division state
 export function createInitialDivision(
   id: string,

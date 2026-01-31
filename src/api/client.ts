@@ -702,6 +702,58 @@ function transformCompositeWeightsToApi(weights: import('../types').CompositeWei
   return result;
 }
 
+function transformCompositeExportFromApi(data: Record<string, unknown>): import('../types').CompositeExportResponse {
+  const players = (data.players as Record<string, unknown>[]).map((p) => ({
+    bib: p.bib as string,
+    firstName: p.first_name as string,
+    lastName: p.last_name as string,
+    name: p.name as string,
+    fieldScore: p.field_score as number,
+    throwScore: p.throw_score as number,
+    hitPower: p.hit_power as number,
+    hitForm: p.hit_form as number,
+    hitContact: p.hit_contact as number,
+    pitchingStrength: p.pitching_strength as number,
+    pitchingForm: p.pitching_form as number,
+    catchScore: p.catch_score as number,
+    runningScore: p.running_score as number,
+    fieldingSubtotal: p.fielding_subtotal as number,
+    hittingSubtotal: p.hitting_subtotal as number,
+    pitchingSubtotal: p.pitching_subtotal as number,
+    subjectiveTotal: p.subjective_total as number,
+    objectiveTotal: p.objective_total as number,
+    officialAdjust: p.official_adjust as number,
+    totalScore: p.total_score as number,
+    rank: p.rank as number,
+    projectedRound: p.projected_round as number,
+    littleLeagueAge: p.little_league_age as number,
+    birthday: p.birthday as string,
+    isAllStar: p.is_all_star as boolean,
+    isDNE: p.is_dne as boolean,
+    isCoachKid: p.is_coach_kid as boolean,
+    coachTeamId: p.coach_team_id as string | null,
+    sibling: p.sibling as string,
+    siblingId: p.sibling_id as string | null,
+    isDrafted: p.is_drafted as boolean,
+    tier: p.tier as import('../types').CompositeDataTier,
+    coachAggregate: p.coach_aggregate as number | null,
+    tryoutAggregate: p.tryout_aggregate as number | null,
+    isPartialTryout: p.is_partial_tryout as boolean,
+  }));
+
+  const tierCounts = data.tier_counts as Record<string, number>;
+  return {
+    players,
+    seasonName: data.season_name as string,
+    playerCount: data.player_count as number,
+    tierCounts: {
+      full: tierCounts.full || 0,
+      coachOnly: tierCounts.coach_only || 0,
+      tryoutOnly: tierCounts.tryout_only || 0,
+    },
+  };
+}
+
 // -----------------------------------------------------------------------------
 // API Error Handling
 // -----------------------------------------------------------------------------
@@ -2066,6 +2118,28 @@ export const api = {
         }),
       }
     );
+  },
+
+  async exportCompositeForDraft(
+    seasonId: string,
+    weights: import('../types').CompositeWeights,
+    teamCount: number
+  ): Promise<import('../types').CompositeExportResponse> {
+    const response = await fetchWithCSRFRetry(
+      `${API_BASE_URL}/seasons/${seasonId}/composite-scores/export-for-draft/`,
+      {
+        ...getDefaultOptions('POST'),
+        method: 'POST',
+        body: JSON.stringify({
+          coach_rating: weights.coachRating,
+          tryout_score: weights.tryoutScore,
+          ...(weights.stationWeights ? { station_weights: weights.stationWeights } : {}),
+          team_count: teamCount,
+        }),
+      }
+    );
+    const data = await handleResponse<Record<string, unknown>>(response);
+    return transformCompositeExportFromApi(data);
   },
 };
 
