@@ -1,9 +1,9 @@
 ---
-status: complete
+status: diagnosed
 phase: 02-coach-ratings
 source: 02-01-SUMMARY.md, 02-02-SUMMARY.md
 started: 2026-01-29T22:00:00Z
-updated: 2026-01-30T18:10:00Z
+updated: 2026-01-30T18:15:00Z
 ---
 
 ## Current Test
@@ -65,7 +65,20 @@ skipped: 0
   reason: "User reported: we should not prevent, we should only warn. some kids have same names, they would get a unique bib ID and ID in the system."
   severity: major
   test: 7
-  root_cause: ""
-  artifacts: []
-  missing: []
-  debug_session: ""
+  root_cause: "Three-layer blocking: (1) Backend view returns 409 Conflict on case-insensitive name match (server/draft/views/coach_ratings.py:60-70), (2) Database UniqueConstraint on (season, coach, player_first_name, player_last_name) in CoachRating.Meta (server/draft/models.py:854-859), (3) Frontend hook catches 409 as generic error without surfacing duplicate context (src/hooks/useCoachRatings.ts:25-42)"
+  artifacts:
+    - path: "server/draft/views/coach_ratings.py"
+      issue: "Returns 409 blocking response on duplicate name match (lines 60-70)"
+    - path: "server/draft/models.py"
+      issue: "UniqueConstraint on (season, coach, player_first_name, player_last_name) prevents DB insert (lines 854-859)"
+    - path: "server/draft/migrations/0008_coach_ratings.py"
+      issue: "Migration creating the unique constraint"
+    - path: "src/hooks/useCoachRatings.ts"
+      issue: "Generic error handling doesn't distinguish 409 from other errors (lines 25-42)"
+    - path: "src/components/coachRatings/CoachRosterList.tsx"
+      issue: "No duplicate warning UI exists"
+  missing:
+    - "Remove UniqueConstraint from CoachRating model, create migration"
+    - "Change backend view from 409 block to warning response with duplicate info"
+    - "Add frontend confirmation dialog when duplicate name detected"
+    - "Pass force flag to backend to proceed after user confirms"
