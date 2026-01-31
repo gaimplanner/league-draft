@@ -46,11 +46,12 @@ Plans:
   2. Coach ratings include soft-skill categories (baseball IQ, hustle, coachability) rendered from the template alongside physical skill categories
   3. A coach can save an in-progress rating and return later to complete it before final submission
   4. An admin can view a dashboard showing which coaches have submitted ratings and which are still pending, with submitted/total counts per coach
-**Plans**: 2 plans
+**Plans**: 3 plans (2 original + 1 gap closure)
 
 Plans:
 - [x] 02-01-PLAN.md -- Backend: CoachRating model, migration, validators, transformers, CRUD views with draft/submit workflow, admin progress endpoint, URL routing
 - [x] 02-02-PLAN.md -- Frontend: TypeScript types, API client, hooks, Zod schema, rating form with template-driven categories, coach roster list, admin dashboard, App.tsx integration
+- [ ] 02-03-PLAN.md -- Gap closure: Change duplicate player name from block (409) to warn-then-allow with confirmation dialog
 
 ### Phase 3: Tryout Day Scoring
 **Goal**: Volunteers can score players at tryout stations in real-time via mobile browser, with bib-based player lookup, group rotation management, and a bulk-entry fallback for paper-based scoring -- all with scorer identity tracked for accountability.
@@ -109,11 +110,11 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | Phase | Plans Complete | Status | Completed |
 |-------|---------------|--------|-----------|
 | 1. Evaluation Templates | 3/3 | Complete | 2026-01-30 |
-| 2. Coach Ratings | 2/2 | Complete | 2026-01-30 |
+| 2. Coach Ratings | 2/3 | UAT gap closure | - |
 | 3. Tryout Day Scoring | 4/4 | Complete | 2026-01-30 |
 | 4. Composite Scoring | 2/2 | Complete | 2026-01-30 |
 | 5. Draft Integration | 2/2 | Complete | 2026-01-31 |
 
 ---
 *Roadmap created: 2026-01-29*
-*Last updated: 2026-01-31*
+*Last updated: 2026-01-30*
