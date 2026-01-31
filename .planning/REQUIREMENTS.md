@@ -41,9 +41,9 @@
 
 ### Draft Integration
 
-- [ ] **DRAFT-01**: Composite scores feed into the existing draft flow as the primary scoring source
-- [ ] **DRAFT-02**: Existing CSV/Excel import continues to work as a secondary/alternative import path
-- [ ] **DRAFT-03**: Admin reviews and approves evaluation-based rankings before they flow into draft configuration
+- [x] **DRAFT-01**: Composite scores feed into the existing draft flow as the primary scoring source
+- [x] **DRAFT-02**: Existing CSV/Excel import continues to work as a secondary/alternative import path
+- [x] **DRAFT-03**: Admin reviews and approves evaluation-based rankings before they flow into draft configuration
 
 ## v2 Requirements
 
@@ -105,9 +105,9 @@
 | COMP-03 | Phase 4 | Complete |
 | COMP-04 | Phase 4 | Complete |
 | COMP-05 | Phase 4 | Complete |
-| DRAFT-01 | Phase 5 | Pending |
-| DRAFT-02 | Phase 5 | Pending |
-| DRAFT-03 | Phase 5 | Pending |
+| DRAFT-01 | Phase 5 | Complete |
+| DRAFT-02 | Phase 5 | Complete |
+| DRAFT-03 | Phase 5 | Complete |
 
 **Coverage:**
 - v1 requirements: 25 total
@@ -116,4 +116,4 @@
 
 ---
 *Requirements defined: 2026-01-29*
-*Last updated: 2026-01-31 after Phase 4 completion*
+*Last updated: 2026-01-31 after Phase 5 completion*

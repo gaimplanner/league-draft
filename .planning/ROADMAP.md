@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Coach Ratings** - End-of-season coach rating submission with template-driven forms and progress tracking
 - [x] **Phase 3: Tryout Day Scoring** - Mobile-first station scoring with bib lookup, groups, bulk fallback, and progress monitoring
 - [x] **Phase 4: Composite Scoring** - Weighted blending of coach ratings and tryout scores with normalization and DNE handling
-- [ ] **Phase 5: Draft Integration** - Composite scores feed into the existing draft flow with admin approval gate
+- [x] **Phase 5: Draft Integration** - Composite scores feed into the existing draft flow with admin approval gate
 
 ## Phase Details
 
@@ -98,8 +98,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 05-01-PLAN.md -- Backend export endpoint, frontend types/API client/mapper for composite-to-Player transformation
-- [ ] 05-02-PLAN.md -- Extend ImportTypeSelector, SeasonPlayerImport component (season select + preview + approve), App.tsx integration
+- [x] 05-01-PLAN.md -- Backend export endpoint, frontend types/API client/mapper for composite-to-Player transformation
+- [x] 05-02-PLAN.md -- Extend ImportTypeSelector, SeasonPlayerImport component (season select + preview + approve), App.tsx integration
 
 ## Progress
 
@@ -112,7 +112,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | 2. Coach Ratings | 2/2 | Complete | 2026-01-30 |
 | 3. Tryout Day Scoring | 4/4 | Complete | 2026-01-30 |
 | 4. Composite Scoring | 2/2 | Complete | 2026-01-30 |
-| 5. Draft Integration | 0/2 | Not started | - |
+| 5. Draft Integration | 2/2 | Complete | 2026-01-31 |
 
 ---
 *Roadmap created: 2026-01-29*
