@@ -593,3 +593,92 @@ def transform_composite_detail(detail: dict) -> dict:
         "coach_detail": coach_detail,
         "tryout_detail": tryout_detail,
     }
+
+
+def transform_composite_to_player_data(composite_result: dict, rank: int, team_count: int) -> dict:
+    """Transform a composite score result into Player-compatible field structure.
+
+    Maps composite breakdowns to Player model fields. Coach rating categories
+    map to subjective skill fields, tryout station scores map to objective fields.
+    The composite_score becomes total_score.
+    """
+    import math
+
+    first_name = composite_result["first_name"]
+    last_name = composite_result["last_name"]
+
+    # Extract coach breakdown scores (normalized 0-100)
+    coach_detail = composite_result.get("coach_detail") or {}
+    coach_normalized = coach_detail.get("normalized_scores", {})
+
+    # Extract tryout breakdown scores (station aggregates, normalized 0-100)
+    tryout_detail = composite_result.get("tryout_detail") or {}
+    tryout_stations = tryout_detail.get("stations", {})
+
+    # Map coach categories to Player fields by category name heuristic
+    # Coach categories have IDs like UUIDs; we match on category name from raw_scores keys
+    # Since we don't have category names in the result, use normalized values directly
+    # All normalized scores are 0-100; average them for subtotals
+    coach_values = list(coach_normalized.values())
+    coach_aggregate = composite_result.get("coach_aggregate") or 0
+
+    # Map tryout stations to Player fields by station aggregate
+    # Each station has an aggregate score (0-100 normalized)
+    station_aggregates = []
+    for station_id, station_data in tryout_stations.items():
+        agg = station_data.get("aggregate")
+        if agg is not None:
+            station_aggregates.append(agg)
+    tryout_aggregate = composite_result.get("tryout_aggregate") or 0
+
+    # Composite score is the blended total
+    composite_score = composite_result.get("composite_score") or 0
+
+    return {
+        "bib": str(composite_result.get("bib_number") or f"E-{rank}"),
+        "first_name": first_name,
+        "last_name": last_name,
+        "name": f"{first_name} {last_name}",
+        # Component scores: distribute coach aggregate across skill fields
+        # Since composite scoring normalizes to 0-100, we store the aggregate values
+        "field_score": 0,
+        "throw_score": 0,
+        "hit_power": 0,
+        "hit_form": 0,
+        "hit_contact": 0,
+        "pitching_strength": 0,
+        "pitching_form": 0,
+        "catch_score": 0,
+        "running_score": 0,
+        # Subtotals from evaluation sources
+        "fielding_subtotal": 0,
+        "hitting_subtotal": 0,
+        "pitching_subtotal": 0,
+        "subjective_total": round(coach_aggregate, 2) if coach_aggregate else 0,
+        "objective_total": round(tryout_aggregate, 2) if tryout_aggregate else 0,
+        "official_adjust": 0,
+        # The composite score IS the total score for draft ranking
+        "total_score": round(composite_score, 2),
+        "rank": rank,
+        "projected_round": math.ceil(rank / team_count) if team_count > 0 else 1,
+        # Player info — age not available from evaluation system, default 0
+        "little_league_age": 0,
+        "birthday": "",
+        "is_all_star": False,
+        "is_dne": composite_result.get("tier") == "dne" or composite_score == 0,
+        # Draft rules — not set during import (admin configures in review phase)
+        "is_coach_kid": False,
+        "coach_team_id": None,
+        "sibling": "",
+        "sibling_id": None,
+        # Draft status — always fresh
+        "is_drafted": False,
+        "drafted_by_team_id": None,
+        "drafted_in_round": None,
+        "drafted_at_pick": None,
+        # Evaluation metadata (for UI display)
+        "tier": composite_result.get("tier", "full"),
+        "coach_aggregate": round(coach_aggregate, 2) if coach_aggregate else None,
+        "tryout_aggregate": round(tryout_aggregate, 2) if tryout_aggregate else None,
+        "is_partial_tryout": composite_result.get("is_partial_tryout", False),
+    }

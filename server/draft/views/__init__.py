@@ -90,6 +90,7 @@ from .composite import (
     composite_scores_list,
     composite_score_detail,
     composite_score_promote,
+    composite_scores_export_for_draft,
 )
 
 __all__ = [
@@ -169,4 +170,5 @@ __all__ = [
     "composite_scores_list",
     "composite_score_detail",
     "composite_score_promote",
+    "composite_scores_export_for_draft",
 ]
