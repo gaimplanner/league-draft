@@ -1,5 +1,6 @@
 export { EvaluationImport } from './EvaluationImport';
 export { ImportTypeSelector } from './ImportTypeSelector';
+export { SeasonPlayerImport } from './SeasonPlayerImport';
 export { WorkbookUpload } from './WorkbookUpload';
 export { TabOverview } from './TabOverview';
 export { FieldWeightSliders } from './FieldWeightSliders';

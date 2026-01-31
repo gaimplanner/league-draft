@@ -1,12 +1,13 @@
-import { FileSpreadsheet, FileText, Users } from 'lucide-react';
+import { FileSpreadsheet, FileText, Users, TrendingUp } from 'lucide-react';
 
 interface ImportTypeSelectorProps {
   onSelectCSV: () => void;
   onSelectExcel: () => void;
   onSelectDualCSV?: () => void;
+  onSelectEvaluation?: () => void;
 }
 
-export function ImportTypeSelector({ onSelectCSV, onSelectExcel, onSelectDualCSV }: ImportTypeSelectorProps) {
+export function ImportTypeSelector({ onSelectCSV, onSelectExcel, onSelectDualCSV, onSelectEvaluation }: ImportTypeSelectorProps) {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center p-4">
       <div className="max-w-4xl w-full">
@@ -93,6 +94,33 @@ export function ImportTypeSelector({ onSelectCSV, onSelectExcel, onSelectDualCSV
                 <li>• Verify paid/registered</li>
                 <li>• Exclude non-registered</li>
                 <li>• Flag DNE players</li>
+              </ul>
+            </button>
+          )}
+
+          {/* Evaluation-based Import (From Composite Scores) */}
+          {onSelectEvaluation && (
+            <button
+              onClick={onSelectEvaluation}
+              className="bg-white dark:bg-gray-800 rounded-lg p-6 border-2 border-gray-200 dark:border-gray-700 hover:border-indigo-500 dark:hover:border-indigo-500 transition-colors text-left group"
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-12 h-12 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center group-hover:bg-indigo-200 dark:group-hover:bg-indigo-900/50 transition-colors">
+                  <TrendingUp className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                    From Evaluations
+                  </h2>
+                </div>
+              </div>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                Import composite scores from a completed season.
+              </p>
+              <ul className="text-xs text-gray-500 dark:text-gray-500 space-y-1">
+                <li>• Pre-calculated composites</li>
+                <li>• Coach + tryout blended</li>
+                <li>• Admin-approved rankings</li>
               </ul>
             </button>
           )}
