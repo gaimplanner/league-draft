@@ -8,7 +8,7 @@ import { DivisionSelector } from './components/DivisionSelector';
 import { DivisionCreator } from './components/DivisionCreator';
 import { FileUpload } from './components/FileUpload';
 import { ColumnMapper } from './components/ColumnMapper';
-import { ImportTypeSelector, EvaluationImport } from './components/evaluation';
+import { ImportTypeSelector, EvaluationImport, SeasonPlayerImport } from './components/evaluation';
 import { CSVImportFlow, DualCSVImportResult } from './components/evaluation/CSVImportFlow';
 import { RegistrationCSVRecord } from './components/evaluation/DualCSVUpload';
 import { PlayerReview } from './components/PlayerReview';
@@ -93,7 +93,7 @@ function App() {
   }, []);
   const [mode, setMode] = useState<AppMode>('selector');
   const [csvData, setCSVData] = useState<ParsedCSVData | null>(null);
-  const [importMode, setImportMode] = useState<'csv' | 'excel' | 'dualcsv' | null>(null);
+  const [importMode, setImportMode] = useState<'csv' | 'excel' | 'dualcsv' | 'evaluation' | null>(null);
   // Dual CSV verification result - stores excluded rows, DNE players, and all registration records
   const [dualCSVVerification, setDualCSVVerification] = useState<{
     excludedRowIndices: Set<number>;
@@ -1163,7 +1163,7 @@ function App() {
                     <p className="text-sm text-gray-500 dark:text-gray-400 mb-4 text-center">
                       Or start fresh with new player data:
                     </p>
-                    <div className="grid grid-cols-3 gap-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                       <button
                         onClick={() => setImportMode('csv')}
                         className="px-4 py-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg hover:border-blue-500 dark:hover:border-blue-500 transition-colors text-gray-700 dark:text-gray-300 font-medium"
@@ -1182,6 +1182,12 @@ function App() {
                       >
                         Import Excel
                       </button>
+                      <button
+                        onClick={() => setImportMode('evaluation')}
+                        className="px-4 py-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg hover:border-indigo-500 dark:hover:border-indigo-500 transition-colors text-gray-700 dark:text-gray-300 font-medium"
+                      >
+                        From Evaluations
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -1194,6 +1200,7 @@ function App() {
                 onSelectCSV={() => setImportMode('csv')}
                 onSelectExcel={() => setImportMode('excel')}
                 onSelectDualCSV={() => setImportMode('dualcsv')}
+                onSelectEvaluation={() => setImportMode('evaluation')}
               />
             )}
 
@@ -1232,6 +1239,43 @@ function App() {
                   });
                   setImportMode(null);
                   setPhase('mapping');
+                }}
+                onCancel={() => setImportMode(null)}
+              />
+            )}
+
+            {/* Evaluation Import Flow (Composite Scores from Season) */}
+            {importMode === 'evaluation' && (
+              <SeasonPlayerImport
+                teamCount={activeDivision?.teamCount ?? 8}
+                onComplete={async (importedPlayers: Player[]) => {
+                  if (!activeDivision) return;
+
+                  // Save players to API (same pattern as handleMappingComplete)
+                  let updatedPlayers = [...importedPlayers];
+                  if (isApiMode()) {
+                    try {
+                      setIsSaving(true);
+                      const savedPlayers = await savePlayersToApi(activeDivision.id, updatedPlayers);
+                      updatedPlayers = savedPlayers;
+                    } catch (err) {
+                      console.error('Failed to save evaluation import to API:', err);
+                      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+                      alert(`Failed to save player data: ${errorMessage}\n\nPlease try again or check your network connection.`);
+                      return;
+                    } finally {
+                      setIsSaving(false);
+                    }
+                  }
+
+                  setAllPlayers(updatedPlayers);
+                  setPlayers(updatedPlayers);
+                  updateActiveDivision({
+                    players: updatedPlayers,
+                    rosterSize: Math.ceil(updatedPlayers.length / activeDivision.teamCount),
+                  });
+                  setImportMode(null);
+                  setPhase('review');
                 }}
                 onCancel={() => setImportMode(null)}
               />
