@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { Search, X, ChevronDown, ChevronUp, Lock, Users } from 'lucide-react';
 import { Player, Team } from '../../types';
 import { getTeamDisplayName } from '../../utils/teamUtils';
@@ -19,6 +19,12 @@ interface DraftBoardPlayerGridProps {
   maxPerAge: number;
   currentTeamAgeBreakdown: Record<string, number>;
   isPublicView: boolean;
+  // When provided, renders the Best-by-Age quick-pick strip above the search.
+  // Clicking a quick-pick defers to the scoreboard's pending-confirm flow in the parent.
+  onQuickPick?: (player: Player) => void;
+  // Called when a Draft click would push the team past the age limit.
+  // Parent routes this through the scoreboard confirmation banner instead of a browser dialog.
+  onAgeOverrideNeeded?: (player: Player, currentCount: number) => void;
 }
 
 type SortField = 'rank' | 'bib' | 'name' | 'age' | 'school' | 'allstar' | 'sibling' | 'team' | 'draftedRound' | 'round' | 'fielding' | 'hitting' | 'pitching' | 'catch' | 'running' | 'total';
@@ -36,11 +42,14 @@ export const DraftBoardPlayerGrid = ({
   maxPerAge,
   currentTeamAgeBreakdown,
   isPublicView,
+  onQuickPick,
+  onAgeOverrideNeeded,
 }: DraftBoardPlayerGridProps) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortField, setSortField] = useState<SortField>('rank');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [showAllPlayers, setShowAllPlayers] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Filter players based on showAllPlayers toggle
   const filteredPlayers = useMemo(() => {
@@ -164,6 +173,30 @@ export const DraftBoardPlayerGrid = ({
     });
   }, [filteredPlayers, sortField, sortDirection, teams, players]);
 
+  // Best-by-Age quick picks: top 2 eligible per age, by score.
+  // Excludes drafted players and those locked to other teams (coach kids / siblings).
+  const bestByAge = useMemo(() => {
+    if (!onQuickPick) return [];
+    const byAge: Record<number, Player[]> = {};
+    players.forEach((player) => {
+      if (player.isDrafted) return;
+      const isCoachKidForOther = player.isCoachKid && player.coachTeamId && player.coachTeamId !== currentTeamId;
+      const isSiblingLockedToOther = player.lockedToTeamId && player.lockedToTeamId !== currentTeamId;
+      if (isCoachKidForOther || isSiblingLockedToOther) return;
+      const age = player.littleLeagueAge;
+      if (!byAge[age]) byAge[age] = [];
+      byAge[age].push(player);
+    });
+    return Object.keys(byAge)
+      .map(Number)
+      .sort((a, b) => a - b)
+      .map((age) => ({
+        age,
+        players: byAge[age].sort((a, b) => b.totalScore - a.totalScore).slice(0, 2),
+      }))
+      .filter((group) => group.players.length > 0);
+  }, [players, currentTeamId, onQuickPick]);
+
   const handleSort = (field: SortField) => {
     if (sortField === field) {
       setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
@@ -186,15 +219,12 @@ export const DraftBoardPlayerGrid = ({
   );
 
   const isPlayerRestricted = (player: Player) => {
-    // Already drafted
     if (player.isDrafted) return true;
 
-    // Coach's kid for another team
     const isCoachKidForOtherTeam = player.isCoachKid &&
       player.coachTeamId &&
       player.coachTeamId !== currentTeamId;
 
-    // Sibling locked to another team
     const isSiblingLockedToOtherTeam = player.lockedToTeamId &&
       player.lockedToTeamId !== currentTeamId;
 
@@ -209,16 +239,75 @@ export const DraftBoardPlayerGrid = ({
   };
 
   const handleDraft = (player: Player) => {
-    if (isPlayerAgeMaxed(player)) {
+    if (isPlayerAgeMaxed(player) && onAgeOverrideNeeded) {
       const currentCount = currentTeamAgeBreakdown[player.littleLeagueAge] || 0;
-      if (!window.confirm(
-        `Warning: Team already has ${currentCount} players age ${player.littleLeagueAge} (limit: ${maxPerAge}). Continue anyway?`
-      )) {
-        return;
-      }
+      onAgeOverrideNeeded(player, currentCount);
+      return;
     }
     onDraftPlayer(player.id);
   };
+
+  // Global keyboard shortcuts scoped to the drawer:
+  // `/` focuses search, `Esc` clears it, `Enter` drafts the top eligible player
+  // when nothing is typing. Skips when DraftBoard has already claimed the event.
+  useEffect(() => {
+    if (isPublicView) return;
+
+    const handler = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
+
+      const target = e.target as HTMLElement | null;
+      const isTyping =
+        !!target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable);
+
+      if (e.key === '/' && !isTyping) {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+        return;
+      }
+
+      if (
+        e.key === 'Escape' &&
+        searchTerm &&
+        document.activeElement === searchInputRef.current
+      ) {
+        e.preventDefault();
+        setSearchTerm('');
+        return;
+      }
+
+      if (e.key === 'Enter' && !isTyping && onQuickPick && !mandatoryPick) {
+        const top = sortedPlayers.find((p) => !isPlayerRestricted(p));
+        if (top) {
+          e.preventDefault();
+          if (isPlayerAgeMaxed(top) && onAgeOverrideNeeded) {
+            onAgeOverrideNeeded(top, currentTeamAgeBreakdown[top.littleLeagueAge] || 0);
+          } else {
+            onQuickPick(top);
+          }
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    isPublicView,
+    searchTerm,
+    onQuickPick,
+    onAgeOverrideNeeded,
+    mandatoryPick,
+    sortedPlayers,
+    currentTeamId,
+    enforceAgeLimit,
+    maxPerAge,
+    currentTeamAgeBreakdown,
+  ]);
 
   // Calculate column count for empty state
   const getColumnCount = () => {
@@ -231,26 +320,70 @@ export const DraftBoardPlayerGrid = ({
 
   const availableCount = players.filter(p => !p.isDrafted).length;
 
+  // Shared <th> class for sortable columns — keeps the header voice consistent.
+  const thSortable = 'px-2 py-2 text-xs font-semibold uppercase tracking-label text-ink-muted cursor-pointer hover:text-ink hover:bg-surface-3 transition-colors';
+
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+    <div className="bg-surface border border-rule rounded-sharp">
+      {/* Best-by-Age quick-pick strip (only when scoreboard is in on-deck mode) */}
+      {bestByAge.length > 0 && (
+        <div className="px-4 py-3 border-b border-rule bg-surface-2">
+          <div className="flex items-center gap-4 overflow-x-auto">
+            <div className="flex flex-col flex-shrink-0 pr-2">
+              <span className="font-mono text-[10px] uppercase tracking-label text-ink-faint">Quick pick</span>
+              <span className="font-mono text-[10px] uppercase tracking-label text-ink-muted">Best by age</span>
+            </div>
+            {bestByAge.map(({ age, players: ageGroup }, groupIdx) => (
+              <div
+                key={age}
+                className={`flex items-center gap-1.5 flex-shrink-0 ${
+                  groupIdx === 0 ? '' : 'border-l border-rule pl-4'
+                }`}
+              >
+                <span className="font-mono text-[11px] tabular-nums text-ink-faint w-5 text-right">
+                  {age}
+                </span>
+                {ageGroup.map((player) => (
+                  <button
+                    key={player.id}
+                    onClick={() => onQuickPick?.(player)}
+                    disabled={isLoading}
+                    className="group flex items-center gap-2 px-2 py-1 rounded-sharp border border-rule hover:border-brand hover:bg-brand-soft text-xs font-medium text-ink disabled:opacity-50 transition-colors"
+                    title={`Draft ${player.firstName} ${player.lastName} (${player.totalScore.toFixed(1)} pts)`}
+                  >
+                    <span>{player.firstName} {player.lastName.charAt(0)}.</span>
+                    <span className="font-mono text-[10px] tabular-nums text-ink-muted group-hover:text-ink">
+                      {player.totalScore.toFixed(1)}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Search Header */}
-      <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+      <div className="p-4 border-b border-rule">
         <div className="flex items-center gap-4">
           <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-ink-faint" />
             <input
+              ref={searchInputRef}
               type="text"
-              placeholder="Search by name or BIB..."
+              aria-label="Search players by name or BIB. Press slash to focus search."
+              placeholder="Search by name or BIB · press /"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-8 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+              className="w-full pl-10 pr-8 py-2 border border-rule rounded-sharp bg-surface text-ink text-sm placeholder:text-ink-faint focus:outline-none focus:border-ink transition-colors"
             />
             {searchTerm && (
               <button
                 onClick={() => setSearchTerm('')}
                 className="absolute right-3 top-1/2 transform -translate-y-1/2"
+                title="Clear search"
               >
-                <X className="w-4 h-4 text-gray-400 hover:text-gray-600" />
+                <X className="w-4 h-4 text-ink-faint hover:text-ink" />
               </button>
             )}
           </div>
@@ -258,20 +391,20 @@ export const DraftBoardPlayerGrid = ({
           {/* Show All Toggle */}
           <button
             onClick={() => setShowAllPlayers(!showAllPlayers)}
-            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+            className={`flex items-center gap-2 px-3 py-2 rounded-sharp text-xs font-semibold uppercase tracking-button transition-colors ${
               showAllPlayers
-                ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-                : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
+                ? 'bg-ink text-surface'
+                : 'border border-rule text-ink-muted hover:text-ink hover:border-rule-strong'
             }`}
             title={showAllPlayers ? 'Showing all players' : 'Showing available only'}
           >
-            <Users className="w-4 h-4" />
-            <span className="hidden sm:inline">{showAllPlayers ? 'All Players' : 'Available Only'}</span>
+            <Users className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">{showAllPlayers ? 'All players' : 'Available only'}</span>
           </button>
 
-          <span className="text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
+          <span className="font-mono text-[11px] uppercase tracking-label text-ink-muted whitespace-nowrap">
             {showAllPlayers
-              ? `${sortedPlayers.length} players (${availableCount} available)`
+              ? `${sortedPlayers.length} players · ${availableCount} available`
               : `${sortedPlayers.length} available`
             }
           </span>
@@ -282,10 +415,10 @@ export const DraftBoardPlayerGrid = ({
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-600">
+            <tr className="bg-surface-2 border-b border-rule">
               <th
                 onClick={() => handleSort('round')}
-                className="px-2 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-300 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 w-16"
+                className={`${thSortable} text-center w-16`}
                 title="Projected Round"
               >
                 Proj<SortIndicator field="round" />
@@ -293,7 +426,7 @@ export const DraftBoardPlayerGrid = ({
               {showAllPlayers && (
                 <th
                   onClick={() => handleSort('draftedRound')}
-                  className="px-2 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-300 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 w-14"
+                  className={`${thSortable} text-center w-14`}
                   title="Round Drafted"
                 >
                   Drafted<SortIndicator field="draftedRound" />
@@ -301,44 +434,44 @@ export const DraftBoardPlayerGrid = ({
               )}
               <th
                 onClick={() => handleSort('rank')}
-                className="px-2 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-300 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 w-14"
+                className={`${thSortable} text-center w-14`}
               >
                 Rank<SortIndicator field="rank" />
               </th>
               <th
                 onClick={() => handleSort('bib')}
-                className="px-2 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-300 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 w-14"
+                className={`${thSortable} text-center w-14`}
               >
                 BIB<SortIndicator field="bib" />
               </th>
               <th
                 onClick={() => handleSort('allstar')}
-                className="px-1 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-300 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 w-8"
+                className={`${thSortable} text-center w-8 px-1`}
                 title="All-Star"
               >
                 <span>⭐</span><SortIndicator field="allstar" />
               </th>
               <th
                 onClick={() => handleSort('name')}
-                className="px-2 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600"
+                className={`${thSortable} text-left`}
               >
                 Name<SortIndicator field="name" />
               </th>
               <th
                 onClick={() => handleSort('age')}
-                className="px-2 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-300 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 w-12"
+                className={`${thSortable} text-center w-12`}
               >
                 Age<SortIndicator field="age" />
               </th>
               <th
                 onClick={() => handleSort('school')}
-                className="px-2 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 w-24"
+                className={`${thSortable} text-left w-24`}
               >
                 School<SortIndicator field="school" />
               </th>
               <th
                 onClick={() => handleSort('team')}
-                className="px-2 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 w-24"
+                className={`${thSortable} text-left w-24`}
               >
                 Team<SortIndicator field="team" />
               </th>
@@ -346,65 +479,65 @@ export const DraftBoardPlayerGrid = ({
                 <>
                   <th
                     onClick={() => handleSort('fielding')}
-                    className="px-2 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-300 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 w-12"
+                    className={`${thSortable} text-center w-14`}
                     title="Fielding"
                   >
-                    F<SortIndicator field="fielding" />
+                    Field<SortIndicator field="fielding" />
                   </th>
                   <th
                     onClick={() => handleSort('hitting')}
-                    className="px-2 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-300 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 w-12"
+                    className={`${thSortable} text-center w-14`}
                     title="Hitting"
                   >
-                    H<SortIndicator field="hitting" />
+                    Hit<SortIndicator field="hitting" />
                   </th>
                   <th
                     onClick={() => handleSort('pitching')}
-                    className="px-2 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-300 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 w-12"
+                    className={`${thSortable} text-center w-14`}
                     title="Pitching"
                   >
-                    P<SortIndicator field="pitching" />
+                    Pitch<SortIndicator field="pitching" />
                   </th>
                   <th
                     onClick={() => handleSort('catch')}
-                    className="px-2 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-300 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 w-12"
+                    className={`${thSortable} text-center w-14`}
                     title="Catching"
                   >
-                    C<SortIndicator field="catch" />
+                    Catch<SortIndicator field="catch" />
                   </th>
                   <th
                     onClick={() => handleSort('running')}
-                    className="px-2 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-300 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 w-12"
+                    className={`${thSortable} text-center w-14`}
                     title="Running"
                   >
-                    R<SortIndicator field="running" />
+                    Run<SortIndicator field="running" />
                   </th>
                   <th
                     onClick={() => handleSort('total')}
-                    className="px-2 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-300 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 w-14 border-l border-gray-200 dark:border-gray-600"
+                    className={`${thSortable} text-center w-14 border-l border-rule`}
                   >
                     Total<SortIndicator field="total" />
                   </th>
                 </>
               )}
-              <th className="px-2 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-300 w-16">
+              <th className="px-2 py-2 text-center text-xs font-semibold uppercase tracking-label text-ink-muted w-16">
                 Flags
               </th>
               <th
                 onClick={() => handleSort('sibling')}
-                className="px-2 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-300 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 w-14"
+                className={`${thSortable} text-center w-14`}
                 title="Sibling BIB"
               >
                 Sib<SortIndicator field="sibling" />
               </th>
               {!isPublicView && (
-                <th className="px-2 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-300 w-16">
+                <th className="px-2 py-2 text-center text-xs font-semibold uppercase tracking-label text-ink-muted w-16">
                   Action
                 </th>
               )}
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+          <tbody className="divide-y divide-rule">
             {sortedPlayers.map((player) => {
               const isMandatory = mandatoryPick?.playerId === player.id;
               const isRestricted = isPlayerRestricted(player);
@@ -418,23 +551,33 @@ export const DraftBoardPlayerGrid = ({
                 ((player.isCoachKid && player.coachTeamId !== currentTeamId) ||
                  (player.lockedToTeamId && player.lockedToTeamId !== currentTeamId));
 
+              const rowState = player.isDrafted
+                ? 'bg-surface-2 opacity-50'
+                : isMandatory && !isPublicView
+                ? 'bg-brand-soft'
+                : isLockedToOtherTeam
+                ? 'bg-alert-soft opacity-60'
+                : '';
+
               return (
                 <tr
                   key={player.id}
-                  className={`
-                    hover:bg-gray-50 dark:hover:bg-gray-700/50
-                    ${player.isDrafted ? 'opacity-50 bg-gray-100 dark:bg-gray-800' : ''}
-                    ${isLockedToOtherTeam && !player.isDrafted ? 'opacity-50 bg-red-50/50 dark:bg-red-900/10' : ''}
-                    ${isMandatory && !isPublicView && !player.isDrafted ? 'bg-yellow-50 dark:bg-yellow-900/20' : ''}
-                  `}
+                  className={`hover:bg-surface-2 transition-colors ${rowState}`}
                 >
                   {/* Projected Round */}
                   <td className="px-2 py-1.5 text-center">
-                    <span className={`tabular-nums ${
-                      hasRoundOverride
-                        ? 'text-blue-600 dark:text-blue-400 font-medium'
-                        : 'text-gray-600 dark:text-gray-400'
-                    }`}>
+                    <span
+                      className={`font-mono tabular-nums ${
+                        hasRoundOverride
+                          ? 'text-brand font-semibold'
+                          : 'text-ink-muted'
+                      }`}
+                      title={
+                        hasRoundOverride
+                          ? `Bumped to R${player.lockedToRound} to resolve a conflict (originally projected R${player.projectedRound})`
+                          : `Projected round ${effectiveRound}`
+                      }
+                    >
                       R{effectiveRound}
                       {hasRoundOverride && '*'}
                     </span>
@@ -444,23 +587,23 @@ export const DraftBoardPlayerGrid = ({
                   {showAllPlayers && (
                     <td className="px-2 py-1.5 text-center">
                       {player.isDrafted && player.draftedInRound ? (
-                        <span className="text-xs text-gray-600 dark:text-gray-400 font-medium">
+                        <span className="font-mono text-xs tabular-nums text-ink-muted">
                           R{player.draftedInRound}
                         </span>
                       ) : (
-                        <span className="text-gray-300 dark:text-gray-600">-</span>
+                        <span className="text-ink-faint">–</span>
                       )}
                     </td>
                   )}
 
                   {/* Rank */}
-                  <td className="px-2 py-1.5 text-center text-gray-500 dark:text-gray-400 tabular-nums font-medium">
+                  <td className="px-2 py-1.5 text-center font-mono text-ink-muted tabular-nums">
                     {player.rank}
                   </td>
 
                   {/* BIB */}
                   <td className="px-2 py-1.5 text-center">
-                    <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 px-1.5 py-0.5 rounded font-mono">
+                    <span className="font-mono text-xs tabular-nums bg-surface text-ink-muted border border-rule px-1.5 py-0.5 rounded-sharp">
                       {player.bib}
                     </span>
                   </td>
@@ -473,22 +616,23 @@ export const DraftBoardPlayerGrid = ({
                   {/* Name */}
                   <td className="px-2 py-1.5 text-left">
                     <span className={`font-medium ${
-                      isRestricted
-                        ? 'text-gray-400 dark:text-gray-500'
-                        : 'text-gray-900 dark:text-white'
+                      isRestricted ? 'text-ink-faint' : 'text-ink'
                     }`}>
                       {player.name}
                     </span>
                   </td>
 
                   {/* Age */}
-                  <td className="px-2 py-1.5 text-center text-gray-600 dark:text-gray-400 tabular-nums">
+                  <td className="px-2 py-1.5 text-center font-mono text-ink-muted tabular-nums">
                     {player.littleLeagueAge}
                   </td>
 
                   {/* School */}
-                  <td className="px-2 py-1.5 text-left text-gray-500 dark:text-gray-400 text-xs truncate max-w-[6rem]" title={player.school || undefined}>
-                    {player.school || '-'}
+                  <td
+                    className="px-2 py-1.5 text-left text-ink-muted text-xs truncate max-w-[6rem]"
+                    title={player.school || undefined}
+                  >
+                    {player.school || '–'}
                   </td>
 
                   {/* Team */}
@@ -497,87 +641,84 @@ export const DraftBoardPlayerGrid = ({
                       <span
                         className={`inline-flex items-center gap-0.5 text-xs font-medium truncate max-w-[5.5rem] ${
                           player.isDrafted
-                            ? 'text-gray-600 dark:text-gray-400'
+                            ? 'text-ink-muted'
                             : isLockedToOtherTeam
-                            ? 'text-red-600 dark:text-red-400'
-                            : 'text-blue-600 dark:text-blue-400'
+                            ? 'text-alert'
+                            : 'text-brand'
                         }`}
-                        title={player.isDrafted ? `Drafted by ${teamName}` : (player.isCoachKid ? `Coach's Kid (${teamName})` : `Locked to ${teamName}`)}
+                        title={player.isDrafted ? `Drafted by ${teamName}` : (player.isCoachKid ? `Coach's kid (${teamName})` : `Locked to ${teamName}`)}
                       >
                         {!player.isDrafted && isLockedToTeam && <Lock className="w-2.5 h-2.5 flex-shrink-0" />}
                         <span className="truncate">{teamName}</span>
                       </span>
                     ) : (
-                      <span className="text-gray-300 dark:text-gray-600">-</span>
+                      <span className="text-ink-faint">–</span>
                     )}
                   </td>
 
                   {/* Score Columns */}
                   {showScores && (
                     <>
-                      <td className={`px-2 py-1.5 text-center tabular-nums ${
-                        isRestricted ? 'text-gray-400 dark:text-gray-500' : 'text-gray-700 dark:text-gray-300'
+                      <td className={`px-2 py-1.5 text-center font-mono tabular-nums ${
+                        isRestricted ? 'text-ink-faint' : 'text-ink-muted'
                       }`}>
                         {player.fieldingSubtotal.toFixed(1)}
                       </td>
-                      <td className={`px-2 py-1.5 text-center tabular-nums ${
-                        isRestricted ? 'text-gray-400 dark:text-gray-500' : 'text-gray-700 dark:text-gray-300'
+                      <td className={`px-2 py-1.5 text-center font-mono tabular-nums ${
+                        isRestricted ? 'text-ink-faint' : 'text-ink-muted'
                       }`}>
                         {player.hittingSubtotal.toFixed(1)}
                       </td>
-                      <td className={`px-2 py-1.5 text-center tabular-nums ${
-                        isRestricted ? 'text-gray-400 dark:text-gray-500' : 'text-gray-700 dark:text-gray-300'
+                      <td className={`px-2 py-1.5 text-center font-mono tabular-nums ${
+                        isRestricted ? 'text-ink-faint' : 'text-ink-muted'
                       }`}>
                         {player.pitchingSubtotal.toFixed(1)}
                       </td>
-                      <td className={`px-2 py-1.5 text-center tabular-nums ${
-                        isRestricted ? 'text-gray-400 dark:text-gray-500' : 'text-gray-700 dark:text-gray-300'
+                      <td className={`px-2 py-1.5 text-center font-mono tabular-nums ${
+                        isRestricted ? 'text-ink-faint' : 'text-ink-muted'
                       }`}>
                         {player.catchScore.toFixed(1)}
                       </td>
-                      <td className={`px-2 py-1.5 text-center tabular-nums ${
-                        isRestricted ? 'text-gray-400 dark:text-gray-500' : 'text-gray-700 dark:text-gray-300'
+                      <td className={`px-2 py-1.5 text-center font-mono tabular-nums ${
+                        isRestricted ? 'text-ink-faint' : 'text-ink-muted'
                       }`}>
                         {player.runningScore.toFixed(1)}
                       </td>
-                      <td className={`px-2 py-1.5 text-center tabular-nums font-bold border-l border-gray-200 dark:border-gray-700 ${
-                        isRestricted ? 'text-gray-400 dark:text-gray-500' : 'text-gray-900 dark:text-white'
+                      <td className={`px-2 py-1.5 text-center font-mono tabular-nums font-semibold border-l border-rule ${
+                        isRestricted ? 'text-ink-faint' : 'text-ink'
                       }`}>
                         {player.totalScore.toFixed(1)}
                       </td>
                     </>
                   )}
 
-                  {/* Flags (DNE, SIB, Age Warning) */}
+                  {/* Flags — monochrome letter-glyphs; the letter carries the meaning */}
                   <td className="px-2 py-1.5">
                     <div className="flex items-center justify-center gap-1 flex-wrap">
-                      {/* DNE */}
                       {player.isDNE && (
                         <span
-                          className="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200"
+                          className="font-mono text-[10px] font-semibold uppercase tracking-label px-1.5 py-0.5 rounded-sharp border border-rule bg-surface text-ink-muted"
                           title="Did Not Evaluate"
                         >
                           DNE
                         </span>
                       )}
 
-                      {/* Sibling badge */}
                       {player.siblingId && (
                         <span
-                          className="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200"
+                          className="font-mono text-[10px] font-semibold uppercase tracking-label px-1.5 py-0.5 rounded-sharp border border-rule bg-surface text-ink-muted"
                           title={`Sibling: ${player.sibling || 'linked'}`}
                         >
                           SIB
                         </span>
                       )}
 
-                      {/* Age limit warning */}
                       {isAgeMaxed && (
                         <span
-                          className="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200"
+                          className="font-mono text-[10px] font-semibold uppercase tracking-label px-1.5 py-0.5 rounded-sharp border border-warn bg-surface text-warn"
                           title={`Age ${player.littleLeagueAge} at limit`}
                         >
-                          ⚠️
+                          Age
                         </span>
                       )}
                     </div>
@@ -586,11 +727,14 @@ export const DraftBoardPlayerGrid = ({
                   {/* Sibling BIB */}
                   <td className="px-2 py-1.5 text-center">
                     {siblingBib ? (
-                      <span className="text-xs text-purple-600 dark:text-purple-400 font-medium" title={`Sibling: ${player.sibling || 'linked'}`}>
+                      <span
+                        className="font-mono text-xs tabular-nums text-ink-muted"
+                        title={`Sibling: ${player.sibling || 'linked'}`}
+                      >
                         {siblingBib}
                       </span>
                     ) : (
-                      <span className="text-gray-300 dark:text-gray-600">-</span>
+                      <span className="text-ink-faint">–</span>
                     )}
                   </td>
 
@@ -601,11 +745,7 @@ export const DraftBoardPlayerGrid = ({
                         <button
                           onClick={() => handleDraft(player)}
                           disabled={isLoading}
-                          className={`px-2 py-1 rounded text-xs font-semibold transition-all disabled:opacity-50 ${
-                            isMandatory
-                              ? 'bg-yellow-500 hover:bg-yellow-600 text-white'
-                              : 'bg-green-600 hover:bg-green-700 text-white'
-                          }`}
+                          className="bg-brand hover:bg-brand-strong text-white text-[11px] font-semibold uppercase tracking-button px-3 py-1 rounded-button disabled:opacity-50 transition-colors"
                         >
                           Draft
                         </button>
@@ -619,7 +759,7 @@ export const DraftBoardPlayerGrid = ({
               <tr>
                 <td
                   colSpan={getColumnCount()}
-                  className="px-3 py-8 text-center text-gray-500 dark:text-gray-400"
+                  className="px-3 py-8 text-center text-ink-muted"
                 >
                   {searchTerm ? 'No players match your search' : 'No available players'}
                 </td>
@@ -630,27 +770,32 @@ export const DraftBoardPlayerGrid = ({
       </div>
 
       {/* Legend */}
-      <div className="px-4 py-2 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50">
-        <div className="flex items-center gap-4 text-[10px] text-gray-500 dark:text-gray-400 flex-wrap">
-          <div className="flex items-center gap-1">
+      <div className="px-4 py-2.5 border-t border-rule bg-surface-2">
+        <div className="flex items-center gap-4 text-xs text-ink-muted flex-wrap">
+          <div className="flex items-center gap-1.5">
             <Lock className="w-3 h-3" />
-            <span>= Locked to team</span>
+            <span>Locked to team</span>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1.5">
             <span>⭐</span>
-            <span>= All-Star</span>
+            <span>All-Star</span>
           </div>
-          <div className="flex items-center gap-1">
-            <span className="px-1 py-0.5 bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 rounded font-semibold">SIB</span>
-            <span>= Sibling</span>
+          <div className="flex items-center gap-1.5">
+            <span className="font-mono text-[10px] font-semibold uppercase tracking-label px-1 py-0.5 rounded-sharp border border-rule bg-surface text-ink-muted">SIB</span>
+            <span>Sibling</span>
           </div>
-          <div className="flex items-center gap-1">
-            <span className="px-1 py-0.5 bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200 rounded font-semibold">DNE</span>
-            <span>= Did Not Evaluate</span>
+          <div className="flex items-center gap-1.5">
+            <span className="font-mono text-[10px] font-semibold uppercase tracking-label px-1 py-0.5 rounded-sharp border border-rule bg-surface text-ink-muted">DNE</span>
+            <span>Did not evaluate</span>
           </div>
-          {showScores && (
-            <span className="ml-auto">F=Fielding H=Hitting P=Pitching C=Catch R=Running</span>
-          )}
+          <div className="flex items-center gap-1.5">
+            <span className="font-mono text-[10px] font-semibold uppercase tracking-label px-1 py-0.5 rounded-sharp border border-warn bg-surface text-warn">Age</span>
+            <span>At age limit</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="font-mono text-xs text-brand font-semibold">R#*</span>
+            <span>Round bumped to resolve conflict</span>
+          </div>
         </div>
       </div>
     </div>

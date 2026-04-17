@@ -16,7 +16,7 @@ interface JoinPageProps {
 }
 
 export function JoinPage({ token, onJoinComplete, onCancel }: JoinPageProps) {
-  const { isAuthenticated, isLoading: authLoading, user, login, register } = useAuth();
+  const { isAuthenticated, isInitialized, user, login, register } = useAuth();
   const [linkInfo, setLinkInfo] = useState<JoinLinkInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
@@ -120,7 +120,7 @@ export function JoinPage({ token, onJoinComplete, onCancel }: JoinPageProps) {
   };
 
   // Show loading state
-  if (authLoading || loading) {
+  if (!isInitialized || loading) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">

@@ -6,6 +6,7 @@ interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  isInitialized: boolean;
 }
 
 interface AuthContextType extends AuthState {
@@ -33,7 +34,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [state, setState] = useState<AuthState>({
     user: null,
     isAuthenticated: false,
-    isLoading: true,
+    isLoading: false,
+    isInitialized: false,
   });
 
   // Track if we've already handled session expiry to avoid loops (Issue #4)
@@ -42,18 +44,20 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const checkAuth = useCallback(async () => {
     try {
       const user = await api.getCurrentUser();
-      setState({
+      setState(prev => ({
+        ...prev,
         user,
         isAuthenticated: true,
         isLoading: false,
-      });
+      }));
     } catch (error) {
       // Not authenticated or error - clear state
-      setState({
+      setState(prev => ({
+        ...prev,
         user: null,
         isAuthenticated: false,
         isLoading: false,
-      });
+      }));
     }
   }, []);
 
@@ -63,11 +67,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setState(prev => ({ ...prev, isLoading: true }));
     try {
       const user = await api.login(credentials);
-      setState({
+      setState(prev => ({
+        ...prev,
         user,
         isAuthenticated: true,
         isLoading: false,
-      });
+      }));
     } catch (error) {
       setState(prev => ({ ...prev, isLoading: false }));
       // Handle ApiError (check by name since instanceof can fail across module boundaries)
@@ -83,11 +88,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setState(prev => ({ ...prev, isLoading: true }));
     try {
       const user = await api.register(data);
-      setState({
+      setState(prev => ({
+        ...prev,
         user,
         isAuthenticated: true,
         isLoading: false,
-      });
+      }));
     } catch (error) {
       setState(prev => ({ ...prev, isLoading: false }));
       // Handle ApiError (check by name since instanceof can fail across module boundaries)
@@ -118,11 +124,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
     // Clear session expired flag (Issue #22)
     sessionExpiredHandled.current = false;
-    setState({
+    setState(prev => ({
+      ...prev,
       user: null,
       isAuthenticated: false,
       isLoading: false,
-    });
+    }));
     // Notify other tabs about logout (Issue #27 - cross-tab sync)
     localStorage.setItem('logout-event', Date.now().toString());
     // Note: Draft state is stored in useDraft hook which is re-initialized on re-mount
@@ -136,6 +143,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       await api.initCSRF();
       // Then check authentication
       await checkAuth();
+      setState(prev => ({ ...prev, isInitialized: true }));
     };
     init();
 
@@ -145,11 +153,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
         sessionExpiredHandled.current = true;
         console.log('Session expired, logging out user');
         // Clear state immediately without calling API (session is already invalid)
-        setState({
+        setState(prev => ({
+          ...prev,
           user: null,
           isAuthenticated: false,
           isLoading: false,
-        });
+        }));
         // Notify other tabs about logout (Issue #27 - cross-tab sync)
         localStorage.setItem('logout-event', Date.now().toString());
       }
@@ -171,11 +180,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
         // Only clear state if we're currently authenticated
         if (state.isAuthenticated && !sessionExpiredHandled.current) {
           sessionExpiredHandled.current = true;
-          setState({
+          setState(prev => ({
+            ...prev,
             user: null,
             isAuthenticated: false,
             isLoading: false,
-          });
+          }));
         }
       }
     };

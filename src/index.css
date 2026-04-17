@@ -1,30 +1,85 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
+@layer base {
+  :root {
+    --brand: oklch(48% 0.12 150);
+    --brand-strong: oklch(42% 0.13 150);
+    --brand-soft: oklch(94% 0.04 150);
 
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
+    --surface: oklch(98.5% 0.005 150);
+    --surface-2: oklch(96% 0.006 150);
+    --surface-3: oklch(93% 0.008 150);
 
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
+    --ink: oklch(20% 0.01 150);
+    --ink-muted: oklch(50% 0.01 150);
+    --ink-faint: oklch(65% 0.008 150);
 
-body {
-  margin: 0;
-  min-width: 320px;
-  min-height: 100vh;
-}
+    --rule: oklch(90% 0.005 150);
+    --rule-strong: oklch(82% 0.008 150);
 
-#root {
-  max-width: 100%;
-  margin: 0 auto;
-  text-align: center;
+    --alert: oklch(56% 0.19 25);
+    --alert-soft: oklch(94% 0.04 25);
+    --warn: oklch(72% 0.14 80);
+    --warn-soft: oklch(95% 0.05 80);
+
+    --scrim: oklch(20% 0.01 150 / 0.45);
+
+    color-scheme: light;
+    color: var(--ink);
+    background-color: var(--surface);
+
+    font-family: 'Archivo', system-ui, sans-serif;
+    font-feature-settings: 'ss01' 1;
+    line-height: 1.5;
+    font-weight: 400;
+
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface: oklch(16% 0.01 150);
+      --surface-2: oklch(20% 0.012 150);
+      --surface-3: oklch(24% 0.014 150);
+      --ink: oklch(95% 0.005 150);
+      --ink-muted: oklch(72% 0.008 150);
+      --ink-faint: oklch(55% 0.008 150);
+      --rule: oklch(28% 0.01 150);
+      --rule-strong: oklch(35% 0.012 150);
+      --brand: oklch(62% 0.11 150);
+      --brand-strong: oklch(70% 0.11 150);
+      --brand-soft: oklch(26% 0.05 150);
+      --alert: oklch(68% 0.18 25);
+      --alert-soft: oklch(28% 0.08 25);
+      --warn: oklch(78% 0.13 80);
+      --warn-soft: oklch(28% 0.07 80);
+      --scrim: oklch(8% 0.01 150 / 0.65);
+    }
+  }
+
+  body {
+    margin: 0;
+    min-width: 320px;
+    min-height: 100vh;
+    font-family: 'Archivo', system-ui, sans-serif;
+  }
+
+  #root {
+    max-width: 100%;
+    margin: 0 auto;
+  }
+
+  .font-mono,
+  code,
+  kbd,
+  samp {
+    font-variant-numeric: tabular-nums;
+  }
 }

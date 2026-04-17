@@ -46,7 +46,7 @@ function App() {
   // All hooks must be called unconditionally at the top
   const viewMode = useViewMode();
   const isPublicView = viewMode === 'public';
-  const { isAuthenticated, isLoading: authLoading, user, logout, checkAuth } = useAuth();
+  const { isAuthenticated, isInitialized, user, logout, checkAuth } = useAuth();
   const [authPage, setAuthPage] = useState<AuthPage>('login');
   const [resetParams, setResetParams] = useState<{ uid: string; token: string } | null>(null);
   const [joinToken, setJoinToken] = useState<string | null>(null);
@@ -742,7 +742,7 @@ function App() {
   }, [checkAuth]);
 
   // Show loading state while checking authentication
-  if (isApiMode() && authLoading && !isPublicView) {
+  if (isApiMode() && !isInitialized && !isPublicView) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
@@ -770,7 +770,7 @@ function App() {
   }
 
   // Show auth pages when in API mode and not authenticated
-  if (isApiMode() && !authLoading && !isAuthenticated && !isPublicView) {
+  if (isApiMode() && isInitialized && !isAuthenticated && !isPublicView) {
     // Helper to go back to login and clear URL
     const handleBackToLogin = () => {
       setAuthPage('login');

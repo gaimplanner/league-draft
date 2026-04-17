@@ -59,12 +59,10 @@ export const DraftBoardRosterView = ({
       const effectiveRound = p.lockedToRound ?? p.projectedRound;
       if (effectiveRound !== round) return false;
 
-      // Coach's kid for this team
       if (p.isCoachKid && p.coachTeamId === teamId) {
         return true;
       }
 
-      // Sibling locked to this team
       if (p.lockedToTeamId === teamId) {
         return true;
       }
@@ -82,13 +80,11 @@ export const DraftBoardRosterView = ({
 
   // Build cell data for each round x team combination
   const getCellData = (teamId: string, round: number): CellData => {
-    // Check if there's a drafted player for this slot
     const draftedPlayer = getDraftedPlayer(teamId, round);
     if (draftedPlayer) {
       return { type: 'drafted', player: draftedPlayer };
     }
 
-    // Check if there's a pre-filled player (undrafted coach's kid or locked sibling)
     const prefilled = getPrefilledPlayer(teamId, round);
     if (prefilled) {
       return {
@@ -118,18 +114,17 @@ export const DraftBoardRosterView = ({
     return false;
   };
 
-  // Generate round numbers
   const rounds = useMemo(() => {
     return Array.from({ length: totalRounds }, (_, i) => i + 1);
   }, [totalRounds]);
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+    <div className="bg-surface border border-rule rounded-sharp overflow-hidden">
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-600">
-              <th className="sticky left-0 z-20 bg-gray-50 dark:bg-gray-700/50 px-3 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 w-16 border-r border-gray-200 dark:border-gray-600">
+            <tr className="bg-surface-2 border-b border-rule">
+              <th className="sticky left-0 z-20 bg-surface-2 px-3 py-2 text-left text-xs font-semibold uppercase tracking-label text-ink-muted w-16 border-r border-rule">
                 Round
               </th>
               {sortedTeams.map((team, idx) => {
@@ -139,19 +134,19 @@ export const DraftBoardRosterView = ({
                     key={team.id}
                     className={`px-2 py-2 text-center text-xs font-semibold min-w-[140px] ${
                       isCurrent
-                        ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200'
-                        : 'text-gray-600 dark:text-gray-300'
+                        ? 'bg-brand-soft text-ink'
+                        : 'text-ink-muted'
                     }`}
                   >
                     <div className="flex flex-col items-center gap-0.5">
-                      <span className="text-[10px] text-gray-400 dark:text-gray-500">
+                      <span className="font-mono text-[10px] uppercase tracking-label text-ink-faint">
                         #{idx + 1}
                       </span>
                       <span className="truncate max-w-[130px]">
                         {getTeamDisplayName(team)}
                       </span>
                       {!isPublicView && showScores && (
-                        <span className="text-[10px] font-normal text-gray-500 dark:text-gray-400">
+                        <span className="font-mono text-[10px] font-normal tabular-nums text-ink-muted">
                           {team.totalScore.toFixed(1)} pts
                         </span>
                       )}
@@ -161,10 +156,10 @@ export const DraftBoardRosterView = ({
               })}
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+          <tbody className="divide-y divide-rule">
             {rounds.map((round) => (
-              <tr key={round} className={round === currentRound ? 'bg-yellow-50/50 dark:bg-yellow-900/10' : ''}>
-                <td className="sticky left-0 z-10 bg-white dark:bg-gray-800 px-3 py-2 text-center font-bold text-gray-700 dark:text-gray-300 border-r border-gray-200 dark:border-gray-600">
+              <tr key={round}>
+                <td className="sticky left-0 z-10 bg-surface px-3 py-2 text-center font-mono font-semibold tabular-nums text-ink border-r border-rule">
                   {round}
                 </td>
                 {sortedTeams.map((team) => {
@@ -175,27 +170,29 @@ export const DraftBoardRosterView = ({
                   return (
                     <td
                       key={team.id}
-                      className={`px-2 py-2 text-center ${
+                      className={`px-2 py-2 text-center transition-colors ${
                         isCurrent
-                          ? 'bg-yellow-100 dark:bg-yellow-900/30 ring-2 ring-inset ring-yellow-400'
+                          ? 'bg-brand-soft ring-1 ring-inset ring-brand'
                           : isPast
-                          ? 'bg-gray-50 dark:bg-gray-700/30'
+                          ? 'bg-surface-2'
                           : ''
                       }`}
                     >
                       {cellData.type === 'drafted' && cellData.player && (
-                        <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded px-2 py-1">
-                          <div className="font-medium text-gray-900 dark:text-white text-xs truncate">
+                        <div className="bg-surface-2 border border-rule rounded-sharp px-2 py-1">
+                          <div className="font-medium text-ink text-xs truncate">
                             {cellData.player.name}
                           </div>
                           {!isPublicView && showScores && (
-                            <div className="text-[10px] text-gray-500 dark:text-gray-400">
+                            <div className="font-mono text-[10px] tabular-nums text-ink-muted">
                               {cellData.player.totalScore.toFixed(1)} pts
                             </div>
                           )}
-                          {/* Show lock icon if player was locked to this team */}
                           {(cellData.player.isCoachKid || cellData.player.lockedToTeamId) && (
-                            <span className="inline-flex items-center gap-0.5 mt-0.5 px-1 py-0.5 text-[8px] font-semibold bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded">
+                            <span
+                              className="inline-flex items-center gap-0.5 mt-0.5 px-1 py-0.5 text-[8px] font-semibold rounded-sharp border border-rule bg-surface text-ink-muted"
+                              title="Locked to team"
+                            >
                               <Lock className="w-2 h-2" />
                             </span>
                           )}
@@ -203,16 +200,19 @@ export const DraftBoardRosterView = ({
                       )}
 
                       {cellData.type === 'prefilled' && cellData.player && (
-                        <div className="bg-blue-50 dark:bg-blue-900/20 border border-dashed border-blue-300 dark:border-blue-700 rounded px-2 py-1">
-                          <div className="font-medium text-blue-700 dark:text-blue-300 text-xs truncate">
+                        <div className="bg-brand-soft border border-dashed border-brand rounded-sharp px-2 py-1">
+                          <div className="font-medium text-ink text-xs truncate">
                             {cellData.player.name}
                           </div>
                           {!isPublicView && showScores && (
-                            <div className="text-[10px] text-blue-500 dark:text-blue-400">
+                            <div className="font-mono text-[10px] tabular-nums text-ink-muted">
                               {cellData.player.totalScore.toFixed(1)} pts
                             </div>
                           )}
-                          <span className="inline-flex items-center gap-0.5 mt-0.5 px-1 py-0.5 text-[8px] font-semibold bg-blue-200 dark:bg-blue-800 text-blue-800 dark:text-blue-200 rounded">
+                          <span
+                            className="inline-flex items-center gap-0.5 mt-0.5 px-1 py-0.5 text-[8px] font-semibold rounded-sharp border border-rule bg-surface text-ink-muted"
+                            title={cellData.prefilledReason === 'coach-kid' ? "Coach's kid" : 'Sibling locked'}
+                          >
                             <Lock className="w-2 h-2" />
                           </span>
                         </div>
@@ -221,12 +221,12 @@ export const DraftBoardRosterView = ({
                       {cellData.type === 'empty' && (
                         <div className={`h-10 ${
                           isCurrent
-                            ? 'border-2 border-dashed border-yellow-400 rounded flex items-center justify-center'
+                            ? 'border-2 border-dashed border-brand rounded-sharp flex items-center justify-center'
                             : ''
                         }`}>
                           {isCurrent && (
-                            <span className="text-[10px] text-yellow-600 dark:text-yellow-400 font-medium">
-                              PICKING
+                            <span className="font-mono text-[10px] uppercase tracking-label font-semibold text-brand">
+                              Picking
                             </span>
                           )}
                         </div>
@@ -241,23 +241,23 @@ export const DraftBoardRosterView = ({
       </div>
 
       {/* Legend */}
-      <div className="px-4 py-2 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50">
-        <div className="flex items-center gap-4 text-[10px] text-gray-500 dark:text-gray-400">
-          <div className="flex items-center gap-1">
-            <div className="w-3 h-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded"></div>
+      <div className="px-4 py-2.5 border-t border-rule bg-surface-2">
+        <div className="flex items-center gap-4 text-xs text-ink-muted">
+          <div className="flex items-center gap-1.5">
+            <div className="w-3 h-3 bg-surface-2 border border-rule rounded-sharp"></div>
             <span>Drafted</span>
           </div>
-          <div className="flex items-center gap-1">
-            <div className="w-3 h-3 bg-blue-50 dark:bg-blue-900/20 border border-dashed border-blue-300 dark:border-blue-700 rounded"></div>
-            <span>Pre-filled (Locked)</span>
+          <div className="flex items-center gap-1.5">
+            <div className="w-3 h-3 bg-brand-soft border border-dashed border-brand rounded-sharp"></div>
+            <span>Pre-filled (locked)</span>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1.5">
             <Lock className="w-3 h-3" />
-            <span>= Locked to Team</span>
+            <span>Locked to team</span>
           </div>
-          <div className="flex items-center gap-1">
-            <div className="w-3 h-3 border-2 border-dashed border-yellow-400 rounded"></div>
-            <span>Current Pick</span>
+          <div className="flex items-center gap-1.5">
+            <div className="w-3 h-3 border-2 border-dashed border-brand rounded-sharp"></div>
+            <span>Current pick</span>
           </div>
         </div>
       </div>

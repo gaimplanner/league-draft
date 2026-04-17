@@ -1,5 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
-import { Undo, ChevronLeft, AlertCircle, ChevronRight, X, Users, Grid3X3, Eye, EyeOff } from 'lucide-react';
+import {
+  Undo,
+  ChevronLeft,
+  AlertCircle,
+  X,
+  Users,
+  Grid3X3,
+  Eye,
+  EyeOff,
+  Trophy,
+} from 'lucide-react';
 import { DraftState, Team, DivisionAgeRange, Player } from '../types';
 import { getNextPick, calculateDraftOrder } from '../utils/draftOrder';
 import { useViewMode } from '../contexts/ViewContext';
@@ -26,6 +36,14 @@ interface DraftBoardProps {
   onClearMandatoryPickError?: () => void;
 }
 
+// All scoreboard Zone-2 confirmations flow through a single state.
+// The banner voice stays identical regardless of which action is pending.
+type PendingAction =
+  | { kind: 'draft'; player: Player }
+  | { kind: 'skip' }
+  | { kind: 'reset' }
+  | { kind: 'age-override'; player: Player; currentCount: number };
+
 export const DraftBoard = ({
   draftState,
   onDraftPlayer,
@@ -48,8 +66,7 @@ export const DraftBoard = ({
   const [drawerMode, setDrawerMode] = useState<'players' | 'rosters'>('players');
   const [showScores, setShowScores] = useState(!isPublicView);
   const [showRoundInterstitial, setShowRoundInterstitial] = useState(false);
-  // Pending draft confirmation (replaces browser confirm dialog)
-  const [pendingDraftPlayer, setPendingDraftPlayer] = useState<Player | null>(null);
+  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [interstitialData, setInterstitialData] = useState<{
     completedRound: number;
     nextRound: number;
@@ -57,10 +74,8 @@ export const DraftBoard = ({
   } | null>(null);
   const previousRoundRef = useRef(draftState.currentRound);
 
-  // Detect when we advance to a new round
   useEffect(() => {
     if (draftState.currentRound > previousRoundRef.current && draftState.currentRound > 1) {
-      // Round has advanced - show interstitial
       const newOrder = draftState.currentRoundOrder.map((teamId, index) => {
         const team = draftState.teams.find(t => t.id === teamId)!;
         return {
@@ -82,26 +97,20 @@ export const DraftBoard = ({
 
   const availablePlayers = draftState.players.filter((p) => !p.isDrafted);
 
-  // Try to get current team from currentTeamId, fallback to deriving from currentRoundOrder
   const derivedCurrentTeamId = draftState.currentTeamId ||
     draftState.currentRoundOrder[draftState.currentPickInRound - 1] || null;
   const currentTeam = draftState.teams.find((t) => t.id === derivedCurrentTeamId);
 
-  // Calculate next team
   const { round: nextRound, pickInRound: nextPickInRound } = getNextPick(
     draftState.currentRound,
     draftState.currentPickInRound,
     draftState.teams.length
   );
 
-  // For next team preview, we need to check if we're advancing to a new round
   let nextTeamId: string | null = null;
   if (nextRound === draftState.currentRound) {
-    // Same round - use cached order
     nextTeamId = draftState.currentRoundOrder[nextPickInRound - 1] || null;
   } else {
-    // Would be next round - calculate what that order would be
-    // (This is just for preview, the actual order will be calculated when the pick is made)
     const previewNextRoundOrder = calculateDraftOrder(
       draftState.teams,
       nextRound,
@@ -118,331 +127,408 @@ export const DraftBoard = ({
   const currentPickNumber = (draftState.currentRound - 1) * draftState.teams.length + draftState.currentPickInRound;
   const isFinalRound = draftState.currentRound === totalRounds;
 
-  // Calculate if skip is allowed (can't skip if all remaining players must be drafted)
   const remainingSpots = totalPicks - draftState.picks.length;
   const canSkip = availablePlayers.length < remainingSpots;
 
-  const handleSkipPick = () => {
-    if (!currentTeam) return;
-    if (!canSkip) {
-      window.alert('Cannot skip - all remaining players must be drafted.');
-      return;
-    }
-    if (window.confirm(`Skip pick for ${getTeamDisplayName(currentTeam)}? They will have one fewer player.`)) {
-      onSkipPick();
-    }
+  const handleRequestSkip = () => {
+    if (!currentTeam || !canSkip) return;
+    setPendingAction({ kind: 'skip' });
   };
 
-  // Handle confirming a pending draft pick
-  const handleConfirmDraft = () => {
-    if (pendingDraftPlayer) {
-      onDraftPlayer(pendingDraftPlayer.id);
-      setPendingDraftPlayer(null);
-    }
+  const handleRequestReset = () => {
+    setPendingAction({ kind: 'reset' });
   };
 
-  // Clear pending draft when team changes or draft completes
+  // Grid delegates here when a Draft click would push a team over the age limit.
+  const handleAgeOverrideNeeded = (player: Player, currentCount: number) => {
+    setPendingAction({ kind: 'age-override', player, currentCount });
+  };
+
+  const handleConfirmPending = () => {
+    if (!pendingAction) return;
+    switch (pendingAction.kind) {
+      case 'draft':
+        onDraftPlayer(pendingAction.player.id);
+        break;
+      case 'age-override':
+        onDraftPlayer(pendingAction.player.id);
+        break;
+      case 'skip':
+        onSkipPick();
+        break;
+      case 'reset':
+        onReset();
+        break;
+    }
+    setPendingAction(null);
+  };
+
+  const handleCancelPending = () => {
+    setPendingAction(null);
+  };
+
+  // Clear any pending confirmation when the draft advances or completes.
   useEffect(() => {
-    setPendingDraftPlayer(null);
+    setPendingAction(null);
   }, [draftState.currentTeamId, draftState.isDraftComplete]);
 
+  // Global keyboard shortcuts for admins running the draft at speed.
+  // Escape cancels any pending confirmation, Enter confirms, Cmd/Ctrl-Z undoes.
+  useEffect(() => {
+    if (isPublicView) return;
+
+    const handler = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const isTyping =
+        !!target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable);
+
+      if (e.key === 'Escape' && pendingAction) {
+        e.preventDefault();
+        e.stopPropagation();
+        setPendingAction(null);
+        return;
+      }
+
+      if (e.key === 'Enter' && !isTyping && pendingAction && !isLoading) {
+        e.preventDefault();
+        e.stopPropagation();
+        handleConfirmPending();
+        return;
+      }
+
+      if (
+        (e.metaKey || e.ctrlKey) &&
+        !e.shiftKey &&
+        (e.key === 'z' || e.key === 'Z') &&
+        !isTyping &&
+        !pendingAction &&
+        !isLoading &&
+        draftState.picks.length > 0
+      ) {
+        e.preventDefault();
+        onUndo();
+      }
+    };
+
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPublicView, pendingAction, isLoading, draftState.picks.length, onUndo]);
+
+  // Zone 2 default (On deck) only shows when nothing else is claiming the slot.
+  const showQuickPicks = !draftState.mandatoryPick && !pendingAction && !isPublicView;
+
+  const mandatoryPlayerForScoreboard = draftState.mandatoryPick
+    ? draftState.players.find((p) => p.id === draftState.mandatoryPick?.playerId)
+    : undefined;
+
+  // Build the Zone 2 banner content from whichever state is active.
+  // Falls through to On-Deck when nothing's pending.
+  const zone2 = (() => {
+    if (draftState.mandatoryPick && !isPublicView) {
+      return {
+        label: 'Mandatory pick',
+        labelIcon: <AlertCircle className="w-3 h-3" />,
+        labelTone: 'alert' as const,
+        headline: mandatoryPlayerForScoreboard?.name ?? '',
+        detail:
+          draftState.mandatoryPick.reason === 'coach-kid'
+            ? "Coach's kid"
+            : `Sibling of ${draftState.mandatoryPick.siblingName}`,
+        primaryLabel: 'Draft',
+        onPrimary: () =>
+          mandatoryPlayerForScoreboard && onDraftPlayer(mandatoryPlayerForScoreboard.id),
+        cancellable: false,
+      };
+    }
+
+    if (pendingAction && !isPublicView) {
+      switch (pendingAction.kind) {
+        case 'draft':
+          return {
+            label: 'Confirm pick',
+            labelTone: 'default' as const,
+            headline: pendingAction.player.name,
+            detail: `${pendingAction.player.totalScore.toFixed(1)} pts`,
+            detailMono: true,
+            primaryLabel: 'Draft',
+            onPrimary: handleConfirmPending,
+            cancellable: true,
+          };
+        case 'age-override':
+          return {
+            label: 'Age limit reached',
+            labelIcon: <AlertCircle className="w-3 h-3" />,
+            labelTone: 'warn' as const,
+            headline: pendingAction.player.name,
+            detail: `Team already has ${pendingAction.currentCount} age-${pendingAction.player.littleLeagueAge} players (limit ${maxPerAge})`,
+            primaryLabel: 'Draft anyway',
+            onPrimary: handleConfirmPending,
+            cancellable: true,
+          };
+        case 'skip':
+          return {
+            label: 'Skip this pick?',
+            labelTone: 'warn' as const,
+            headline: currentTeam ? getTeamDisplayName(currentTeam) : 'Current team',
+            detail: 'Team will finish with one fewer player',
+            primaryLabel: 'Skip pick',
+            onPrimary: handleConfirmPending,
+            cancellable: true,
+          };
+        case 'reset':
+          return {
+            label: 'Reset draft?',
+            labelIcon: <AlertCircle className="w-3 h-3" />,
+            labelTone: 'alert' as const,
+            headline: 'Clear all picks',
+            detail: "Teams and players are preserved · you'll return to setup",
+            primaryLabel: 'Reset draft',
+            onPrimary: handleConfirmPending,
+            cancellable: true,
+          };
+      }
+    }
+
+    return null;
+  })();
+
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
+    <div className="min-h-screen bg-surface p-4">
       {/* Round Completion Interstitial Modal */}
       {showRoundInterstitial && interstitialData && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-lg w-full max-h-[90vh] flex flex-col overflow-hidden">
-            {/* Header */}
-            <div className="bg-gradient-to-r from-green-500 to-blue-500 p-4 text-white text-center flex-shrink-0">
-              <div className="text-base opacity-90 mb-1">🎉 Round {interstitialData.completedRound} Complete!</div>
-              <h2 className="text-xl font-bold">Draft Order for Round {interstitialData.nextRound}</h2>
+        <Modal onDismiss={() => setShowRoundInterstitial(false)} maxWidth="lg">
+          <div className="px-6 py-5 border-b border-rule">
+            <div className="font-mono text-[11px] uppercase tracking-label text-ink-faint mb-2">
+              Round {interstitialData.completedRound} complete
             </div>
-
-            {/* Team Order - no scroll, compact rows */}
-            <div className="p-4 flex-1">
-              <div className="space-y-1">
-                {interstitialData.newOrder.map(({ team, position, score }) => (
-                  <div
-                    key={team.id}
-                    className="flex items-center gap-3 py-2 px-3 bg-gray-50 dark:bg-gray-700 rounded-lg"
-                  >
-                    <div className="w-7 h-7 bg-blue-500 text-white rounded-full flex items-center justify-center font-bold text-sm">
-                      {position}
-                    </div>
-                    <div className="flex-1">
-                      <div className="font-medium text-gray-900 dark:text-white">
-                        {getTeamDisplayName(team)}
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <span className="font-bold text-gray-900 dark:text-white">{score.toFixed(1)}</span>
-                      <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">pts</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {draftState.draftFormat === 'recalculated' && (
-                <div className="mt-3 p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-sm text-blue-800 dark:text-blue-200">
-                  📊 Order recalculated based on team scores (lowest picks first)
-                </div>
-              )}
-              {draftState.draftFormat === 'snake' && (
-                <div className="mt-3 p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-sm text-blue-800 dark:text-blue-200">
-                  🐍 Snake draft: Order reversed from previous round
-                </div>
-              )}
-            </div>
-
-            {/* Continue Button */}
-            <div className="p-4 pt-0 flex-shrink-0">
-              <button
-                onClick={() => setShowRoundInterstitial(false)}
-                className="w-full px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-bold text-lg rounded-lg shadow-lg flex items-center justify-center gap-2"
-              >
-                Continue to Round {interstitialData.nextRound}
-                <ChevronRight className="w-5 h-5" />
-              </button>
-            </div>
+            <h2 className="font-black text-3xl leading-tight tracking-score text-ink">
+              Round {interstitialData.nextRound} order
+            </h2>
           </div>
-        </div>
+
+          <div className="px-6 py-4">
+            <div className="divide-y divide-rule">
+              {interstitialData.newOrder.map(({ team, position, score }) => (
+                <div
+                  key={team.id}
+                  className="flex items-center gap-4 py-2.5"
+                >
+                  <span className="font-mono text-xs tabular-nums text-ink-faint w-6 text-right">
+                    {String(position).padStart(2, '0')}
+                  </span>
+                  <span className="flex-1 text-sm font-semibold text-ink truncate">
+                    {getTeamDisplayName(team)}
+                  </span>
+                  <span className="font-mono text-xs tabular-nums text-ink-muted">
+                    {score.toFixed(1)}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {draftState.draftFormat === 'recalculated' && (
+              <p className="mt-4 font-mono text-[11px] uppercase tracking-label text-ink-faint">
+                Recalculated · lowest-scoring team picks first
+              </p>
+            )}
+            {draftState.draftFormat === 'snake' && (
+              <p className="mt-4 font-mono text-[11px] uppercase tracking-label text-ink-faint">
+                Snake · order reversed from previous round
+              </p>
+            )}
+          </div>
+
+          <div className="px-6 py-4 border-t border-rule flex justify-end">
+            <button
+              onClick={() => setShowRoundInterstitial(false)}
+              className="bg-brand hover:bg-brand-strong text-white text-xs font-semibold uppercase tracking-button px-5 py-2.5 rounded-button transition-colors"
+            >
+              Continue to Round {interstitialData.nextRound}
+            </button>
+          </div>
+        </Modal>
       )}
 
       <div className="max-w-7xl mx-auto">
-        {/* Sticky Draft Header Container - top-10 accounts for the fixed division header */}
-        <div className="sticky top-10 z-40 bg-gray-50 dark:bg-gray-900 -mx-4 px-4 pt-0 pb-4">
-        {/* Compact Draft Header */}
-        <div className="bg-gradient-to-r from-blue-600 to-blue-500 rounded-lg p-4 text-white shadow-lg">
-          {/* Header row */}
-          <div className="flex items-center justify-between gap-4 flex-wrap">
-            {/* Left: Pick info and current team */}
-            {currentTeam && (
-              <div className="flex items-center gap-4 flex-wrap">
-                <div className="text-xs uppercase tracking-wide opacity-80 bg-white/10 px-2 py-1 rounded">
-                  R{draftState.currentRound} · Pick {currentPickNumber}/{totalPicks}
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-2xl font-bold">{getTeamDisplayName(currentTeam)}</span>
-                  {nextTeam && (
-                    <span className="text-sm opacity-70">→ {getTeamDisplayName(nextTeam)}</span>
-                  )}
-                </div>
-                {/* Age Breakdown - compact inline badges */}
-                {enforceAgeLimit && maxPerAge > 0 && Object.keys(currentTeam.ageBreakdown || {}).length > 0 && (
-                  <div className="flex items-center gap-1">
-                    {Object.entries(currentTeam.ageBreakdown || {})
-                      .sort(([a], [b]) => Number(a) - Number(b))
-                      .map(([age, count]) => (
-                        <span
-                          key={age}
-                          className={`px-1.5 py-0.5 rounded text-xs ${
-                            count >= maxPerAge
-                              ? 'bg-red-500/40 text-red-200'
-                              : count >= maxPerAge - 1
-                              ? 'bg-yellow-500/40 text-yellow-200'
-                              : 'bg-white/20 text-white/80'
-                          }`}
-                        >
-                          {age}:{count}
+        {/* Sticky scoreboard — current pick (hero) | on-deck OR mandatory OR pending | admin */}
+        <div className="sticky top-10 z-40 -mx-4 px-4 pt-0 pb-4 bg-surface">
+          <section className="bg-surface border border-rule rounded-sharp">
+            <div className="grid grid-cols-[1.2fr_1.3fr_auto] gap-x-8 items-start px-6 py-5">
+
+              {/* Zone 1 — current pick */}
+              <div className="min-w-0">
+                {currentTeam ? (
+                  <>
+                    <div className="font-mono text-[11px] uppercase tracking-label text-ink-muted mb-2">
+                      Round {draftState.currentRound} · Pick {currentPickNumber} of {totalPicks}
+                    </div>
+                    <h1
+                      className="font-black text-5xl leading-[0.95] tracking-score text-ink mb-3 truncate"
+                      title={getTeamDisplayName(currentTeam)}
+                    >
+                      {getTeamDisplayName(currentTeam)}
+                    </h1>
+                    {enforceAgeLimit && maxPerAge > 0 && Object.keys(currentTeam.ageBreakdown || {}).length > 0 && (
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-mono text-[10px] uppercase tracking-label text-ink-faint mr-1">
+                          Ages
                         </span>
-                      ))}
+                        {Object.entries(currentTeam.ageBreakdown || {})
+                          .sort(([a], [b]) => Number(a) - Number(b))
+                          .map(([age, count]) => {
+                            const isFull = count >= maxPerAge;
+                            const isNear = !isFull && count >= maxPerAge - 1;
+                            return (
+                              <span
+                                key={age}
+                                className={`font-mono text-[11px] tabular-nums px-1.5 py-0.5 border rounded-sharp ${
+                                  isFull
+                                    ? 'border-alert text-alert'
+                                    : isNear
+                                    ? 'border-warn text-ink'
+                                    : 'border-rule text-ink-muted'
+                                }`}
+                                title={`Age ${age}: ${count} of ${maxPerAge}`}
+                              >
+                                {age}:{count}
+                              </span>
+                            );
+                          })}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="text-ink-faint text-sm">No current team</div>
+                )}
+              </div>
+
+              {/* Zone 2 — on-deck OR mandatory OR pending (mutually exclusive) */}
+              <div className="min-w-0 border-l border-rule pl-8">
+                {zone2 ? (
+                  <ConfirmBanner
+                    label={zone2.label}
+                    labelIcon={zone2.labelIcon}
+                    labelTone={zone2.labelTone}
+                    headline={zone2.headline}
+                    detail={zone2.detail}
+                    detailMono={zone2.detailMono}
+                    primaryLabel={zone2.primaryLabel}
+                    onPrimary={zone2.onPrimary}
+                    cancellable={zone2.cancellable}
+                    onCancel={handleCancelPending}
+                    isLoading={isLoading}
+                  />
+                ) : (
+                  <>
+                    <div className="font-mono text-[11px] uppercase tracking-label text-ink-faint mb-2">
+                      On deck
+                    </div>
+                    <div className="text-2xl font-semibold text-ink-muted truncate">
+                      {nextTeam ? getTeamDisplayName(nextTeam) : '—'}
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Zone 3 — admin / live */}
+              <div className="flex items-start gap-1">
+                {!isPublicView ? (
+                  <>
+                    {isFinalRound && (
+                      <button
+                        onClick={handleRequestSkip}
+                        disabled={!canSkip || isLoading || !!pendingAction}
+                        className="text-[11px] uppercase tracking-button font-semibold text-ink-muted hover:text-ink border border-rule hover:border-rule-strong px-3 py-1.5 rounded-sharp disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                        title={canSkip ? "Skip this team's pick" : 'Cannot skip — all remaining players must be drafted'}
+                      >
+                        Skip
+                      </button>
+                    )}
+                    <button
+                      onClick={onUndo}
+                      disabled={draftState.picks.length === 0 || isLoading || !!pendingAction}
+                      className="text-[11px] uppercase tracking-button font-semibold text-ink-muted hover:text-ink border border-rule hover:border-rule-strong px-3 py-1.5 rounded-sharp flex items-center gap-1.5 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                      title="Undo last pick · ⌘Z"
+                    >
+                      <Undo className="w-3 h-3" />
+                      Undo
+                    </button>
+                    <button
+                      onClick={handleRequestReset}
+                      disabled={isLoading || !!pendingAction}
+                      className="text-[11px] uppercase tracking-button font-semibold text-ink-muted hover:text-ink border border-rule hover:border-rule-strong px-3 py-1.5 rounded-sharp flex items-center gap-1.5 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                      title="Return to draft setup"
+                    >
+                      <ChevronLeft className="w-3 h-3" />
+                      Reset
+                    </button>
+                  </>
+                ) : (
+                  <div className="font-mono text-[11px] uppercase tracking-label text-brand border border-brand px-2.5 py-1 rounded-sharp">
+                    Live view
                   </div>
                 )}
               </div>
-            )}
-
-            {/* Right: Admin controls */}
-            {!isPublicView && (
-              <div className="flex gap-1 flex-shrink-0">
-                {isFinalRound && (
-                  <button
-                    onClick={handleSkipPick}
-                    disabled={!canSkip || isLoading}
-                    className="px-2 py-1 bg-yellow-500 hover:bg-yellow-600 text-white rounded text-xs font-medium flex items-center gap-1 disabled:opacity-30 disabled:cursor-not-allowed"
-                    title={canSkip ? "Skip this team's pick" : "Cannot skip - all remaining players must be drafted"}
-                  >
-                    ⏭️ <span className="hidden sm:inline">Skip</span>
-                  </button>
-                )}
-                <button
-                  onClick={onUndo}
-                  disabled={draftState.picks.length === 0 || isLoading}
-                  className="px-2 py-1 bg-white/20 hover:bg-white/30 text-white rounded text-xs font-medium flex items-center gap-1 disabled:opacity-30 disabled:cursor-not-allowed"
-                  title="Undo last pick"
-                >
-                  <Undo className="w-3 h-3" />
-                  <span className="hidden sm:inline">Undo</span>
-                </button>
-                <button
-                  onClick={onReset}
-                  className="px-2 py-1 bg-white/20 hover:bg-white/30 text-white rounded text-xs font-medium flex items-center gap-1"
-                  title="Return to Draft Setup"
-                >
-                  <ChevronLeft className="w-3 h-3" />
-                  <span className="hidden sm:inline">Reset</span>
-                </button>
-              </div>
-            )}
-            {isPublicView && (
-              <div className="px-2 py-1 bg-white/20 text-white rounded text-xs font-medium">
-                Live View
-              </div>
-            )}
-          </div>
-
-          {/* Mandatory Pick Warning - compact inline */}
-          {draftState.mandatoryPick && !isPublicView && (() => {
-            const mandatoryPlayer = draftState.players.find((p) => p.id === draftState.mandatoryPick?.playerId);
-            return (
-              <div className="mt-3 flex items-center justify-center gap-3 bg-yellow-500/20 border border-yellow-400/50 rounded-lg px-4 py-2">
-                <AlertCircle className="w-5 h-5 text-yellow-300 flex-shrink-0" />
-                <span className="text-sm text-yellow-100">
-                  <strong>Mandatory:</strong> {mandatoryPlayer?.name}
-                  {draftState.mandatoryPick.reason === 'coach-kid' ? ' (coach\'s kid)' : ` (sibling of ${draftState.mandatoryPick.siblingName})`}
-                </span>
-                <button
-                  onClick={() => mandatoryPlayer && onDraftPlayer(mandatoryPlayer.id)}
-                  disabled={isLoading}
-                  className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white font-medium text-sm rounded flex items-center gap-1 disabled:opacity-50"
-                >
-                  {isLoading ? '...' : 'Draft'} <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
-            );
-          })()}
-
-          {/* Pending Draft Confirmation Banner */}
-          {pendingDraftPlayer && !draftState.mandatoryPick && !isPublicView && (
-            <div className="mt-3 flex items-center justify-center gap-3 bg-blue-500/20 border border-blue-400/50 rounded-lg px-4 py-2">
-              <span className="text-sm text-blue-100">
-                <strong>Confirm:</strong> Draft {pendingDraftPlayer.name} ({pendingDraftPlayer.totalScore.toFixed(1)} pts)?
-              </span>
-              <button
-                onClick={handleConfirmDraft}
-                disabled={isLoading}
-                className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white font-medium text-sm rounded flex items-center gap-1 disabled:opacity-50"
-              >
-                {isLoading ? '...' : 'Draft'} <ChevronRight className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => setPendingDraftPlayer(null)}
-                disabled={isLoading}
-                className="px-2 py-1 bg-white/10 hover:bg-white/20 text-white font-medium text-sm rounded flex items-center gap-1 disabled:opacity-50"
-              >
-                <X className="w-4 h-4" />
-              </button>
             </div>
-          )}
-
-          {/* Best Available by Age - compact horizontal layout */}
-          {!draftState.mandatoryPick && !pendingDraftPlayer && !isPublicView && (() => {
-            const topByAge: Record<number, typeof availablePlayers> = {};
-            availablePlayers.forEach(player => {
-              const isCoachKidForOtherTeam = player.isCoachKid && player.coachTeamId && player.coachTeamId !== derivedCurrentTeamId;
-              const isSiblingLocked = player.lockedToTeamId && player.lockedToTeamId !== derivedCurrentTeamId;
-              if (isCoachKidForOtherTeam || isSiblingLocked) return;
-              const age = player.littleLeagueAge;
-              if (!topByAge[age]) topByAge[age] = [];
-              topByAge[age].push(player);
-            });
-
-            Object.keys(topByAge).forEach(age => {
-              topByAge[Number(age)] = topByAge[Number(age)]
-                .sort((a, b) => b.totalScore - a.totalScore)
-                .slice(0, 2);
-            });
-
-            const ages = Object.keys(topByAge)
-              .map(Number)
-              .filter(age => topByAge[age] && topByAge[age].length > 0)
-              .sort((a, b) => a - b);
-
-            if (ages.length === 0) return null;
-
-            return (
-              <div className="mt-3 bg-white/10 rounded-lg px-3 py-2">
-                <div className="flex items-center gap-4 overflow-x-auto">
-                  <span className="text-xs font-medium text-white/70 whitespace-nowrap flex-shrink-0">Best by Age</span>
-                  {ages.map(age => {
-                    const players = topByAge[age] || [];
-                    return (
-                      <div key={age} className="flex items-center gap-2 flex-shrink-0">
-                        <span className="text-xs text-white/50 w-6">{age}:</span>
-                        {players.map((player) => (
-                          <button
-                            key={player.id}
-                            onClick={() => setPendingDraftPlayer(player)}
-                            disabled={isLoading}
-                            className="px-2 py-1 rounded text-xs font-medium transition-colors disabled:opacity-50 bg-white/10 hover:bg-white/20 text-white"
-                            title={`Draft ${player.firstName} ${player.lastName} (${player.totalScore.toFixed(1)} pts)`}
-                          >
-                            {player.firstName} {player.lastName.charAt(0)}. <span className="opacity-70">{player.totalScore.toFixed(1)}</span>
-                          </button>
-                        ))}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })()}
-        </div>
+          </section>
         </div>
 
-        {/* Round Order Display */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 mb-4">
+        {/* Round order strip */}
+        <div className="bg-surface border border-rule rounded-sharp px-5 py-4 mt-4 mb-4">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-gray-900 dark:text-white">
-              Round {draftState.currentRound} Draft Order
+            <h3 className="font-mono text-[11px] uppercase tracking-label text-ink-muted">
+              Round {draftState.currentRound} order
             </h3>
-            <span className="text-sm text-gray-500 dark:text-gray-400">
-              Format: {draftState.draftFormat}
+            <span className="font-mono text-[11px] uppercase tracking-label text-ink-faint">
+              {draftState.draftFormat}
             </span>
           </div>
           <div className="flex flex-wrap gap-2">
             {draftState.currentRoundOrder.map((teamId, index) => {
-              const team = draftState.teams.find(t => t.id === teamId);
+              const team = draftState.teams.find((t) => t.id === teamId);
               const isPastPick = index + 1 < draftState.currentPickInRound;
               const isCurrentPick = index + 1 === draftState.currentPickInRound;
 
               return (
                 <div
                   key={teamId}
-                  className={`
-                    flex items-center gap-2 px-3 py-2 rounded-lg border-2 transition-all
-                    ${isCurrentPick
-                      ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 shadow-md scale-105'
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-sharp border transition-colors ${
+                    isCurrentPick
+                      ? 'border-brand bg-brand-soft'
                       : isPastPick
-                      ? 'border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 opacity-50'
-                      : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-700'
-                    }
-                  `}
+                      ? 'border-rule bg-surface-2 opacity-50'
+                      : 'border-rule bg-surface'
+                  }`}
                 >
-                  <span className={`
-                    w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold
-                    ${isCurrentPick
-                      ? 'bg-blue-500 text-white'
-                      : isPastPick
-                      ? 'bg-gray-400 text-white'
-                      : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'
-                    }
-                  `}>
-                    {index + 1}
+                  <span
+                    className={`font-mono text-[11px] tabular-nums tracking-label ${
+                      isCurrentPick
+                        ? 'text-brand'
+                        : isPastPick
+                        ? 'text-ink-faint'
+                        : 'text-ink-muted'
+                    }`}
+                  >
+                    {String(index + 1).padStart(2, '0')}
                   </span>
-                  <span className={`
-                    text-sm font-medium
-                    ${isCurrentPick
-                      ? 'text-blue-700 dark:text-blue-200'
-                      : isPastPick
-                      ? 'text-gray-500 dark:text-gray-500 line-through'
-                      : 'text-gray-700 dark:text-gray-300'
-                    }
-                  `}>
+                  <span
+                    className={`text-sm font-semibold ${
+                      isCurrentPick
+                        ? 'text-ink'
+                        : isPastPick
+                        ? 'text-ink-faint line-through'
+                        : 'text-ink'
+                    }`}
+                  >
                     {team ? getTeamDisplayName(team) : 'Unknown'}
                   </span>
                   {isCurrentPick && (
-                    <span className="text-xs bg-blue-500 text-white px-2 py-0.5 rounded-full">
-                      NOW
+                    <span className="font-mono text-[10px] uppercase tracking-label text-brand pl-2 ml-1 border-l border-rule-strong">
+                      Now
                     </span>
                   )}
                 </div>
@@ -451,58 +537,54 @@ export const DraftBoard = ({
           </div>
         </div>
 
-        {/* Drawer Header Bar */}
-        <div className="flex items-center justify-between bg-white dark:bg-gray-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 mb-4">
-          {/* Mode Toggle */}
-          <div className="flex gap-1 bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
+        {/* Drawer toggle */}
+        <div className="flex items-center justify-between bg-surface border border-rule rounded-sharp px-3 py-2 mb-4">
+          <div className="flex gap-1">
             <button
               onClick={() => setDrawerMode('players')}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-sharp text-xs font-semibold uppercase tracking-button transition-colors ${
                 drawerMode === 'players'
-                  ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
-                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                  ? 'bg-ink text-surface'
+                  : 'text-ink-muted hover:text-ink'
               }`}
             >
-              <Grid3X3 className="w-4 h-4" />
-              <span className="hidden sm:inline">Available Players</span>
-              <span className="sm:hidden">Players</span>
-              <span className="text-xs bg-gray-200 dark:bg-gray-500 px-1.5 py-0.5 rounded">
+              <Grid3X3 className="w-3.5 h-3.5" />
+              Players
+              <span className={`font-mono text-[10px] tabular-nums px-1 py-0.5 rounded-sharp ${
+                drawerMode === 'players' ? 'bg-surface text-ink' : 'bg-surface-2 text-ink-muted'
+              }`}>
                 {availablePlayers.length}
               </span>
             </button>
             <button
               onClick={() => setDrawerMode('rosters')}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-sharp text-xs font-semibold uppercase tracking-button transition-colors ${
                 drawerMode === 'rosters'
-                  ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
-                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                  ? 'bg-ink text-surface'
+                  : 'text-ink-muted hover:text-ink'
               }`}
             >
-              <Users className="w-4 h-4" />
-              <span className="hidden sm:inline">Team Rosters</span>
-              <span className="sm:hidden">Rosters</span>
+              <Users className="w-3.5 h-3.5" />
+              Rosters
             </button>
           </div>
 
-          {/* Score Toggle */}
           <button
             onClick={() => setShowScores(!showScores)}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-              showScores
-                ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-                : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-sharp text-xs font-semibold uppercase tracking-button transition-colors ${
+              showScores ? 'text-ink' : 'text-ink-muted hover:text-ink'
             }`}
             title={showScores ? 'Hide scores (presentation mode)' : 'Show scores'}
           >
             {showScores ? (
               <>
-                <Eye className="w-4 h-4" />
-                <span className="hidden sm:inline">Scores Visible</span>
+                <Eye className="w-3.5 h-3.5" />
+                Scores on
               </>
             ) : (
               <>
-                <EyeOff className="w-4 h-4" />
-                <span className="hidden sm:inline">Scores Hidden</span>
+                <EyeOff className="w-3.5 h-3.5" />
+                Scores hidden
               </>
             )}
           </button>
@@ -523,6 +605,8 @@ export const DraftBoard = ({
               maxPerAge={maxPerAge}
               currentTeamAgeBreakdown={currentTeam?.ageBreakdown || {}}
               isPublicView={isPublicView}
+              onQuickPick={showQuickPicks ? (player) => setPendingAction({ kind: 'draft', player }) : undefined}
+              onAgeOverrideNeeded={handleAgeOverrideNeeded}
             />
           ) : (
             <DraftBoardRosterView
@@ -546,104 +630,235 @@ export const DraftBoard = ({
         const reason = draftState.mandatoryPick.reason === 'coach-kid' ? "Coach's kid" : 'Sibling requirement';
 
         return (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white dark:bg-gray-800 rounded-xl p-6 max-w-md w-full shadow-2xl">
-              {/* Header */}
-              <div className="flex items-start gap-3 mb-4">
-                <div className="flex-shrink-0 w-12 h-12 rounded-full bg-yellow-100 dark:bg-yellow-900/30 flex items-center justify-center">
-                  <AlertCircle className="w-6 h-6 text-yellow-600 dark:text-yellow-400" />
-                </div>
-                <div className="text-left">
-                  <h3 className="text-xl font-bold text-gray-900 dark:text-white">
-                    Mandatory Pick
+          <Modal onDismiss={onClearMandatoryPickError} maxWidth="md">
+            <div className="px-6 py-5 border-b border-rule">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-alert flex-shrink-0 mt-1" />
+                <div>
+                  <div className="font-mono text-[11px] uppercase tracking-label text-alert mb-1">
+                    Mandatory pick required
+                  </div>
+                  <h3 className="font-black text-2xl leading-tight tracking-score text-ink">
+                    {mandatoryPlayer?.name}
                   </h3>
-                  <p className="text-sm text-yellow-600 dark:text-yellow-400 font-medium">
+                  <p className="font-mono text-[11px] uppercase tracking-label text-ink-muted mt-1">
                     {reason}
                   </p>
                 </div>
               </div>
+            </div>
 
-              {/* Player Info */}
-              {mandatoryPlayer && (
-                <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 mb-5">
-                  <div className="flex items-start justify-between">
-                    <div className="text-left">
-                      <p className="text-lg font-semibold text-gray-900 dark:text-white">
-                        {mandatoryPlayer.name}
-                      </p>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">
-                        BIB #{mandatoryPlayer.bib} · Age {mandatoryPlayer.littleLeagueAge} · Rank #{mandatoryPlayer.rank}
-                      </p>
+            {mandatoryPlayer && (
+              <div className="px-6 py-4 border-b border-rule bg-surface-2">
+                <div className="flex items-center justify-between gap-4">
+                  <dl className="flex items-center gap-6 font-mono text-xs tabular-nums text-ink-muted">
+                    <div>
+                      <dt className="uppercase text-[10px] tracking-label text-ink-faint">Bib</dt>
+                      <dd className="text-ink">{mandatoryPlayer.bib}</dd>
                     </div>
-                    <div className="text-right">
-                      <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                        {mandatoryPlayer.totalScore.toFixed(1)}
-                      </p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">points</p>
+                    <div>
+                      <dt className="uppercase text-[10px] tracking-label text-ink-faint">Age</dt>
+                      <dd className="text-ink">{mandatoryPlayer.littleLeagueAge}</dd>
+                    </div>
+                    <div>
+                      <dt className="uppercase text-[10px] tracking-label text-ink-faint">Rank</dt>
+                      <dd className="text-ink">#{mandatoryPlayer.rank}</dd>
+                    </div>
+                  </dl>
+                  <div className="text-right">
+                    <div className="font-mono text-[10px] uppercase tracking-label text-ink-faint">Score</div>
+                    <div className="font-mono text-2xl font-semibold tabular-nums text-ink">
+                      {mandatoryPlayer.totalScore.toFixed(1)}
                     </div>
                   </div>
                 </div>
-              )}
-
-              {/* Actions */}
-              <div className="flex gap-3">
-                <button
-                  onClick={onClearMandatoryPickError}
-                  className="flex-1 px-4 py-2.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg font-medium transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => {
-                    if (mandatoryPlayer) {
-                      onClearMandatoryPickError?.();
-                      onDraftPlayer(mandatoryPlayer.id);
-                    }
-                  }}
-                  disabled={isLoading}
-                  className="flex-1 px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {isLoading ? 'Drafting...' : 'Draft Player'}
-                  {!isLoading && <ChevronRight className="w-4 h-4" />}
-                </button>
               </div>
+            )}
+
+            <div className="px-6 py-4 flex justify-end gap-2">
+              <button
+                onClick={onClearMandatoryPickError}
+                className="text-xs font-semibold uppercase tracking-button text-ink-muted hover:text-ink border border-rule hover:border-rule-strong px-4 py-2 rounded-button transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (mandatoryPlayer) {
+                    onClearMandatoryPickError?.();
+                    onDraftPlayer(mandatoryPlayer.id);
+                  }
+                }}
+                disabled={isLoading}
+                className="bg-brand hover:bg-brand-strong text-white text-xs font-semibold uppercase tracking-button px-4 py-2 rounded-button disabled:opacity-50 transition-colors"
+              >
+                {isLoading ? 'Drafting…' : 'Draft player'}
+              </button>
             </div>
-          </div>
+          </Modal>
         );
       })()}
 
       {/* Draft Complete Confirmation Modal */}
       {pendingComplete && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-8 max-w-md w-full text-center shadow-xl">
-            <div className="text-5xl mb-4">🏆</div>
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
-              Draft Complete!
-            </h2>
-            <p className="text-gray-600 dark:text-gray-400 mb-6">
-              All {draftState.picks.length} picks have been made.
-              <br />
-              Ready to finalize the draft?
-            </p>
-            <div className="flex gap-4 justify-center">
-              <button
-                onClick={onCancelComplete}
-                disabled={isLoading}
-                className="px-4 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                ← Go Back & Review
-              </button>
-              <button
-                onClick={onFinalizeDraft}
-                disabled={isLoading}
-                className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isLoading ? 'Finalizing...' : 'Finalize Draft →'}
-              </button>
+        <Modal onDismiss={isLoading ? undefined : onCancelComplete} maxWidth="md">
+          <div className="px-6 py-6">
+            <div className="flex items-start gap-3 mb-4">
+              <Trophy className="w-6 h-6 text-brand flex-shrink-0 mt-0.5" />
+              <div>
+                <div className="font-mono text-[11px] uppercase tracking-label text-ink-faint mb-1">
+                  All picks made
+                </div>
+                <h2 className="font-black text-3xl leading-tight tracking-score text-ink">
+                  Draft complete
+                </h2>
+              </div>
             </div>
+            <p className="text-sm text-ink-muted max-w-[48ch]">
+              All <span className="font-mono tabular-nums text-ink">{draftState.picks.length}</span> picks
+              have been recorded. Finalize to lock in rosters and unlock exports.
+            </p>
           </div>
-        </div>
+
+          <div className="px-6 py-4 border-t border-rule flex justify-end gap-2">
+            <button
+              onClick={onCancelComplete}
+              disabled={isLoading}
+              className="text-xs font-semibold uppercase tracking-button text-ink-muted hover:text-ink border border-rule hover:border-rule-strong px-4 py-2 rounded-button disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              Back to review
+            </button>
+            <button
+              onClick={onFinalizeDraft}
+              disabled={isLoading}
+              className="bg-brand hover:bg-brand-strong text-white text-xs font-semibold uppercase tracking-button px-4 py-2 rounded-button disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {isLoading ? 'Finalizing…' : 'Finalize draft'}
+            </button>
+          </div>
+        </Modal>
       )}
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// Shared building blocks — kept in-file to avoid premature extraction.
+// ---------------------------------------------------------------------------
+
+interface ConfirmBannerProps {
+  label: string;
+  labelIcon?: React.ReactNode;
+  labelTone: 'default' | 'alert' | 'warn';
+  headline: string;
+  detail?: string;
+  detailMono?: boolean;
+  primaryLabel: string;
+  onPrimary: () => void;
+  cancellable: boolean;
+  onCancel: () => void;
+  isLoading: boolean;
+}
+
+const ConfirmBanner = ({
+  label,
+  labelIcon,
+  labelTone,
+  headline,
+  detail,
+  detailMono,
+  primaryLabel,
+  onPrimary,
+  cancellable,
+  onCancel,
+  isLoading,
+}: ConfirmBannerProps) => {
+  const labelClass =
+    labelTone === 'alert'
+      ? 'text-alert'
+      : labelTone === 'warn'
+      ? 'text-warn'
+      : 'text-ink-muted';
+
+  return (
+    <>
+      <div className={`font-mono text-[11px] uppercase tracking-label mb-2 flex items-center gap-1.5 ${labelClass}`}>
+        {labelIcon}
+        {label}
+      </div>
+      <div className="flex items-center gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="text-2xl font-semibold text-ink truncate">{headline}</div>
+          {detail && (
+            <div
+              className={`mt-0.5 text-xs ${
+                detailMono ? 'font-mono tabular-nums text-ink-muted' : 'text-ink-muted'
+              }`}
+            >
+              {detail}
+            </div>
+          )}
+        </div>
+        <button
+          onClick={onPrimary}
+          disabled={isLoading}
+          className="flex-shrink-0 bg-brand hover:bg-brand-strong text-white text-xs font-semibold uppercase tracking-button px-4 py-2 rounded-button disabled:opacity-50 transition-colors"
+        >
+          {isLoading ? 'Working…' : primaryLabel}
+        </button>
+        {cancellable && (
+          <button
+            onClick={onCancel}
+            disabled={isLoading}
+            className="flex-shrink-0 text-ink-muted hover:text-ink p-1.5 rounded-sharp disabled:opacity-50 transition-colors"
+            title="Cancel"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+    </>
+  );
+};
+
+interface ModalProps {
+  children: React.ReactNode;
+  onDismiss?: () => void;
+  maxWidth: 'md' | 'lg';
+}
+
+const Modal = ({ children, onDismiss, maxWidth }: ModalProps) => {
+  useEffect(() => {
+    if (!onDismiss) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onDismiss();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onDismiss]);
+
+  const widthClass = maxWidth === 'lg' ? 'max-w-lg' : 'max-w-md';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="presentation">
+      {onDismiss ? (
+        <button
+          type="button"
+          className="absolute inset-0 bg-scrim"
+          onClick={onDismiss}
+          aria-label="Close dialog"
+        />
+      ) : (
+        <div className="absolute inset-0 bg-scrim" aria-hidden="true" />
+      )}
+      <div
+        className={`relative z-10 bg-surface border border-rule rounded-sharp shadow-lg w-full ${widthClass} max-h-[90vh] flex flex-col overflow-hidden`}
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+      >
+        {children}
+      </div>
     </div>
   );
 };
